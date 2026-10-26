@@ -1,0 +1,4 @@
+# Keep local Git hook scripts runnable in Git for Windows
+.githooks/* text eol=lf
+*.sh text eol=lf
+*.ps1 text eol=crlf
