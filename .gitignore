@@ -1,0 +1,45 @@
+# Never publish secrets, credentials or private visual datasets
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.key
+*credentials*.json
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+# Web
+node_modules/
+dist/
+build/
+coverage/
+.vite/
+*.tsbuildinfo
+# Captured / private data, checkpoints and large videos
+data/private/
+data/raw/
+datasets/
+models/
+*.pt
+*.pth
+*.onnx
+*.safetensors
+*.ckpt
+*.h5
+*.mp4
+*.mov
+*.avi
+*.webm
+*.mkv
+# IDE / OS
+.idea/
+.vscode/settings.json
+Thumbs.db
+.DS_Store
