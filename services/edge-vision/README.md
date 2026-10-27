@@ -23,6 +23,11 @@
 
 This is a heuristic demonstration; it does not establish clinical reliability. **Do not call the heuristic score a validated probability**. It cannot infer injuries, consciousness, severity, or whether emergency help is required.
 
+For the exact readiness checklist and dependency-isolated camera commands, see
+[Member 1 verification runbook](RUNBOOK.md). The latest MediaPipe optional
+video dependency installs its own compatible OpenCV package; avoid mixing
+multiple OpenCV wheels in the same Python environment.
+
 ## Setup and test
 
 From `D:\VIIL-Sentinel\services\edge-vision` with Python 3.11+:

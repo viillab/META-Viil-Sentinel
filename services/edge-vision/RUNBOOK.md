@@ -1,0 +1,103 @@
+# Member 1 — Edge Vision verification and handoff
+
+The local detector is a **non-clinical heuristic**, not an independently validated
+safety system. No automatic rescue dispatch or medical conclusions are permitted.
+All model and media handling in this module is local-only.
+
+## Stage 1 — Reproducible code verification (no camera)
+
+In PowerShell, run:
+
+~~~powershell
+cd D:\VIIL-Sentinel\services\edge-vision
+python -m pytest -q
+python -m ruff check .
+python -m sentinel_edge.evaluation --manifest examples/synthetic/manifest.json
+~~~
+
+The example's synthetic F1 score is not a real-world performance claim.
+
+## Stage 2 — Isolated local video dependencies
+
+Using a local Python 3.11+ virtual environment (do not override system packages).
+MediaPipe installs its compatible OpenCV contrib package; do not separately
+install another OpenCV provider into the same environment:
+
+~~~powershell
+cd D:\VIIL-Sentinel\services\edge-vision
+py -3 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -e ".[video,dev]"
+.\.venv\Scripts\python.exe -m sentinel_edge.doctor
+~~~
+
+**A Pose Landmarker .task model is not shipped with this repo.**
+Obtain a compatible model with appropriate usage rights via
+[official MediaPipe documentation](https://developers.google.com/edge/mediapipe/solutions/vision/pose_landmarker/python).
+Store it in D:\VIIL-Sentinel\models\pose_landmarker_lite.task
+(or another location ignored by Git).
+
+Run the readiness check with the actual model path:
+
+~~~powershell
+.\.venv\Scripts\python.exe -m sentinel_edge.doctor --model "D:\VIIL-Sentinel\models\pose_landmarker_lite.task"
+~~~
+
+The probe checks package versions and file existence; it does **not**
+load the model, open a camera or confirm model accuracy.
+
+## Stage 3 — Webcam or consented staged video
+
+Only analyze footage from people who explicitly consented.
+Staged fall demonstrations must be performed safely, with supervision,
+and without any actual uncontrolled fall.
+
+~~~powershell
+.\.venv\Scripts\python.exe -m sentinel_edge --source 0 --model "D:\VIIL-Sentinel\models\pose_landmarker_lite.task" --display --max-frames 300
+~~~
+
+For a specific authorized local video, replace --source 0 with its path.
+
+The video runner outputs **FALL_CANDIDATE metadata only** to stdout,
+and summary counts to stderr. No image, video or pose is sent to a network.
+An absent pose, multiple detected people, occluded/out-of-frame joints,
+or poor landmark confidence must not be converted into a fall claim.
+The task is configured for up to two poses to detect obvious multi-person
+ambiguity, but **does not perform persistent person tracking**. It can still
+miss people or switch identities; never use it as a monitoring guarantee.
+
+## Stage 4 — Explicit pose trace export and evaluation
+
+Derived pose coordinates may still be identifying. Export only with
+explicit authority and store files outside the repository:
+
+~~~powershell
+.\.venv\Scripts\python.exe -m sentinel_edge --source "D:\staged-private\fall1.mp4" --model "D:\VIIL-Sentinel\models\pose_landmarker_lite.task" --trace-output "D:\staged-private\fall1.pose.jsonl" --acknowledge-pose-privacy
+~~~
+
+Create a version-1 ground-truth manifest alongside the local traces,
+following examples/synthetic/manifest.json and annotating onset when known.
+Evaluate it:
+
+~~~powershell
+.\.venv\Scripts\python.exe -m sentinel_edge.evaluation --manifest "D:\staged-private\manifest.json"
+~~~
+
+Report results only after independent held-out footage is evaluated.
+Include non-falls such as sitting, bending, lying, partial occlusion,
+camera-angle differences and changing illumination. Split training or
+threshold tuning data from test data by subject where possible.
+
+## Member 2 integration contract
+
+Candidate events contain source identifier, timestamp, *heuristic*
+uncalibrated score and uncertainty notes. Member 2 must not interpret a
+candidate as a confirmed fall, medical severity or diagnosis. Evidence
+selection, secure transmission and the human decision workflow are
+separate integration tasks and are **not implemented in this branch**.
+
+## Git ownership
+
+The work belongs to member1/feature/runner-hardening.
+**Human user performs promotion into preprod manually.**
+No agent changes to preprod or main in this task.
