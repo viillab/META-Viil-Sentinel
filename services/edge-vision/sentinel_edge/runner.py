@@ -17,6 +17,7 @@ from sentinel_edge.handoff import SOURCE_ID_PATTERN, to_envelope
 from sentinel_edge.model_smoke import _file_sha256
 from sentinel_edge.detector import TemporalFallDetector
 from sentinel_edge.pose_adapter import extract_torso_landmarks
+from sentinel_edge.pose_rejection_diagnostics import pose_adapter_reason
 from sentinel_edge.frame_resize import resize_for_inference, validate_max_side
 from sentinel_edge.pose_traces import frame_to_trace_record
 
@@ -82,6 +83,7 @@ def process_capture(
     display: bool = False, trace_file: TextIO | None = None,
     output: TextIO | None = None, clock: Callable[[], float] = monotonic,
     on_frame: Callable[[PoseFrame], None] | None = None,
+    pose_reason_consumer: Callable[[str], None] | None = None,
     event_encoder: Callable[[FallCandidateEvent], dict] | None = None,
     on_event: Callable[[FallCandidateEvent], None] | None = None,
     detector: TemporalFallDetector | None = None,
@@ -119,6 +121,8 @@ def process_capture(
         image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
         result = landmarker.detect_for_video(image, timestamp)
         landmarks = extract_torso_landmarks(result)
+        if pose_reason_consumer is not None:
+            pose_reason_consumer(pose_adapter_reason(result))
         if not landmarks:
             invalid_poses += 1
         frame = PoseFrame(

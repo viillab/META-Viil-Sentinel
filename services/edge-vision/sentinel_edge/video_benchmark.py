@@ -39,6 +39,7 @@ def collect_video_frames(
     event_consumer: Callable[[FallCandidateEvent], None] | None = None,
     config: DetectorConfig | None = None,
     max_inference_side: int = 0,
+    pose_reason_consumer: Callable[[str], None] | None = None,
 ) -> tuple[list[PoseFrame], dict]:
     """Process one file using an independent MediaPipe task instance.
 
@@ -77,6 +78,10 @@ def collect_video_frames(
         )
         # Read one extra frame so we don't silently evaluate only the start
         # of an overlong video and present it as a complete clip.
+        diagnostic_options = (
+            {"pose_reason_consumer": pose_reason_consumer}
+            if pose_reason_consumer is not None else {}
+        )
         stats = process_capture(
             capture, cv2=cv2, mp=mp, landmarker=landmark_model,
             webcam=False, source_id=clip_id, max_frames=max_frames + 1,
@@ -84,6 +89,7 @@ def collect_video_frames(
             on_frame=frame_consumer if frame_consumer is not None else frames.append,
             on_event=event_consumer,
             detector=TemporalFallDetector(config) if config is not None else None,
+            **diagnostic_options,
             max_inference_side=max_inference_side,
         )
     require_complete_decode(

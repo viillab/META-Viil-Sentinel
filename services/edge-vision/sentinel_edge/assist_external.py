@@ -5,6 +5,7 @@ reviewed event onsets. This reports only diagnostic whole-clip predictions.
 Raw frames/landmarks and model parameters never leave private local memory.
 """
 from argparse import ArgumentParser
+from collections import Counter
 from hashlib import sha256
 import json
 from pathlib import Path
@@ -12,6 +13,7 @@ from pathlib import Path
 from sentinel_edge.caucafall_curator import _video_metadata, _sha256_file
 from sentinel_edge.contracts import PoseFeatures
 from sentinel_edge.private_model_training import read_private_artifact
+from sentinel_edge.pose_rejection_diagnostics import REASONS
 from sentinel_edge.public_dataset_ingest import _github_blob_sha1
 from sentinel_edge.temporal_training import pool_temporal_window
 from sentinel_edge.video_benchmark import collect_video_frames
@@ -164,9 +166,13 @@ def windows_of(duration_ms: int) -> list[tuple[int, int]]:
 
 def _evaluate_one(path: Path, group: str, activity: str, duration_ms: int,
                   pose_task: Path, model, *, collector=collect_video_frames,
+                  detailed_reasons=False,
                   diagnostics=False) -> dict:
     windows = [NearestFrameSampler(activity, start, end)
                for start, end in windows_of(duration_ms)]
+    if detailed_reasons and not diagnostics:
+        raise ValueError("Rejection reasons require failure diagnostics")
+    reason_counts = Counter()
     raw_torso_frames = geometric_valid_frames = 0
     def consume(frame):
         nonlocal raw_torso_frames, geometric_valid_frames
@@ -175,9 +181,17 @@ def _evaluate_one(path: Path, group: str, activity: str, duration_ms: int,
             geometric_valid_frames += (PoseFeatures.from_frame(frame, .55) is not None)
         for sampler in windows:
             sampler.on_frame(frame)
+    extra = {}
+    if detailed_reasons:
+        def consume_reason(reason):
+            if reason not in REASONS:
+                raise ValueError("Unexpected pose adapter reason")
+            reason_counts.update((reason,))
+        extra["pose_reason_consumer"] = consume_reason
     frames, stats = collector(
         path, clip_id=activity, model=pose_task, max_frames=6000,
         frame_consumer=consume, event_consumer=lambda _: None,
+        **extra,
     )
     if frames or stats["frames_processed"] != windows[0].frames_processed:
         raise ValueError("Inconsistent pose stream frame counts")
@@ -208,6 +222,13 @@ def _evaluate_one(path: Path, group: str, activity: str, duration_ms: int,
                 any(p >= model.threshold for p in successes) if successes else None
             ),
             "fully_pose_covered": abstentions == 0}
+    if detailed_reasons:
+        if (sum(reason_counts.values()) != stats["frames_processed"]
+                or reason_counts["accepted"] != raw_torso_frames):
+            raise ValueError("Adapter rejection counters contradict frame stream")
+        result["pose_rejection_reasons"] = {
+            reason: reason_counts[reason] for reason in REASONS
+        }
     if diagnostics:
         if not (0 <= geometric_valid_frames <= raw_torso_frames <= stats["frames_processed"]):
             raise ValueError("Contradictory pose pipeline counters")
@@ -302,8 +323,39 @@ def summarize_failure_diagnostics(rows: list[dict], group: str) -> dict:
     }
 
 
+def aggregate_pose_rejection_reasons(rows: list[dict], group: str) -> dict:
+    """Only source-level categorical integers, never raw MediaPipe outputs."""
+    if group not in ("adl", "fall"):
+        raise ValueError("Invalid pose-rejection group")
+    subset = [r for r in rows if r["publisher_class"] == group]
+    if not subset or any("pose_rejection_reasons" not in r for r in subset):
+        raise ValueError("Missing opt-in pose-rejection diagnostic evidence")
+    combined = Counter()
+    for row in subset:
+        counts = row["pose_rejection_reasons"]
+        if (set(counts) != set(REASONS)
+                or any(type(value) is not int or value < 0
+                       for value in counts.values())
+                or sum(counts.values()) != row["failure_diagnostic"]["decoded_frames"]
+                or counts["accepted"] != row["failure_diagnostic"][
+                    "torso_adapter_available_frames"
+                ]):
+            raise ValueError("Pose-rejection count contradicted stream")
+        combined.update(counts)
+    return {
+        "videos": len(subset),
+        "decoded_frames": sum(combined.values()),
+        "accepted_frames": combined["accepted"],
+        "rejected_frames": sum(combined.values()) - combined["accepted"],
+        "reason_frame_counts": {reason: combined[reason] for reason in REASONS},
+        "reason_counts_not_root_cause": True,
+        "raw_pose_recorded": False,
+    }
+
+
 def evaluate_external(root: Path, pose_task: Path, frozen_model_path: Path,
                       report_path: Path, *, collector=collect_video_frames,
+                      detailed_reasons=False,
                       diagnostics=False) -> dict:
     """One-shot source-frozen external video stress; NEVER trains or tunes."""
     root = private_root(root).resolve(strict=True)
@@ -355,7 +407,8 @@ def evaluate_external(root: Path, pose_task: Path, frozen_model_path: Path,
         raise ValueError("Repeated reference video activity")
     rows = [
         _evaluate_one(path, group, activity, duration, pose_task,
-                      model, collector=collector, diagnostics=diagnostics)
+                      model, collector=collector, diagnostics=diagnostics,
+                      detailed_reasons=detailed_reasons)
         for path, group, activity, duration in plan
     ]
     by_class = {
@@ -388,6 +441,12 @@ def evaluate_external(root: Path, pose_task: Path, frozen_model_path: Path,
             for group in ("adl", "fall")
         }
         report["diagnostic_only_not_causal_proof"] = True
+    if detailed_reasons:
+        report["adapter_rejection_reason_counts"] = {
+            group: aggregate_pose_rejection_reasons(rows, group)
+            for group in ("adl", "fall")
+        }
+        report["pose_reasons_describe_adapter_gates_not_physical_cause"] = True
     with report_path.open("x", encoding="utf8") as out:
         json.dump(report, out, indent=2)
     return report
@@ -395,7 +454,8 @@ def evaluate_external(root: Path, pose_task: Path, frozen_model_path: Path,
 
 def main(argv=None) -> int:
     parser = ArgumentParser(description="Externally sourced frozen-video research only")
-    parser.add_argument("--mode", choices=("download", "evaluate", "diagnose"), required=True)
+    parser.add_argument("--mode", choices=("download", "evaluate", "diagnose",
+                                            "reason-audit"), required=True)
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--model", type=Path)
     parser.add_argument("--pose-task", type=Path)
@@ -415,7 +475,8 @@ def main(argv=None) -> int:
                 parser.error("evaluate requires --model, --pose-task and --report")
             result = evaluate_external(
                 args.root, args.pose_task, args.model, args.report,
-                diagnostics=(args.mode == "diagnose"),
+                diagnostics=(args.mode in ("diagnose", "reason-audit")),
+                detailed_reasons=(args.mode == "reason-audit"),
             )
     except (OSError, ValueError, RuntimeError, KeyError, TypeError) as exc:
         parser.error("External frozen evaluation refused: " + str(exc))
