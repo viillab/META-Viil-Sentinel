@@ -1,7 +1,9 @@
 """Local-only FastAPI MVP foundation for VIIL Sentinel."""
 from uuid import UUID
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+
 from app.agent import InvalidTransition, human_review
 from app.config import Settings, get_settings
 from app.meta import provider_for

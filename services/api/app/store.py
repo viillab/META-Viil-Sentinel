@@ -1,6 +1,7 @@
 """Explicit ephemeral repository. Replace with persistence before any non-demo deployment."""
-from uuid import UUID
 from threading import RLock
+from uuid import UUID
+
 from app.models import Incident
 
 
