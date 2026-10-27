@@ -116,6 +116,38 @@ predeclared V1 selection remains unchanged.
 .\.venv\Scripts\python.exe -m sentinel_edge.model_quality --synthetic-demo --dev-crossval
 ```
 
+## Actual NumPy Tiny MLP research training (Member 1)
+
+The [Tiny MLP real-video research training SOP](docs/NUMPY_TINY_MLP_REAL_TRAINING_HANDOFF_2026-10-27.md)
+adds `python -m sentinel_edge.tiny_mlp_training` to train a
+**real, NumPy-only, 12-hidden-unit MLP** on the source-verified
+CAUCAFall+GMDCSA-24 public Fall/ADL clips. It compares against a
+newly fitted linear V1 on the **same declared TRAIN subjects**;
+chooses architecture and threshold using **VAL subjects only**;
+then reports older **already-exposed TEST subjects only as a
+non-independent diagnostic**. Independent actor verification and
+human review of publisher labels have NOT been performed, and
+success in validation would not prove real-world safety.
+
+**Real training completed:** from 31 TRAIN clips and 10 VAL clips,
+Tiny MLP achieved **0.80** VAL balanced accuracy vs **0.90** for
+re-fitted linear V1. The **predeclared decision retains linear V1**;
+Tiny MLP cannot be promoted despite 4/6 vs 3/6 Fall detections
+on ten old **previously exposed** TEST clips. The private MLP
+is 3,568 parameter/scaler bytes (9,478-byte JSON) vs linear
+736 RAM bytes, and is slower in a local NumPy per-window test.
+See the SOP for full split counts and reproducible evaluation.
+
+Weights, train scalers and threshold are privately persisted as a
+strict, bounded numeric-only JSON below Git-ignored `data/private`,
+never connected to the normal heuristic/incident system. The
+original model files, remote services and automatic alerts are
+unchanged; no PyTorch/GPU or paid API is required.
+
+```powershell
+.\.venv\Scripts\python.exe -m sentinel_edge.tiny_mlp_training --help
+```
+
 ## Two-reviewer event-level Fall benchmark (Member 1)
 
 The [multi-onset event-review SOP](docs/REVIEWED_MULTI_EVENT_BENCHMARK_HANDOFF_2026-10-27.md)
