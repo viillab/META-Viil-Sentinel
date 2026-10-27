@@ -67,6 +67,9 @@ class TemporalFallDetector:
 
         feature = PoseFeatures.from_frame(frame, self.config.min_visibility)
         if feature is None:
+            # Discontinuous/occluded landmarks invalidate the upright baseline.
+            # A later prone pose must not reuse evidence captured before loss.
+            self._frames.clear()
             self._pending_since = None
             self._pending_descent = 0.0
             return None
