@@ -116,6 +116,35 @@ predeclared V1 selection remains unchanged.
 .\.venv\Scripts\python.exe -m sentinel_edge.model_quality --synthetic-demo --dev-crossval
 ```
 
+## Offline persistent PoseLandmarker performance experiment (Member 1)
+
+The [persistent MediaPipe session handoff](docs/PERSISTENT_POSE_SESSION_RESOURCE_HANDOFF_2026-10-27.md)
+adds `python -m sentinel_edge.persistent_pose_session` to replay
+**8 source-verified IKAR staged Fall MP4s with ONE PoseLandmarker**
+instead of reloading an instance for every video. The original
+`TemporalFallDetector` is independently re-created at each
+video cut to prevent cross-video fall evidence; the session
+uses strictly monotonic MediaPipe VIDEO timestamps with 1,000 ms
+synthetic boundary gaps. The original pose adapter, heuristic,
+multi-person abstention and any live event code are untouched.
+
+Real local Windows measurements: **889/889** frames complete,
+**28.62 FPS**, **31.059 seconds** wall time, **241.82 MiB**
+maximum sampled process RSS, **823** strict valid torso frames
+and **1** original heuristic event. The previous independent
+model-per-file replay measured **24.62 FPS**, **36.115 seconds**,
+**248.24 MiB** sampled RSS and **831** valid torso frames,
+with one heuristic event. The approximately **16.2%** higher
+observed throughput is NOT isolated model-start benefit:
+disk caches, processor load, test order and artificial scene
+cuts can influence results. Tracker continuity changed the
+accepted-frame count, so this is an **offline research diagnostic,
+not a live webcam / safety deployment setting**.
+
+```powershell
+.\.venv\Scripts\python.exe -m sentinel_edge.persistent_pose_session --help
+```
+
 ## Real offline Edge MediaPipe CPU/RAM/FPS profile (Member 1)
 
 The [source-verified performance handoff](docs/REAL_EDGE_REPLAY_RESOURCE_PROFILE_2026-10-27.md)
