@@ -96,6 +96,17 @@ Include non-falls such as sitting, bending, lying, partial occlusion,
 camera-angle differences and changing illumination. Split training or
 threshold tuning data from test data by subject where possible.
 
+## Stage 5 — Real MediaPipe runtime smoke test (no camera)
+
+See [Model validation](docs/MODEL_VALIDATION.md) for an official downloadable
+Pose Landmarker Lite task bundle and SHA-256/latency testing. The smoke test
+uses **synthetic empty frames**, checks model load and inference, but does not
+measure fall detection sensitivity, real-person accuracy or false alarms.
+
+```powershell
+.\.venv\Scripts\python.exe -m sentinel_edge.model_smoke --model "D:\\VIIL-Sentinel\\models\\pose_landmarker_lite.task" --frames 30
+```
+
 ## Member 2 integration contract
 
 Candidate events contain source identifier, timestamp, *heuristic*

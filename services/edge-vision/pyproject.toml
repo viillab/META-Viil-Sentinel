@@ -17,6 +17,7 @@ dev = ["pytest>=8,<10", "ruff>=0.8,<1.0"]
 viil-edge = "sentinel_edge.runner:main"
 viil-edge-doctor = "sentinel_edge.doctor:main"
 viil-edge-evaluate = "sentinel_edge.evaluation:main"
+viil-edge-model-smoke = "sentinel_edge.model_smoke:main"
 
 [tool.setuptools.packages.find]
 include = ["sentinel_edge*"]
