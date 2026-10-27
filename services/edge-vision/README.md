@@ -51,6 +51,22 @@ until manual review. Optional **publisher-labeled** in-memory baseline
 training is *research-only* and reports pose-quality exclusions and held-out
 subjects; it does **not** assert independent human label verification.
 
+## Independent annotation review gate (requires real human verification)
+
+The [two-reviewer label-verification protocol and developer handoff](docs/INDEPENDENT_ANNOTATION_REVIEW_HANDOFF_2026-10-27.md)
+adds `python -m sentinel_edge.annotation_review` as a **private-only**
+preprocessing gate. It can generate a template with **two blank, unapproved
+review entries per clip**, then compile an exporter-compatible reviewed
+manifest **only if two distinct reviewers attest matching Fall/ADL activity,
+timing and SHA-256 source media** for every clip. Disagreement, ambiguity,
+untouched templates, changed video and missing participants fail closed.
+The tool cannot independently verify reviewer identities or consent.
+
+**No CAUCAFall clip has been newly approved by this tool:** historical
+publisher-labeled research scores remain unreviewed, and data must not be
+presented as independently validated until humans complete real visual review.
+Private review files and derived pose remain ignored under `data/private`.
+
 ## Lightweight V1/V2 model-quality comparison (Member 1 handoff)
 
 The [V2 implementation and next-developer handoff](docs/MEMBER1_MODEL_QUALITY_V2_HANDOFF_2026-10-27.md)
