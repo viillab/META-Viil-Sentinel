@@ -24,6 +24,7 @@ from sentinel_edge.frame_resize import resize_for_inference, validate_max_side
 from sentinel_edge.pose_traces import frame_to_trace_record
 
 
+
 @dataclass(frozen=True)
 class StreamStats:
     frames_processed: int
@@ -42,6 +43,8 @@ def parse_args(argv: list[str] | None = None):
                         help="Use versioned privacy-minimal Member2 handoff envelopes")
     parser.add_argument("--confirm-consent", action="store_true",
                         help="Explicitly authorize local v1 event export from camera/video")
+    parser.add_argument("--shadow-model", type=Path,
+                        help="Optional pinned V1 research prediction counts ONLY (no events)")
     parser.add_argument("--max-frames", type=int, default=0, help="0: process until EOF/interrupt")
     parser.add_argument("--display", action="store_true", help="Display input frames locally; no recording")
     parser.add_argument("--trace-output", type=Path,
@@ -69,6 +72,11 @@ def parse_args(argv: list[str] | None = None):
             parser.error("Trace output parent directory must already exist")
         if args.trace_output.exists():
             parser.error("Trace output already exists; refusing to overwrite")
+    if args.shadow_model is not None:
+        if not (args.confirm_consent and args.acknowledge_pose_privacy):
+            parser.error("Shadow research mode requires consent and privacy acknowledgement")
+        if not args.shadow_model.is_file():
+            parser.error("Shadow research artifact not found")
     return args
 
 
@@ -182,6 +190,12 @@ def main(argv: list[str] | None = None) -> int:
     if not webcam and not Path(source).is_file():
         raise SystemExit(f"Video file not found: {source}")
 
+    if args.shadow_model is not None:
+        # Keep training-window imports out of the camera runner module to
+        # avoid a circular import through offline video_benchmark.
+        from sentinel_edge.shadow_inference import (
+            RollingModelShadow, load_verified_linear_shadow,
+        )
     with ExitStack() as stack:
         cap = cv2.VideoCapture(source)
         if not cap.isOpened():
@@ -203,6 +217,8 @@ def main(argv: list[str] | None = None) -> int:
         landmarker = stack.enter_context(
             mp.tasks.vision.PoseLandmarker.create_from_options(options)
         )
+        shadow = (RollingModelShadow(load_verified_linear_shadow(args.shadow_model))
+                  if args.shadow_model is not None else None)
         encoder = None
         if args.candidate_format == "v1":
             provenance = "authorized_local_camera" if webcam else "consented_staged_video"
@@ -218,11 +234,15 @@ def main(argv: list[str] | None = None) -> int:
                 webcam=webcam, source_id=args.source_id,
                 max_frames=args.max_frames, display=args.display,
                 trace_file=trace_file, event_encoder=encoder,
+                on_frame=shadow.observe if shadow is not None else None,
             )
         except KeyboardInterrupt:
             print("Interrupted by operator; local capture closed.", file=sys.stderr)
             return 130
 
+        if shadow is not None:
+            print("RESEARCH_MODEL_SHADOW " + json.dumps(shadow.summary(), sort_keys=True),
+                  file=sys.stderr)
         # Status goes to stderr; stdout contains only machine-readable event JSONL.
         print(
             f"Processed {stats.frames_processed} frames; "
