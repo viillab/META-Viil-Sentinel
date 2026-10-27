@@ -34,8 +34,10 @@ people. Exported derived features are sensitive: the CLI ONLY creates files
 inside Git-ignored `data/private`, with explicit authorization and no overwrite.
 
 A real **in-memory IKAR pilot** decoded 87 frames and produced a 30×6 window
-without assigning a Fall/No-Fall label or saving the features. The supervised
-classifier remains **synthetic-data-only**; this is NOT a real-trained fall AI.
+without assigning a Fall/No-Fall label or saving the features. IKAR was **not**
+used for supervised training. A separate publisher-labeled, unreviewed
+CAUCAFall study (below) has since fitted a research-only classifier; neither
+experiment validates a deployed fall detector.
 
 ## CAUCAFall real-video Fall/ADL research curation
 
@@ -66,14 +68,32 @@ be rerun in memory without overwriting the private manifests:
 Model improvements must be supported by held-out results and pose coverage,
 never claimed from synthetic fixtures or validation-set optimization alone.
 
+## Development-subject Cross-Validation (optional research gate)
+
+The [4-fold cross-subject research protocol and next-developer instructions](docs/DEVELOPMENT_SUBJECT_CV_HANDOFF_2026-10-27.md)
+add an opt-in `--dev-crossval` to the in-memory V1/V2 CLI. It rotates
+train/inner-validation/outer-scoring groups over **development subjects only**.
+No final test labels or features influence the CV. The same 40 real CAUCAFall
+clips yielded 29 eligible *development* clips from 8 declared participants:
+V1 outer-fold fall recall **9/15**, V2 **4/15**; both flagged 3 of 14 ADL
+clips as fall. Inner validation chose V1 in all four folds. These clips
+are staged publisher-labeled activities, not deployment evidence. The
+predeclared V1 selection remains unchanged.
+
+```powershell
+.\.venv\Scripts\python.exe -m sentinel_edge.model_quality --synthetic-demo --dev-crossval
+```
+
 ## Research-only trained Temporal Logistic baseline
 
 A lightweight **NumPy-supervised model** can now be fitted on masked temporal
 pose features in an **offline experiment**. It applies the v2 subject-disjoint
 audit, trains and normalizes using train subjects only, selects threshold on
-validation subjects, and scores a separate held-out test. **Only an invented
-synthetic demo has been trained and verified**; this is NOT a TCN/GRU, NOT a
-validated Fall Detection AI replacement and is never connected to live alerts.
+validation subjects, and scores a separate held-out test. Both fictional
+synthetic demonstrations and a tiny real **publisher-labeled staged** CAUCAFall
+pilot have been trained and evaluated in memory. Neither has independently
+verified action labels or robust real-world evidence. This is NOT a TCN/GRU,
+NOT a validated Fall Detection AI replacement and never connects to live alerts.
 
 See [temporal baseline training and dataset gates](docs/TEMPORAL_TRAINING_RESEARCH_BASELINE_2026-10-27.md).
 
