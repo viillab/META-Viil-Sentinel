@@ -14,6 +14,7 @@ from sentinel_edge.caucafall_curator import _video_metadata, _sha256_file
 from sentinel_edge.contracts import PoseFeatures
 from sentinel_edge.private_model_training import read_private_artifact
 from sentinel_edge.pose_rejection_diagnostics import REASONS
+from sentinel_edge.multipose_spatial_diagnostics import MULTIPOSE_CATEGORIES
 from sentinel_edge.public_dataset_ingest import _github_blob_sha1
 from sentinel_edge.temporal_training import pool_temporal_window
 from sentinel_edge.video_benchmark import collect_video_frames
@@ -166,13 +167,17 @@ def windows_of(duration_ms: int) -> list[tuple[int, int]]:
 
 def _evaluate_one(path: Path, group: str, activity: str, duration_ms: int,
                   pose_task: Path, model, *, collector=collect_video_frames,
+                  spatial_audit=False,
                   detailed_reasons=False,
                   diagnostics=False) -> dict:
     windows = [NearestFrameSampler(activity, start, end)
                for start, end in windows_of(duration_ms)]
+    if spatial_audit and not detailed_reasons:
+        raise ValueError("Spatial analysis requires detailed pose reason audit")
     if detailed_reasons and not diagnostics:
         raise ValueError("Rejection reasons require failure diagnostics")
     reason_counts = Counter()
+    spatial_counts = Counter()
     raw_torso_frames = geometric_valid_frames = 0
     def consume(frame):
         nonlocal raw_torso_frames, geometric_valid_frames
@@ -188,6 +193,12 @@ def _evaluate_one(path: Path, group: str, activity: str, duration_ms: int,
                 raise ValueError("Unexpected pose adapter reason")
             reason_counts.update((reason,))
         extra["pose_reason_consumer"] = consume_reason
+    if spatial_audit:
+        def consume_spatial(category):
+            if category not in MULTIPOSE_CATEGORIES:
+                raise ValueError("Invalid geometry category")
+            spatial_counts.update((category,))
+        extra["multipose_category_consumer"] = consume_spatial
     frames, stats = collector(
         path, clip_id=activity, model=pose_task, max_frames=6000,
         frame_consumer=consume, event_consumer=lambda _: None,
@@ -226,6 +237,15 @@ def _evaluate_one(path: Path, group: str, activity: str, duration_ms: int,
         if (sum(reason_counts.values()) != stats["frames_processed"]
                 or reason_counts["accepted"] != raw_torso_frames):
             raise ValueError("Adapter rejection counters contradict frame stream")
+        if spatial_audit:
+            if (sum(spatial_counts.values()) != stats["frames_processed"]
+                    or spatial_counts["not_multiple"] !=
+                    stats["frames_processed"] - reason_counts["multiple_people"]):
+                raise ValueError("Spatial categories contradict adapter frame counts")
+            result["multipose_spatial_categories"] = {
+                category: spatial_counts[category]
+                for category in MULTIPOSE_CATEGORIES
+            }
         result["pose_rejection_reasons"] = {
             reason: reason_counts[reason] for reason in REASONS
         }
@@ -353,11 +373,44 @@ def aggregate_pose_rejection_reasons(rows: list[dict], group: str) -> dict:
     }
 
 
+def aggregate_multipose_spatial(rows: list[dict], group: str) -> dict:
+    """Only bounded categorical totals; no positions or individual tracking."""
+    if group not in ("fall", "adl"):
+        raise ValueError("Unexpected spatial audit class")
+    subset = [r for r in rows if r["publisher_class"] == group]
+    if not subset or any("multipose_spatial_categories" not in r for r in subset):
+        raise ValueError("Missing opt-in spatial audit counters")
+    totals = Counter()
+    for item in subset:
+        counts = item["multipose_spatial_categories"]
+        reasons = item["pose_rejection_reasons"]
+        if (set(counts) != set(MULTIPOSE_CATEGORIES)
+                or any(type(v) is not int or v < 0 for v in counts.values())
+                or sum(counts.values()) != item["failure_diagnostic"]["decoded_frames"]
+                or sum(v for k, v in counts.items() if k != "not_multiple")
+                != reasons["multiple_people"]):
+            raise ValueError("Spatial audit frame categories inconsistent")
+        totals.update(counts)
+    return {
+        "videos": len(subset),
+        "decoded_frames": sum(totals.values()),
+        "multi_pose_frames": sum(
+            totals[c] for c in MULTIPOSE_CATEGORIES if c != "not_multiple"
+        ),
+        "spatial_categories": {c: totals[c] for c in MULTIPOSE_CATEGORIES},
+        "no_person_identity_or_duplicate_proven": True,
+        "research_only_multi_person_abstention_unchanged": True,
+    }
+
+
 def evaluate_external(root: Path, pose_task: Path, frozen_model_path: Path,
                       report_path: Path, *, collector=collect_video_frames,
                       detailed_reasons=False,
+                      spatial_audit=False,
                       diagnostics=False) -> dict:
     """One-shot source-frozen external video stress; NEVER trains or tunes."""
+    if spatial_audit and not (detailed_reasons and diagnostics):
+        raise ValueError("Spatial audit requires both reason and frame diagnostics")
     root = private_root(root).resolve(strict=True)
     if not root.is_dir():
         raise ValueError("No external research root")
@@ -408,7 +461,8 @@ def evaluate_external(root: Path, pose_task: Path, frozen_model_path: Path,
     rows = [
         _evaluate_one(path, group, activity, duration, pose_task,
                       model, collector=collector, diagnostics=diagnostics,
-                      detailed_reasons=detailed_reasons)
+                      detailed_reasons=detailed_reasons,
+                      spatial_audit=spatial_audit)
         for path, group, activity, duration in plan
     ]
     by_class = {
@@ -447,6 +501,12 @@ def evaluate_external(root: Path, pose_task: Path, frozen_model_path: Path,
             for group in ("adl", "fall")
         }
         report["pose_reasons_describe_adapter_gates_not_physical_cause"] = True
+    if spatial_audit:
+        report["multipose_spatial_summary"] = {
+            group: aggregate_multipose_spatial(rows, group)
+            for group in ("adl", "fall")
+        }
+        report["spatial_categories_are_not_real_person_counts"] = True
     with report_path.open("x", encoding="utf8") as out:
         json.dump(report, out, indent=2)
     return report
@@ -455,7 +515,7 @@ def evaluate_external(root: Path, pose_task: Path, frozen_model_path: Path,
 def main(argv=None) -> int:
     parser = ArgumentParser(description="Externally sourced frozen-video research only")
     parser.add_argument("--mode", choices=("download", "evaluate", "diagnose",
-                                            "reason-audit"), required=True)
+                                            "reason-audit", "spatial-audit"), required=True)
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--model", type=Path)
     parser.add_argument("--pose-task", type=Path)
@@ -475,8 +535,9 @@ def main(argv=None) -> int:
                 parser.error("evaluate requires --model, --pose-task and --report")
             result = evaluate_external(
                 args.root, args.pose_task, args.model, args.report,
-                diagnostics=(args.mode in ("diagnose", "reason-audit")),
-                detailed_reasons=(args.mode == "reason-audit"),
+                diagnostics=(args.mode in ("diagnose", "reason-audit", "spatial-audit")),
+                detailed_reasons=(args.mode in ("reason-audit", "spatial-audit")),
+                spatial_audit=(args.mode == "spatial-audit"),
             )
     except (OSError, ValueError, RuntimeError, KeyError, TypeError) as exc:
         parser.error("External frozen evaluation refused: " + str(exc))

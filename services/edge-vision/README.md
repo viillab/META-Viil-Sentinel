@@ -116,6 +116,28 @@ predeclared V1 selection remains unchanged.
 .\.venv\Scripts\python.exe -m sentinel_edge.model_quality --synthetic-demo --dev-crossval
 ```
 
+## Frozen multi-pose geometry audit (Member 1)
+
+The [real-source spatial geometry handoff](docs/FROZEN_MULTIPOSE_SPATIAL_HANDOFF_2026-10-27.md)
+adds an opt-in `python -m sentinel_edge.assist_external --mode spatial-audit`.
+MediaPipe's **multiple returned torso pose hypotheses** are counted
+as geometrically overlapping, spatially separated, ambiguous or
+unusable; nothing chooses a person or changes the strict production
+adapter. Source MP4s and the frozen private model remain unchanged.
+Only categorical counts (no pose coordinates, individual tracks,
+frames or confidences) are saved to ignored private reports. These
+categories **cannot certify duplicate detections or true person
+identity**, and no autonomous alerts are enabled. The real 11-video
+spatial audit classified **820/860 multi-pose Fall frames as spatially
+separated geometry** and 40 with insufficient torso geometry; none
+met the strict close-overlap bucket. The 51 ADL multi-pose frames
+split into 7 overlapping, 3 separated, 24 ambiguous, 17 unusable.
+These are not independently verified person counts or a promotion result.
+
+```powershell
+.\.venv\Scripts\python.exe -m sentinel_edge.assist_external --help
+```
+
 ## MediaPipe multi-pose rejection reason audit (Member 1)
 
 The [real ASSIST-IoT pose rejection reason handoff](docs/POSE_REJECTION_REASONS_HANDOFF_2026-10-27.md)

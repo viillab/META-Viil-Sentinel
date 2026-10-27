@@ -18,6 +18,7 @@ from sentinel_edge.model_smoke import _file_sha256
 from sentinel_edge.detector import TemporalFallDetector
 from sentinel_edge.pose_adapter import extract_torso_landmarks
 from sentinel_edge.pose_rejection_diagnostics import pose_adapter_reason
+from sentinel_edge.multipose_spatial_diagnostics import multipose_spatial_category
 from sentinel_edge.frame_resize import resize_for_inference, validate_max_side
 from sentinel_edge.pose_traces import frame_to_trace_record
 
@@ -84,6 +85,7 @@ def process_capture(
     output: TextIO | None = None, clock: Callable[[], float] = monotonic,
     on_frame: Callable[[PoseFrame], None] | None = None,
     pose_reason_consumer: Callable[[str], None] | None = None,
+    multipose_category_consumer: Callable[[str], None] | None = None,
     event_encoder: Callable[[FallCandidateEvent], dict] | None = None,
     on_event: Callable[[FallCandidateEvent], None] | None = None,
     detector: TemporalFallDetector | None = None,
@@ -123,6 +125,8 @@ def process_capture(
         landmarks = extract_torso_landmarks(result)
         if pose_reason_consumer is not None:
             pose_reason_consumer(pose_adapter_reason(result))
+        if multipose_category_consumer is not None:
+            multipose_category_consumer(multipose_spatial_category(result))
         if not landmarks:
             invalid_poses += 1
         frame = PoseFrame(
