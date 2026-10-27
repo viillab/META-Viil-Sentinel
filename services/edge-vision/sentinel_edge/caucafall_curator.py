@@ -263,7 +263,8 @@ def _wilson_95(hits: int, n: int) -> dict:
 
 
 def publisher_label_pilot(root: Path, model: Path, groups: dict,
-                          proposals: dict, *, collector=None, trainer=None) -> dict:
+                          proposals: dict, *, collector=None, trainer=None,
+                          dataset_origin="CAUCAFall OmniFall publisher action annotations") -> dict:
     """Opt-in REAL publisher-labeled, *unreviewed* pilot: no production claims.
 
     Unlike window_export, this uses publisher's action annotations as-is and
@@ -389,7 +390,7 @@ def publisher_label_pilot(root: Path, model: Path, groups: dict,
             "correct classifications. No clinical/safety reliability claim."
         ),
     }
-    result["dataset_origin"] = "CAUCAFall OmniFall publisher action annotations"
+    result["dataset_origin"] = dataset_origin
     result["publisher_labels_only"] = True
     result["independent_human_label_review"] = False
     result["prototype_research_only"] = True
