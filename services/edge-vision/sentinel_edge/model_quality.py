@@ -84,7 +84,7 @@ def _fit_candidate(train_x, train_y, val_x, val_y):
     return predict, best_threshold, best_score, len(mean) * 8 * 3 + 16
 
 
-def compare_models(manifest: dict, bundle: dict) -> tuple[None, dict]:
+def compare_models(manifest: dict, bundle: dict, *, dev_crossval=False) -> tuple[None, dict]:
     """Compare fixed candidates; select on val, score final test once.
 
     The v1 baseline is independently fitted with its own validation threshold.
@@ -133,7 +133,7 @@ def compare_models(manifest: dict, bundle: dict) -> tuple[None, dict]:
     test_v2 = _metrics(y_test, predict_v2(x_test_v2) >= threshold_v2)
     heldout = test_v2 if selected_v2 else test_v1
     val = val_v2 if selected_v2 else baseline_val
-    return None, {
+    report = {
         "stage": "publisher_or_synthetic_research_candidate_selection",
         "selected_model": selected_name,
         "model_selected_on": "validation subjects only; held-out TEST excluded",
@@ -164,11 +164,19 @@ def compare_models(manifest: dict, bundle: dict) -> tuple[None, dict]:
             "clips and cannot predict real-world event safety."
         ),
     }
+    if dev_crossval:
+        from sentinel_edge.dev_crossval import cross_validate_development
+        report["development_crossvalidation"] = cross_validate_development(
+            manifest, bundle
+        )
+    return None, report
 
 
 def main(argv=None):
     parser = ArgumentParser(description="Local research candidate comparison; no alerts")
     parser.add_argument("--synthetic-demo", action="store_true")
+    parser.add_argument("--dev-crossval", action="store_true",
+                        help="Opt-in 4-fold development-subject diagnostic, never choose on test")
     parser.add_argument("--root", type=Path)
     parser.add_argument("--groups", type=Path)
     parser.add_argument("--segments", type=Path)
@@ -180,7 +188,7 @@ def main(argv=None):
         if any((args.root, args.groups, args.segments, args.model)):
             parser.error("Synthetic demo may not be combined with local media")
         from sentinel_edge.temporal_training import synthetic_demo
-        report = compare_models(*synthetic_demo())[1]
+        report = compare_models(*synthetic_demo(), dev_crossval=args.dev_crossval)[1]
         report["synthetic_data_only"] = True
     else:
         if not all((args.root, args.groups, args.segments, args.model)):
@@ -203,7 +211,10 @@ def main(argv=None):
             from sentinel_edge.caucafall_curator import publisher_label_pilot
             report = publisher_label_pilot(
                 root, args.model, _read_bounded_json(groups_file),
-                _read_bounded_json(segments_file), trainer=compare_models
+                _read_bounded_json(segments_file),
+                trainer=lambda groups, bundle: compare_models(
+                    groups, bundle, dev_crossval=args.dev_crossval
+                ),
             )
         except (ValueError, OSError, RuntimeError, TypeError, KeyError) as exc:
             parser.error("Private research input rejected: " + str(exc))
