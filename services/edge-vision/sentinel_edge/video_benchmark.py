@@ -17,6 +17,7 @@ from sentinel_edge.evaluation import (
 )
 from sentinel_edge.model_smoke import _file_sha256
 from sentinel_edge.runner import process_capture
+from sentinel_edge.signal_diagnostics import diagnose_pose_signals
 from sentinel_edge.video_metadata import expected_frame_count, require_complete_decode
 
 VIDEO_SUFFIXES = {".mp4", ".avi", ".mov", ".mkv", ".webm"}
@@ -101,7 +102,7 @@ def validate_video_manifest(manifest_path: Path) -> tuple[list[tuple], bool]:
 def evaluate_video_manifest(
     manifest_path: Path, model: Path, *,
     max_frames: int = MAX_FRAMES, config: DetectorConfig | None = None,
-    collector=collect_video_frames,
+    collector=collect_video_frames, include_diagnostics: bool = False,
 ) -> dict:
     if not 1 <= max_frames <= MAX_FRAMES:
         raise ValueError("max_frames must be 1..6000")
@@ -112,6 +113,7 @@ def evaluate_video_manifest(
     outcomes = []
     total = 0
     no_pose = 0
+    diagnostics = []
     for clip_id, video, label, onset in resolved_clips:
         remaining = MAX_TOTAL_FRAMES - total
         if remaining <= 0:
@@ -131,6 +133,11 @@ def evaluate_video_manifest(
         outcomes.append(evaluate_clip_frames(
             frames, clip_id=clip_id, expected_fall=label, onset_ms=onset, config=config,
         ))
+        if include_diagnostics:
+            diagnostics.append({
+                "clip_id": clip_id,
+                **diagnose_pose_signals(frames, config),
+            })
         # RAM containing derived landmark coordinates is released per clip.
         del frames
 
@@ -152,6 +159,12 @@ def evaluate_video_manifest(
         "fall_accuracy_established": False,
         "notice": "Metrics describe this labeled video set only, not clinical or deployed performance.",
     })
+    if include_diagnostics:
+        report["aggregate_signal_diagnostics"] = diagnostics
+        report["diagnostic_note"] = (
+            "Gate counts are descriptive only, not ground-truth onset detection or "
+            "proof of the cause of missed events."
+        )
     return report
 
 
@@ -165,6 +178,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--confirm-consent", action="store_true",
                         help="Confirm authorization to analyze all video subjects and files")
     parser.add_argument("--max-frames", type=int, default=MAX_FRAMES)
+    parser.add_argument("--signal-diagnostics", action="store_true",
+                        help="Include aggregate-only per-clip detector gate counts")
     parser.add_argument("--min-hip-descent", type=float, default=0.13)
     parser.add_argument("--horizontal-min-angle-deg", type=float, default=56.0)
     parser.add_argument("--horizontal-hold-ms", type=int, default=450)
@@ -174,6 +189,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         result = evaluate_video_manifest(
             args.manifest, args.model, max_frames=args.max_frames,
+            include_diagnostics=args.signal_diagnostics,
             config=DetectorConfig(
                 min_hip_descent=args.min_hip_descent,
                 horizontal_min_angle_deg=args.horizontal_min_angle_deg,

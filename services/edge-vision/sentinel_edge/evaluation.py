@@ -139,7 +139,26 @@ def summarize_clips(
     observed_negative_ms = sum(
         max(0, item.last_frame_ms - item.first_frame_ms) for item in negatives
     )
+    positive_count = sum(item.expected_fall for item in outcomes)
+    negative_count = len(outcomes) - positive_count
+    limitations = []
+    if negative_count == 0:
+        limitations.append(
+            "Positive-only evaluation: cannot measure false-positive rate or "
+            "specificity; reported precision/F1 do not demonstrate no-fall reliability."
+        )
+    if positive_count == 0:
+        limitations.append(
+            "Negative-only evaluation: cannot measure fall-detection sensitivity."
+        )
+    if not all(item.annotated_onset_ms is not None
+               for item in outcomes if item.expected_fall):
+        limitations.append(
+            "Some positive clips lack onset_ms; detection latency is not evaluable for them."
+        )
     return {
+        "ground_truth_balance": {"fall_clips": positive_count, "no_fall_clips": negative_count},
+        "metric_interpretation_limits": limitations,
         "evaluation_type": "clip-level-pose-heuristic",
         "source": source,
         "model_calibrated": False,
