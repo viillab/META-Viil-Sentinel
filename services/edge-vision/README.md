@@ -85,6 +85,68 @@ A candidate event has this shape (the numeric values are **illustrative only**, 
 - Test under realistic light, clothes, camera heights, frame rates and hardware conditions.
 - Integrate the validated detection contract with Member 2/3 through an explicitly authorized authenticated service.
 
+## New — Clip-level evaluation workflow
+
+The Member 1 evaluator runs locally using **authorized, human-annotated clips**
+represented by JSONL pose traces, then outputs clip-level confusion-matrix
+counts, precision, recall, F1, false candidates per negative-video hour and
+(optional) post-onset detection latency. These metrics are meaningful **only
+for the clips you actually label and evaluate**. The included two-clip
+synthetic demonstration is only a parser/logic smoke test.
+
+You can run the synthetic smoke test immediately:
+
+```powershell
+cd D:\VIIL-Sentinel\services\edge-vision
+python -m sentinel_edge.evaluation --manifest examples/synthetic/manifest.json
+```
+
+### Collect local pose traces from an authorized video
+
+After installing the optional video extras and obtaining a licensed local
+Pose Landmarker model, this command exports only four normalized torso
+landmarks per frame. Pose traces can still be identifying and may be
+sensitive. **Use exclusively with consented staged media.** Store them in a
+local ignored folder and never publish them.
+
+```powershell
+# From services/edge-vision, use a local video you are authorized to analyze.
+# Create the private output folder yourself (e.g. D:\staged-private\).
+python -m sentinel_edge --source "D:\staged-private\fall1.mp4" `
+  --model "D:\VIIL-Sentinel\models\pose_landmarker_lite.task" `
+  --trace-output "D:\staged-private\fall1.pose.jsonl" `
+  --acknowledge-pose-privacy
+```
+
+The output path must end in `.pose.jsonl` and must not already exist. The
+export is **opt-in and local**; neither video nor poses are sent to Meta.
+The tool does not export screenshots or raw frames.
+
+### Annotate ground truth and evaluate
+
+Create a manifest alongside the exported clips (see
+`examples/synthetic/manifest.json`). Each clip requires a pseudonymous
+ID, a relative trace path, an explicit `expected_fall` boolean and a
+nonempty `permission_basis` documenting consent or licensing. For positive
+clips you may specify `onset_ms` for detection latency measurements.
+Run from the folder above:
+
+```powershell
+python -m sentinel_edge.evaluation --manifest "D:\staged-private\manifest.json"
+```
+
+Options: `--min-hip-descent`, `--horizontal-min-angle-deg` and
+`--horizontal-hold-ms` enable controlled sensitivity experiments.
+Do not tune thresholds on the held-out evaluation set. Use distinct
+participants for development and evaluation clips, and document camera
+angle, fps and consent.
+
+**Interpretation limits:** This is *clip-level* fall/no-fall scoring, not
+frame or event boundary localization. It cannot validate emergencies,
+patient outcomes, or clinical sensitivity. Falling subjects may be missed
+if pose is occluded, stationary, or the visual perspective hides descent.
+Perfect scores on the tiny synthetic fixtures are not evidence of accuracy.
+
 ## Privacy and licensing
 
 MediaPipe is an external third-party dependency; check the Pose Landmarker model asset license and permitted redistribution before making the GitHub repository Public. Do not commit raw footage, `.task` binaries, research models or personal data.

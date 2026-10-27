@@ -39,6 +39,8 @@ models/
 *.avi
 *.webm
 *.mkv
+# Sensitive pose traces exported locally; synthetic fixtures use other names
+*.pose.jsonl
 # IDE / OS
 .idea/
 .vscode/settings.json

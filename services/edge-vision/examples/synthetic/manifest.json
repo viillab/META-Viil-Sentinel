@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "permission_basis": "Entirely synthetic mathematical pose sequences created for unit demonstrations; no human data.",
+  "clips": [
+    {
+      "id": "synthetic_fall_a",
+      "trace": "fall.jsonl",
+      "expected_fall": true,
+      "onset_ms": 300
+    },
+    {
+      "id": "synthetic_sit_a",
+      "trace": "sitting.jsonl",
+      "expected_fall": false
+    }
+  ]
+}

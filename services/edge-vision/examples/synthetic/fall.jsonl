@@ -1,0 +1,7 @@
+{"timestamp_ms":0,"landmarks":{"11":{"x":0.455,"y":0.25,"visibility":0.98},"12":{"x":0.545,"y":0.25,"visibility":0.98},"23":{"x":0.45,"y":0.53,"visibility":0.98},"24":{"x":0.55,"y":0.53,"visibility":0.98}}}
+{"timestamp_ms":100,"landmarks":{"11":{"x":0.455,"y":0.25,"visibility":0.98},"12":{"x":0.545,"y":0.25,"visibility":0.98},"23":{"x":0.45,"y":0.53,"visibility":0.98},"24":{"x":0.55,"y":0.53,"visibility":0.98}}}
+{"timestamp_ms":200,"landmarks":{"11":{"x":0.455,"y":0.25,"visibility":0.98},"12":{"x":0.545,"y":0.25,"visibility":0.98},"23":{"x":0.45,"y":0.53,"visibility":0.98},"24":{"x":0.55,"y":0.53,"visibility":0.98}}}
+{"timestamp_ms":300,"landmarks":{"11":{"x":0.185,"y":0.78,"visibility":0.98},"12":{"x":0.275,"y":0.78,"visibility":0.98},"23":{"x":0.5199999999999999,"y":0.78,"visibility":0.98},"24":{"x":0.62,"y":0.78,"visibility":0.98}}}
+{"timestamp_ms":500,"landmarks":{"11":{"x":0.185,"y":0.78,"visibility":0.98},"12":{"x":0.275,"y":0.78,"visibility":0.98},"23":{"x":0.5199999999999999,"y":0.78,"visibility":0.98},"24":{"x":0.62,"y":0.78,"visibility":0.98}}}
+{"timestamp_ms":700,"landmarks":{"11":{"x":0.185,"y":0.78,"visibility":0.98},"12":{"x":0.275,"y":0.78,"visibility":0.98},"23":{"x":0.5199999999999999,"y":0.78,"visibility":0.98},"24":{"x":0.62,"y":0.78,"visibility":0.98}}}
+{"timestamp_ms":850,"landmarks":{"11":{"x":0.185,"y":0.78,"visibility":0.98},"12":{"x":0.275,"y":0.78,"visibility":0.98},"23":{"x":0.5199999999999999,"y":0.78,"visibility":0.98},"24":{"x":0.62,"y":0.78,"visibility":0.98}}}
