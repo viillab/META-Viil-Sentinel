@@ -49,6 +49,23 @@ until manual review. Optional **publisher-labeled** in-memory baseline
 training is *research-only* and reports pose-quality exclusions and held-out
 subjects; it does **not** assert independent human label verification.
 
+## Lightweight V1/V2 model-quality comparison (Member 1 handoff)
+
+The [V2 implementation and next-developer handoff](docs/MEMBER1_MODEL_QUALITY_V2_HANDOFF_2026-10-27.md)
+adds a 40-dimensional mask-aware motion descriptor alongside the unchanged
+30-dimensional V1 baseline. It uses train subjects for weights, validation
+subjects to select candidate/threshold, and held-out test subjects for
+diagnostic comparison only. The real publisher-labeled CAUCAFall pilot can
+be rerun in memory without overwriting the private manifests:
+
+```powershell
+.\.venv\Scripts\python.exe -m sentinel_edge.model_quality --synthetic-demo
+```
+
+**This is research model selection, not a production fall-alert model.**
+Model improvements must be supported by held-out results and pose coverage,
+never claimed from synthetic fixtures or validation-set optimization alone.
+
 ## Research-only trained Temporal Logistic baseline
 
 A lightweight **NumPy-supervised model** can now be fitted on masked temporal
