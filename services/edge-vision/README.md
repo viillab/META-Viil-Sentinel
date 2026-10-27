@@ -23,6 +23,16 @@
 
 This is a heuristic demonstration; it does not establish clinical reliability. **Do not call the heuristic score a validated probability**. It cannot infer injuries, consciousness, severity, or whether emergency help is required.
 
+The new [Local Video Benchmark](docs/VIDEO_BENCHMARK.md) evaluates
+consented videos directly using local MediaPipe inference and clip-level
+labels without writing derived pose traces. It is distinct from the
+synthetic negative-control smoke test and cannot establish clinical accuracy.
+
+For the exact readiness checklist and dependency-isolated camera commands, see
+[Member 1 verification runbook](RUNBOOK.md). The latest MediaPipe optional
+video dependency installs its own compatible OpenCV package; avoid mixing
+multiple OpenCV wheels in the same Python environment.
+
 ## Setup and test
 
 From `D:\VIIL-Sentinel\services\edge-vision` with Python 3.11+:

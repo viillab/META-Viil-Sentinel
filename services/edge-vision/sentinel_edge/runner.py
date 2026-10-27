@@ -1,18 +1,28 @@
-"""Local-only video/webcam runner with opt-in minimally scoped pose trace output.
+"""Local-only OpenCV/MediaPipe runner for a non-clinical fall-candidate prototype.
 
-No media uploads and no automatic storage. Four torso landmarks are potentially
-identifying data; export requires explicit opt-in and output is ignored by Git.
+MediaPipe inference is separated from camera opening so full stream behavior
+can be tested without activating a camera or calling a real pose model.
 """
 from argparse import ArgumentParser
 from contextlib import ExitStack
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 import json
 from pathlib import Path
+import sys
 from time import monotonic
+from typing import Any, Callable, TextIO
 
-from sentinel_edge.contracts import Landmark, PoseFrame, REQUIRED_POINTS
+from sentinel_edge.contracts import PoseFrame
 from sentinel_edge.detector import TemporalFallDetector
+from sentinel_edge.pose_adapter import extract_torso_landmarks
 from sentinel_edge.pose_traces import frame_to_trace_record
+
+
+@dataclass(frozen=True)
+class StreamStats:
+    frames_processed: int
+    invalid_pose_frames: int
+    candidate_events: int
 
 
 def parse_args(argv: list[str] | None = None):
@@ -33,6 +43,8 @@ def parse_args(argv: list[str] | None = None):
         parser.error("--max-frames must be >= 0")
     if not args.model.is_file():
         parser.error(f"Model file not found: {args.model}")
+    if not args.source_id.strip() or len(args.source_id) > 128:
+        parser.error("--source-id must be between 1 and 128 characters")
     if args.trace_output is not None:
         if not args.acknowledge_pose_privacy:
             parser.error("--trace-output requires --acknowledge-pose-privacy")
@@ -46,9 +58,75 @@ def parse_args(argv: list[str] | None = None):
 
 
 def timestamp_for_frame(index: int, fps: float, prev_ms: int) -> int:
-    if fps <= 0:
-        raise ValueError("fps must be positive")
+    if not 0 < fps < float("inf"):
+        raise ValueError("fps must be finite and positive")
     return max(int(index * 1000.0 / fps), prev_ms + 1)
+
+
+def process_capture(
+    cap: Any, *,
+    cv2: Any, mp: Any, landmarker: Any,
+    webcam: bool, source_id: str, max_frames: int = 0,
+    display: bool = False, trace_file: TextIO | None = None,
+    output: TextIO | None = None, clock: Callable[[], float] = monotonic,
+    on_frame: Callable[[PoseFrame], None] | None = None,
+) -> StreamStats:
+    """Read local frames and emit only candidate metadata to an output stream.
+
+    This function does not own/close the capture, model, display or trace file:
+    the caller manages these resources. Fail-closed pose conversion sends an
+    empty frame to the detector when pose data are absent or invalid.
+    """
+    if max_frames < 0:
+        raise ValueError("max_frames must be non-negative")
+    output = output if output is not None else sys.stdout
+    detector = TemporalFallDetector()
+    started = clock()
+    frame_number, invalid_poses, candidate_count = 0, 0, 0
+    last_timestamp = -1
+    fps = float(cap.get(cv2.CAP_PROP_FPS))
+    if not 0 < fps < 240:
+        fps = 30.0
+
+    while True:
+        success, bgr = cap.read()
+        if not success:
+            break
+        timestamp = (
+            max(int((clock() - started) * 1000), last_timestamp + 1)
+            if webcam else timestamp_for_frame(frame_number, fps, last_timestamp)
+        )
+        last_timestamp = timestamp
+        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+        image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+        result = landmarker.detect_for_video(image, timestamp)
+        landmarks = extract_torso_landmarks(result)
+        if not landmarks:
+            invalid_poses += 1
+        frame = PoseFrame(
+            timestamp_ms=timestamp,
+            source_id=source_id,
+            landmarks=landmarks,
+        )
+        if trace_file is not None:
+            trace_file.write(frame_to_trace_record(frame) + "\n")
+        if on_frame is not None:
+            on_frame(frame)
+        event = detector.process(frame)
+        if event is not None:
+            print(json.dumps({"type": "FALL_CANDIDATE", **asdict(event)}), file=output)
+            output.flush()
+            candidate_count += 1
+
+        frame_number += 1
+        if display:
+            cv2.imshow("VIIL Sentinel — local pose video (no recording)", bgr)
+            if cv2.waitKey(1) & 0xFF == ord("q"):
+                break
+        if max_frames and frame_number >= max_frames:
+            break
+
+    return StreamStats(frame_number, invalid_poses, candidate_count)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -74,68 +152,38 @@ def main(argv: list[str] | None = None) -> int:
         stack.callback(cap.release)
         if args.display:
             stack.callback(cv2.destroyAllWindows)
-
         trace_file = None
         if args.trace_output:
-            # Open using exclusive creation, even if another process created the file meanwhile.
+            # Exclusive creation; never overwrite an existing privacy-sensitive trace.
             trace_file = stack.enter_context(args.trace_output.open("x", encoding="utf-8"))
 
         options = mp.tasks.vision.PoseLandmarkerOptions(
             base_options=mp.tasks.BaseOptions(model_asset_path=str(args.model.resolve())),
             running_mode=mp.tasks.vision.RunningMode.VIDEO,
-            num_poses=1,
+            num_poses=2,  # Detect a second person and abstain on ambiguous multi-person frames.
         )
-        detector = TemporalFallDetector()
-        start = monotonic()
-        frame_number = 0
-        last_timestamp = -1
-        file_fps = float(cap.get(cv2.CAP_PROP_FPS))
-        if not 0 < file_fps < 240:
-            file_fps = 30.0
+        landmarker = stack.enter_context(
+            mp.tasks.vision.PoseLandmarker.create_from_options(options)
+        )
         try:
-            with mp.tasks.vision.PoseLandmarker.create_from_options(options) as landmarker:
-                while True:
-                    ok, bgr = cap.read()
-                    if not ok:
-                        break
-                    timestamp = (
-                        max(int((monotonic() - start) * 1000), last_timestamp + 1)
-                        if webcam else timestamp_for_frame(frame_number, file_fps, last_timestamp)
-                    )
-                    last_timestamp = timestamp
-                    rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
-                    image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-                    result = landmarker.detect_for_video(image, timestamp)
-                    landmarks = (
-                        {
-                            idx: Landmark(
-                                p.x, p.y,
-                                p.visibility if p.visibility is not None else 0.0,
-                            )
-                            for idx, p in enumerate(result.pose_landmarks[0])
-                            if idx in REQUIRED_POINTS
-                        }
-                        if result.pose_landmarks else {}
-                    )
-                    frame = PoseFrame(
-                        timestamp_ms=timestamp,
-                        source_id=args.source_id,
-                        landmarks=landmarks,
-                    )
-                    if trace_file is not None:
-                        trace_file.write(frame_to_trace_record(frame) + "\n")
-                    event = detector.process(frame)
-                    if event:
-                        print(json.dumps({"type": "FALL_CANDIDATE", **asdict(event)}), flush=True)
-                    frame_number += 1
-                    if args.display:
-                        cv2.imshow("VIIL Sentinel — local pose video (no recording)", bgr)
-                        if cv2.waitKey(1) & 0xFF == ord("q"):
-                            break
-                    if args.max_frames and frame_number >= args.max_frames:
-                        break
+            stats = process_capture(
+                cap, cv2=cv2, mp=mp, landmarker=landmarker,
+                webcam=webcam, source_id=args.source_id,
+                max_frames=args.max_frames, display=args.display,
+                trace_file=trace_file,
+            )
         except KeyboardInterrupt:
-            pass
+            print("Interrupted by operator; local capture closed.", file=sys.stderr)
+            return 130
+
+        # Status goes to stderr; stdout contains only machine-readable event JSONL.
+        print(
+            f"Processed {stats.frames_processed} frames; "
+            f"invalid/unavailable poses: {stats.invalid_pose_frames}; "
+            f"candidate events: {stats.candidate_events}. "
+            "Events require human review.",
+            file=sys.stderr,
+        )
     return 0
 
 
