@@ -24,6 +24,22 @@ candidate production thresholds and outputs are unchanged; the original
 8-clip positive-only IKAR evaluation remains 1/8. No additional person
 images, models or subject metadata have been committed.
 
+## Research-only trained Temporal Logistic baseline
+
+A lightweight **NumPy-supervised model** can now be fitted on masked temporal
+pose features in an **offline experiment**. It applies the v2 subject-disjoint
+audit, trains and normalizes using train subjects only, selects threshold on
+validation subjects, and scores a separate held-out test. **Only an invented
+synthetic demo has been trained and verified**; this is NOT a TCN/GRU, NOT a
+validated Fall Detection AI replacement and is never connected to live alerts.
+
+See [temporal baseline training and dataset gates](docs/TEMPORAL_TRAINING_RESEARCH_BASELINE_2026-10-27.md).
+
+```powershell
+python -m pip install -e ".[training,dev]"
+python -m sentinel_edge.temporal_training --synthetic-demo
+```
+
 ## AI model readiness — verified
 
 See the [latest real runtime and model readiness audit](docs/MODEL_READINESS_AUDIT_2026-10-27.md):

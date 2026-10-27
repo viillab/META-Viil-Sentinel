@@ -12,6 +12,7 @@ dependencies = []
 [project.optional-dependencies]
 video = ["mediapipe>=0.10.20,<0.11"]
 dev = ["pytest>=8,<10", "ruff>=0.8,<1.0"]
+training = ["numpy>=1.26,<3.0"]
 
 [project.scripts]
 viil-edge = "sentinel_edge.runner:main"
@@ -21,6 +22,7 @@ viil-edge-model-smoke = "sentinel_edge.model_smoke:main"
 viil-edge-video-benchmark = "sentinel_edge.video_benchmark:main"
 viil-edge-handoff = "sentinel_edge.handoff_cli:main"
 viil-edge-split-audit = "sentinel_edge.split_audit:main"
+viil-edge-train-baseline = "sentinel_edge.temporal_training:main"
 
 [tool.setuptools.packages.find]
 include = ["sentinel_edge*"]
