@@ -24,6 +24,19 @@ candidate production thresholds and outputs are unchanged; the original
 8-clip positive-only IKAR evaluation remains 1/8. No additional person
 images, models or subject metadata have been committed.
 
+## Private Pose-to-Window Export (reviewed human video only)
+
+A consent-gated [local reviewed-window exporter](docs/PRIVATE_WINDOW_EXPORT_2026-10-27.md)
+now connects real MediaPipe video inference to **30×6 masked motion windows**
+for the existing research trainer. Group IDs, media SHA-256 and human-reviewed
+interval labels must be supplied, with Fall AND ADL among disjoint train/val/test
+people. Exported derived features are sensitive: the CLI ONLY creates files
+inside Git-ignored `data/private`, with explicit authorization and no overwrite.
+
+A real **in-memory IKAR pilot** decoded 87 frames and produced a 30×6 window
+without assigning a Fall/No-Fall label or saving the features. The supervised
+classifier remains **synthetic-data-only**; this is NOT a real-trained fall AI.
+
 ## Research-only trained Temporal Logistic baseline
 
 A lightweight **NumPy-supervised model** can now be fitted on masked temporal

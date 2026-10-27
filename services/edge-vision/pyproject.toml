@@ -23,6 +23,7 @@ viil-edge-video-benchmark = "sentinel_edge.video_benchmark:main"
 viil-edge-handoff = "sentinel_edge.handoff_cli:main"
 viil-edge-split-audit = "sentinel_edge.split_audit:main"
 viil-edge-train-baseline = "sentinel_edge.temporal_training:main"
+viil-edge-export-windows = "sentinel_edge.window_export:main"
 
 [tool.setuptools.packages.find]
 include = ["sentinel_edge*"]
