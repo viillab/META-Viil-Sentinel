@@ -20,6 +20,7 @@ viil-edge-evaluate = "sentinel_edge.evaluation:main"
 viil-edge-model-smoke = "sentinel_edge.model_smoke:main"
 viil-edge-video-benchmark = "sentinel_edge.video_benchmark:main"
 viil-edge-handoff = "sentinel_edge.handoff_cli:main"
+viil-edge-split-audit = "sentinel_edge.split_audit:main"
 
 [tool.setuptools.packages.find]
 include = ["sentinel_edge*"]
