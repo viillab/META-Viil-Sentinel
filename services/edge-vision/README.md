@@ -116,6 +116,45 @@ predeclared V1 selection remains unchanged.
 .\.venv\Scripts\python.exe -m sentinel_edge.model_quality --synthetic-demo --dev-crossval
 ```
 
+## AFDCare-inspired Linear V1 camera Shadow research (Member 1)
+
+The [model-shadow handoff](docs/AFDCARE_INSPIRED_SHADOW_INFERENCE_HANDOFF_2026-10-28.md)
+maps implementation ideas learned through *read-only* inspection
+of AFDCare's real YOLO-Pose + GRU temporal pipeline to VIIL's
+**independently coded, opt-in research-only** `--shadow-model`.
+No AFDCare source, weights, datasets or confidential artifacts
+are copied. Original MediaPipe strict multi-person abstention
+and original heuristic fall candidate JSONL are **unchanged**.
+
+The camera/video runner can verify and load VIIL's exact **frozen
+Linear V1 research model** (SHA-256 pinned, threshold `0.53`)
+for parallel inference; it emits **only aggregate Shadow counters
+to stderr**, never an alert or event. Because V1 was trained on
+30 sparse pose samples over 8 seconds, each 30D prediction needs
+a full continuous 8-second context with 1-second inference hops.
+Actual source-verified replay on all **11 public ASSIST-IoT MP4s**
+(**3,396 frames**) yielded **12 ADL and 10 publisher Fall**
+eligible shadow windows, but **zero Fall Candidate windows**
+in both groups; **20 additional Fall windows abstained** due
+to insufficient usable pose. Four ADL clips were shorter than
+the required 8 seconds and generated no shadow windows.
+The original heuristic also emitted zero events. A direct
+`runner --shadow-model` smoke on one original 516-frame Fall
+clip completed with one below-threshold shadow score and nine
+abstentions; **no shadow alert/event**. These are previously
+exposed publisher-labeled diagnostics, not human-reviewed
+event recall or independent measured accuracy.
+
+Missing poses are masked and undercovered windows abstain;
+source changes / gaps over 700ms reset history. The original
+VIIL V1 is **not** an instantaneous Fall detector, and no
+safety readiness or event recall is inferred from Publisher labels.
+
+```powershell
+.\.venv\Scripts\python.exe -m sentinel_edge.runner --help
+.\.venv\Scripts\python.exe -m sentinel_edge.shadow_external --help
+```
+
 ## Offline persistent PoseLandmarker performance experiment (Member 1)
 
 The [persistent MediaPipe session handoff](docs/PERSISTENT_POSE_SESSION_RESOURCE_HANDOFF_2026-10-27.md)

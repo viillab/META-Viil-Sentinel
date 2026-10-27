@@ -36,6 +36,7 @@ viil-edge-train-tiny-mlp = "sentinel_edge.tiny_mlp_training:main"
 viil-edge-ikar-stress = "sentinel_edge.ikar_domain_stress:main"
 viil-edge-profile-resources = "sentinel_edge.edge_resource_profile:main"
 viil-edge-profile-persistent = "sentinel_edge.persistent_pose_session:main"
+viil-edge-shadow-research = "sentinel_edge.shadow_external:main"
 
 [tool.setuptools.packages.find]
 include = ["sentinel_edge*"]
