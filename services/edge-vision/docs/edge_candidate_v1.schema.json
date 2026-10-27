@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "VIIL Sentinel Edge Candidate V1 (local handoff only)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "event_type",
+    "event_id",
+    "source_id",
+    "source_timestamp_ms",
+    "timestamp_basis",
+    "detector",
+    "model_sha256",
+    "input_provenance",
+    "detector_score",
+    "detector_score_type",
+    "score_calibrated",
+    "confirmed_fall",
+    "human_review_required",
+    "medical_assessment_performed",
+    "simulated",
+    "evidence_refs",
+    "delivery_mode"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "viil.edge.candidate.v1"
+    },
+    "event_type": {
+      "const": "FALL_CANDIDATE"
+    },
+    "event_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "source_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$"
+    },
+    "source_timestamp_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "timestamp_basis": {
+      "const": "relative_to_source_start"
+    },
+    "detector": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$"
+    },
+    "model_sha256": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      ]
+    },
+    "input_provenance": {
+      "enum": [
+        "synthetic_pose_trace",
+        "consented_staged_video",
+        "authorized_local_camera"
+      ]
+    },
+    "detector_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "detector_score_type": {
+      "const": "uncalibrated_heuristic"
+    },
+    "score_calibrated": {
+      "const": false
+    },
+    "confirmed_fall": {
+      "const": false
+    },
+    "human_review_required": {
+      "const": true
+    },
+    "medical_assessment_performed": {
+      "const": false
+    },
+    "simulated": {
+      "type": "boolean"
+    },
+    "evidence_refs": {
+      "type": "array",
+      "maxItems": 0
+    },
+    "delivery_mode": {
+      "const": "local_stdout_only"
+    }
+  }
+}
