@@ -4,6 +4,17 @@ The local detector is a **non-clinical heuristic**, not an independently validat
 safety system. No automatic rescue dispatch or medical conclusions are permitted.
 All model and media handling in this module is local-only.
 
+## Private, annotated video-to-training-window export
+
+Read [Pose-to-Window Exporter protocol](docs/PRIVATE_WINDOW_EXPORT_2026-10-27.md).
+Requires version-2 subject-disjoint research group manifest plus a separately
+curated v1 segment manifest, valid original media SHA-256 and label reviews.
+Video is processed locally into 30×6 masked pose motion features; source
+frames and raw keypoint traces are NOT written, but the derived windows
+are still sensitive and MUST remain only in ignored `data/private`.
+Existing IKAR pilot footage was probed in-memory without fake ADL labels;
+**no fall-vs-normal classifier has been trained on that footage**.
+
 ## Research-only supervised temporal baseline
 
 See [trained NumPy Temporal Logistic and safety/evaluation protocol](docs/TEMPORAL_TRAINING_RESEARCH_BASELINE_2026-10-27.md).
