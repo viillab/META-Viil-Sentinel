@@ -1,0 +1,334 @@
+"""ASSIST-IoT externally sourced hard-negative stress, no fitting or promotion.
+
+Video references have no clip-level subject identities or independently
+reviewed event onsets. This reports only diagnostic whole-clip predictions.
+Raw frames/landmarks and model parameters never leave private local memory.
+"""
+from argparse import ArgumentParser
+from hashlib import sha256
+import json
+from pathlib import Path
+
+from sentinel_edge.caucafall_curator import _video_metadata, _sha256_file
+from sentinel_edge.private_model_training import read_private_artifact
+from sentinel_edge.public_dataset_ingest import _github_blob_sha1
+from sentinel_edge.temporal_training import pool_temporal_window
+from sentinel_edge.video_benchmark import collect_video_frames
+from sentinel_edge.window_export import NearestFrameSampler, _private_output_path
+
+DATASET = "ASSIST-IoT-SRIPAS/multimodal-fall-detection-dataset"
+PINNED_COMMIT = "7a11c96b9a3576cef92f0795a19b3786c69a3335"
+SOURCE_URL = f"https://raw.githubusercontent.com/{DATASET}/{PINNED_COMMIT}"
+SOURCE_LICENSE = "Creative Commons Attribution 4.0 International (CC BY 4.0)"
+DOI = "10.5281/zenodo.8340428"
+# Frozen independent of external video predictions: previous jointly fitted
+# CAUCAFall+GMDCSA-24 model, numeric parameters saved only to data/private.
+EXPECTED_MODEL_SHA256 = "2e55abd9657148a5fb17c3291c96841c31d030695c18116e0da70d6489aec3ab"
+MAX_TOTAL_BYTES = 42 * 1024 * 1024
+MAX_CLIP_BYTES = 9 * 1024 * 1024
+# group, exact public filename, exact bytes, Git tree blob SHA1.
+# Selected by *activity description* BEFORE any frozen-model evaluation.
+CATALOG = (
+    ("adl", "09_low_chair_sitting_quickly.mp4", 1681435, "78cd01c91598710f5abac3e8ead5f856ba4b85f7"),
+    ("adl", "10_collapsing_onto_chair.mp4", 2494982, "dddf82afb956a5f32d887e3dcb8d1aefc63a3d40"),
+    ("adl", "12_sitting_laying_down_quickly.mp4", 2702255, "efee2b70a78eead75623b954b8ac8b7ac393fdee"),
+    ("adl", "13_bending_at_knees.mp4", 1353104, "077030d73c39e27250706809983f6ce555e06245"),
+    ("adl", "14_bending_wo_knees.mp4", 1774202, "2ed3b492327d88d9848a29237f75aa9c7f1dcb4e"),
+    ("adl", "15_stumbling.mp4", 1286514, "2f70c1e223da1fdb9254c8ad802fe1ed47cc499e"),
+    ("adl", "16_jumping_reaching.mp4", 803073, "6b95aeee3c624ecd519ed5fbbf7ee74f3e224d63"),
+    ("adl", "17_crawling.mp4", 1866191, "4edd281e63ffc44360e28b0e7335f3063c6a256b"),
+    ("fall", "01_forward_fall_walking.mp4", 4409845, "6001d9fc65d3ec08ef16cd051271b5c2c6d24775"),
+    ("fall", "02_fall_backward.mp4", 5047305, "47f0571868cfea894222d5c37abe0a45517d946a"),
+    ("fall", "05_vertical_fall_faint.mp4", 2164420, "971487fae13a885bda9bf9ada413ac39deb71add"),
+)
+assert sum(item[2] for item in CATALOG) < MAX_TOTAL_BYTES
+
+
+def private_root(path: Path) -> Path:
+    private = (Path(__file__).resolve().parents[3] / "data" / "private").resolve()
+    target = path.resolve()
+    if not target.is_relative_to(private):
+        raise ValueError("All media/report files must stay in ignored data/private")
+    return target
+
+
+def source_url(group: str, name: str) -> str:
+    if not any(g == group and n == name for g, n, _, _ in CATALOG):
+        raise ValueError("Video source outside frozen allowlist")
+    return f"{SOURCE_URL}/videos/{group}/{name}"
+
+
+def _download(url: str, size: int) -> bytes:
+    # _fetch_binary() in the earlier downloader is hard-pinned to GMDCSA;
+    # fetch ASSIST only from the immutable SHA + fixed names above.
+    from urllib.request import Request, urlopen
+    if not url.startswith(SOURCE_URL + "/videos/"):
+        raise ValueError("Non-pinned external source")
+    with urlopen(Request(url, headers={"User-Agent": "VIIL-Sentinel-research/1.0"}),
+                 timeout=45) as res:
+        if res.status != 200:
+            raise ValueError("Source HTTP response not successful")
+        chunks, length = [], 0
+        while True:
+            chunk = res.read(min(65536, size + 1 - length))
+            if not chunk:
+                break
+            length += len(chunk)
+            if length > size:
+                raise ValueError("External video exceeds pinned length")
+            chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def verify_download(root: Path, *, fetcher=None, metadata_reader=_video_metadata) -> dict:
+    """Idempotent private-only download, exact pinned SHA1 Git blob identity."""
+    root = private_root(root)
+    if root.exists() and not root.is_dir():
+        raise ValueError("Dataset root cannot be a file")
+    root.mkdir(parents=True, exist_ok=True)
+    downloader = fetcher or _download
+    reused = fetched = 0
+    manifest = {"version": 1, "dataset": DATASET, "commit": PINNED_COMMIT,
+                "license": SOURCE_LICENSE, "source_doi": DOI,
+                "labels_independently_reviewed": False,
+                "subject_identities_for_reference_videos": "unknown",
+                "clips": []}
+    for group, name, size, blob_sha in CATALOG:
+        if size > MAX_CLIP_BYTES:
+            raise ValueError("Source exceeds hard per-video byte limit")
+        url = source_url(group, name)
+        path = root / "clips" / group / name
+        if not path.resolve().is_relative_to(root):
+            raise ValueError("Media path escaped private root")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.exists():
+            if not path.is_file():
+                raise ValueError("Invalid preexisting media")
+            data = path.read_bytes()
+            reused += 1
+        else:
+            data = downloader(url, size)
+            if len(data) != size or _github_blob_sha1(data) != blob_sha:
+                raise ValueError("Downloaded source fails expected Git blob digest")
+            if not data.startswith(b"\x00\x00") or b"ftyp" not in data[:32]:
+                raise ValueError("Unexpected MP4 format")
+            with path.open("xb") as out:
+                out.write(data)
+            fetched += 1
+        if len(data) != size or _github_blob_sha1(data) != blob_sha:
+            raise ValueError("Source footage modified: refusing to use")
+        frames, fps = metadata_reader(path)
+        ms = int((frames - 1) * 1000 / fps)
+        if not 900 <= ms <= 90000:
+            raise ValueError("Reference clip is too short or too long")
+        manifest["clips"].append({
+            "activity": name.removesuffix(".mp4"),
+            "class": group,
+            "video": f"clips/{group}/{name}",
+            "source_bytes": size,
+            "media_sha256": sha256(data).hexdigest(),
+            "duration_ms": ms,
+        })
+    target = root / "assist-frozen-video-manifest-v1.json"
+    if target.exists():
+        if json.loads(target.read_text("utf-8")) != manifest:
+            raise ValueError("Existing private manifest drift")
+    else:
+        with target.open("x", encoding="utf8") as out:
+            json.dump(manifest, out, indent=2)
+    return {
+        "selected": len(CATALOG), "adl": sum(a[0] == "adl" for a in CATALOG),
+        "fall": sum(a[0] == "fall" for a in CATALOG),
+        "total_bytes": sum(item[2] for item in CATALOG),
+        "verified_reused": reused, "new_downloads": fetched,
+        "subject_identity_verified": False, "manual_label_review": False,
+        "source_git_commit": PINNED_COMMIT,
+    }
+
+
+def windows_of(duration_ms: int) -> list[tuple[int, int]]:
+    """Predeclared non-overlap up to 8s; never infer fall-onset timestamps."""
+    if not isinstance(duration_ms, int) or not 900 <= duration_ms <= 90000:
+        raise ValueError("Invalid external reference duration")
+    ends = []
+    start = 0
+    while duration_ms - start >= 900:
+        end = min(start + 8000, duration_ms)
+        ends.append((start, end))
+        start = end
+    if not ends or len(ends) > 12:
+        raise ValueError("No bounded 30-frame temporal windows")
+    return ends
+
+
+def _evaluate_one(path: Path, group: str, activity: str, duration_ms: int,
+                  pose_task: Path, model, *, collector=collect_video_frames) -> dict:
+    windows = [NearestFrameSampler(activity, start, end)
+               for start, end in windows_of(duration_ms)]
+    def consume(frame):
+        for sampler in windows:
+            sampler.on_frame(frame)
+    frames, stats = collector(
+        path, clip_id=activity, model=pose_task, max_frames=6000,
+        frame_consumer=consume, event_consumer=lambda _: None,
+    )
+    if frames or stats["frames_processed"] != windows[0].frames_processed:
+        raise ValueError("Inconsistent pose stream frame counts")
+    successes, abstentions = [], 0
+    for sampler in windows:
+        try:
+            features = sampler.finish()
+        except ValueError as exc:
+            if "Too few valid poses" not in str(exc):
+                raise
+            abstentions += 1
+            continue
+        probability = model.predict_probability(pool_temporal_window(features))
+        successes.append(float(probability))
+    return {"activity": activity, "publisher_class": group,
+            "selected_windows": len(windows),
+            "pose_eligible_windows": len(successes),
+            "pose_abstentions": abstentions,
+            "any_window_fall_candidate": (
+                any(p >= model.threshold for p in successes) if successes else None
+            ),
+            "fully_pose_covered": abstentions == 0}
+
+
+def summarize_class(rows: list[dict], group: str) -> dict:
+    """Separate fully observed negative videos from partial-pose unknowns."""
+    if group not in ("adl", "fall"):
+        raise ValueError("Unexpected reference class")
+    subset = [r for r in rows if r["publisher_class"] == group]
+    eligible = [r for r in subset if r["any_window_fall_candidate"] is not None]
+    flagged = sum(r["any_window_fall_candidate"] is True for r in eligible)
+    return {
+        "total_videos": len(subset),
+        "video_pose_eligible": len(eligible),
+        "video_pose_abstained": len(subset) - len(eligible),
+        "windows_attempted": sum(r["selected_windows"] for r in subset),
+        "windows_eligible": sum(r["pose_eligible_windows"] for r in subset),
+        "windows_abstained": sum(r["pose_abstentions"] for r in subset),
+        "any_window_fall_candidate_videos": flagged,
+        "no_fall_candidate_videos": len(eligible) - flagged,
+        "fully_pose_covered_videos": sum(r["fully_pose_covered"] for r in subset),
+        "partly_pose_abstained_videos": sum(not r["fully_pose_covered"] for r in subset),
+        "fully_covered_no_candidate_videos": sum(
+            r["fully_pose_covered"] and r["any_window_fall_candidate"] is False
+            for r in subset
+        ),
+    }
+
+
+def evaluate_external(root: Path, pose_task: Path, frozen_model_path: Path,
+                      report_path: Path, *, collector=collect_video_frames) -> dict:
+    """One-shot source-frozen external video stress; NEVER trains or tunes."""
+    root = private_root(root).resolve(strict=True)
+    if not root.is_dir():
+        raise ValueError("No external research root")
+    report_path = _private_output_path(report_path)
+    frozen_model_path = private_root(frozen_model_path).resolve(strict=True)
+    if _sha256_file(frozen_model_path) != EXPECTED_MODEL_SHA256:
+        raise ValueError("Frozen model artifact SHA256 changed; refuse rescore")
+    model = read_private_artifact(frozen_model_path)
+    if abs(model.threshold - .53) > 1e-8:
+        raise ValueError("Frozen validation-only threshold changed")
+    manifest_path = root / "assist-frozen-video-manifest-v1.json"
+    manifest = json.loads(manifest_path.read_text("utf8"))
+    if set(manifest) != {
+        "version", "dataset", "commit", "license", "source_doi",
+        "labels_independently_reviewed", "subject_identities_for_reference_videos",
+        "clips",
+    } or manifest["commit"] != PINNED_COMMIT or manifest["dataset"] != DATASET or (
+        manifest["license"] != SOURCE_LICENSE or manifest["source_doi"] != DOI
+        or manifest["labels_independently_reviewed"] is not False
+        or manifest["subject_identities_for_reference_videos"] != "unknown"
+    ):
+        raise ValueError("Unexpected dataset manifest schema or revision")
+    expected = {(group, name): (size, blob) for group, name, size, blob in CATALOG}
+    if len(manifest["clips"]) != len(expected):
+        raise ValueError("External subset size has changed")
+    plan = []
+    # Preflight EVERY actual MP4 hash before starting any inference.
+    for item in manifest["clips"]:
+        group, activity = item["class"], item["activity"]
+        name = activity + ".mp4"
+        if (group, name) not in expected:
+            raise ValueError("Unrecognized external activity")
+        path = (root / "clips" / group / name).resolve(strict=True)
+        if not path.is_relative_to(root / "clips") or path.stat().st_size != expected[(group, name)][0]:
+            raise ValueError("External video path/size differs from pinned source")
+        if (item["media_sha256"] != _sha256_file(path)
+                or _github_blob_sha1(path.read_bytes()) != expected[(group, name)][1]):
+            raise ValueError("External video content hash does not match manifest")
+        duration = item["duration_ms"]
+        if type(duration) is not int:
+            raise ValueError("Invalid reference video duration")
+        frames, fps = _video_metadata(path)
+        if int((frames - 1) * 1000 / fps) != duration:
+            raise ValueError("External video duration changed")
+        plan.append((path, group, activity, duration))
+    if len({activity for _, _, activity, _ in plan}) != len(expected):
+        raise ValueError("Repeated reference video activity")
+    rows = [
+        _evaluate_one(path, group, activity, duration, pose_task,
+                      model, collector=collector)
+        for path, group, activity, duration in plan
+    ]
+    by_class = {
+        group: summarize_class(rows, group) for group in ("adl", "fall")
+    }
+    report = {
+        "mode": "research_only_external_frozen_reference_video_stress",
+        "source": DATASET, "source_commit": PINNED_COMMIT, "license": SOURCE_LICENSE,
+        "model_origin": "joint_cauca_gmdcsa_v1_prior_trained",
+        "model_sha256": EXPECTED_MODEL_SHA256,
+        "threshold_selection": "unchanged_prior_validation_only",
+        "threshold": .53,
+        "activity_window_seconds": "non-overlap up to 8",
+        "labels_publisher_only": True,
+        "reference_video_subjects_unknown": True,
+        "no_training_or_threshold_tuning": True,
+        "fall_event_onset_reviewed": False,
+        "video_reference_only_not_independent_subject_holdout": True,
+        "not_production_safety_evidence": True,
+        "alerts_enabled": False,
+        "adls_are_hard_negatives_not_monitored_hours": True,
+        "metrics": by_class,
+        # Public action labels only, no faces, pose windows or individual scores.
+        "activity_outcomes": rows,
+    }
+    with report_path.open("x", encoding="utf8") as out:
+        json.dump(report, out, indent=2)
+    return report
+
+
+def main(argv=None) -> int:
+    parser = ArgumentParser(description="Externally sourced frozen-video research only")
+    parser.add_argument("--mode", choices=("download", "evaluate"), required=True)
+    parser.add_argument("--root", type=Path, required=True)
+    parser.add_argument("--model", type=Path)
+    parser.add_argument("--pose-task", type=Path)
+    parser.add_argument("--report", type=Path)
+    parser.add_argument("--acknowledge-publisher-labels", action="store_true")
+    parser.add_argument("--acknowledge-pose-privacy", action="store_true")
+    args = parser.parse_args(argv)
+    if not (args.acknowledge_publisher_labels and args.acknowledge_pose_privacy):
+        parser.error("Require publisher-label and pose-privacy acknowledgement")
+    try:
+        if args.mode == "download":
+            if args.model or args.pose_task or args.report:
+                parser.error("download mode accepts --root only")
+            result = verify_download(args.root)
+        else:
+            if not all((args.model, args.pose_task, args.report)):
+                parser.error("evaluate requires --model, --pose-task and --report")
+            result = evaluate_external(args.root, args.pose_task, args.model, args.report)
+    except (OSError, ValueError, RuntimeError, KeyError, TypeError) as exc:
+        parser.error("External frozen evaluation refused: " + str(exc))
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -116,6 +116,25 @@ predeclared V1 selection remains unchanged.
 .\.venv\Scripts\python.exe -m sentinel_edge.model_quality --synthetic-demo --dev-crossval
 ```
 
+## Frozen ASSIST-IoT external video stress test (Member 1)
+
+The [source-pinned external benchmark SOP](docs/ASSIST_IOT_EXTERNAL_FROZEN_HANDOFF_2026-10-27.md)
+adds `python -m sentinel_edge.assist_external` to download exactly
+**11 CC BY 4.0 ASSIST-IoT video references** (8 challenging ADL
+and 3 staged Fall activities), verify Git blob and private SHA-256,
+and run the *existing* frozen joint 30D V1 research model without
+training or changing its 0.53 validation-selected threshold. It reports
+per-class video candidate counts and pose abstentions, not false
+alerts/hour or reliable real-world Fall event recall. Source-reference
+participants are **not mapped to per-video identities**; this is an
+external research stress test, **not a proven independent-subject test**.
+All public MP4s and local model/report files stay under ignored
+`data/private`. Live alerts are not connected.
+
+```powershell
+.\.venv\Scripts\python.exe -m sentinel_edge.assist_external --help
+```
+
 ## Joint public-dataset training (Member 1)
 
 The [real CAUCAFall + GMDCSA-24 joint V1 training guide](docs/CROSS_DATASET_REAL_TRAINING_HANDOFF_2026-10-27.md)
