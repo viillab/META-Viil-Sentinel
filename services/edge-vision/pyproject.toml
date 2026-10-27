@@ -25,6 +25,7 @@ viil-edge-split-audit = "sentinel_edge.split_audit:main"
 viil-edge-train-baseline = "sentinel_edge.temporal_training:main"
 viil-edge-export-windows = "sentinel_edge.window_export:main"
 viil-edge-curate-caucafall = "sentinel_edge.caucafall_curator:main"
+viil-edge-research-compare = "sentinel_edge.model_quality:main"
 
 [tool.setuptools.packages.find]
 include = ["sentinel_edge*"]
