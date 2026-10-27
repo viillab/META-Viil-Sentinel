@@ -37,6 +37,18 @@ A real **in-memory IKAR pilot** decoded 87 frames and produced a 30×6 window
 without assigning a Fall/No-Fall label or saving the features. The supervised
 classifier remains **synthetic-data-only**; this is NOT a real-trained fall AI.
 
+## CAUCAFall real-video Fall/ADL research curation
+
+The private [CAUCAFall research curation protocol](docs/CAUCAFALL_RESEARCH_DATASET_2026-10-27.md)
+uses the downloaded Zenodo OmniFall CAUCAFall derivative, publisher MMAction2
+and original CSV annotations to create a **fixed subject-disjoint 40-video
+proposal** (20 fall-motion, 20 clean ADL) with verified media SHA-256.
+It never infers ADL labels from the names of fall source recordings,
+includes no `fallen` as a fall event, and sets `label_reviewed=false`
+until manual review. Optional **publisher-labeled** in-memory baseline
+training is *research-only* and reports pose-quality exclusions and held-out
+subjects; it does **not** assert independent human label verification.
+
 ## Research-only trained Temporal Logistic baseline
 
 A lightweight **NumPy-supervised model** can now be fitted on masked temporal
