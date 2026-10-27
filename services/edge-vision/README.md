@@ -116,6 +116,37 @@ predeclared V1 selection remains unchanged.
 .\.venv\Scripts\python.exe -m sentinel_edge.model_quality --synthetic-demo --dev-crossval
 ```
 
+## Real offline Edge MediaPipe CPU/RAM/FPS profile (Member 1)
+
+The [source-verified performance handoff](docs/REAL_EDGE_REPLAY_RESOURCE_PROFILE_2026-10-27.md)
+adds `python -m sentinel_edge.edge_resource_profile` for
+privacy-minimal frame-accurate local video **replay profiling**.
+It uses the 8 SHA-pinned IKAR staged Fall MP4s, the unchanged
+MediaPipe `num_poses=2` detector and strict original temporal
+heuristic. No model weights, video pixels, landmarks, event times
+or identifying data are exported; only private aggregate performance
+statistics are saved.
+
+On the actual Windows test computer, all **889/889** source frames
+were decoded in both variants. Native complete per-file replay
+(including video/model init, inference and heuristic) achieved
+**24.62 FPS**, **36.115 s** total, peak **sampled**
+process RAM **248.24 MiB**. Experimental aspect-preserving
+512px side cap achieved **24.99 FPS**, **35.577 s**,
+sampled RAM **245.20 MiB**, but changed strict accepted
+Pose frames from **831 to 865** and original heuristic
+candidate events from **1 to 2**. The tiny observed
+~**1.5%** speed difference does NOT justify selecting 512px
+for live use: these candidate events lack independently
+reviewed ground truth and cached/thermal effects may differ.
+Neither setting attains 30 FPS full per-file replay. This
+is **NOT** a live webcam benchmark, event accuracy validation,
+or clinical safety authorization.
+
+```powershell
+.\.venv\Scripts\python.exe -m sentinel_edge.edge_resource_profile --help
+```
+
 ## New IKAR 2026 public Fall-only external stress (Member 1)
 
 The [IKAR source-frozen intake and measured stress handoff](docs/IKAR_2026_FROZEN_PUBLIC_STRESS_HANDOFF.md)
