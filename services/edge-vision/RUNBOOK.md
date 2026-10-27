@@ -4,6 +4,16 @@ The local detector is a **non-clinical heuristic**, not an independently validat
 safety system. No automatic rescue dispatch or medical conclusions are permitted.
 All model and media handling in this module is local-only.
 
+## Research-only supervised temporal baseline
+
+See [trained NumPy Temporal Logistic and safety/evaluation protocol](docs/TEMPORAL_TRAINING_RESEARCH_BASELINE_2026-10-27.md).
+Run `python -m sentinel_edge.temporal_training --synthetic-demo` for a
+**fictional numeric data** pipeline check only. Supplying actual labeled
+metadata and features requires v2 independent train/val/test subject IDs
+and 30-frame masked window sequences for both Fall and ADL. The model is
+trained in-memory only: **no deployed classifier, no model artifact**, and no
+real-video accuracy claim is established.
+
 ## Deep-research temporal motion and dataset safeguards
 
 See [Member1 deep research and new motion-feature pipeline](docs/DEEP_RESEARCH_MOTION_AND_DATASET_PROTOCOL_2026-10-27.md).
