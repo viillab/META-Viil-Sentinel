@@ -41,6 +41,20 @@ health details or URLs in the manifest or filenames. A video file must be
 The tool rejects absolute files, parent traversal, remote URLs and
 symlink escape paths. It does not accept webcam sources.
 
+**Video integrity safeguards:** Before running MediaPipe inference, the tool
+requires valid nominal FPS (1–239 fps) and a positive declared frame count.
+If the declared frame count exceeds either the remaining evaluation budget
+or the per-clip limit, processing is rejected before inference. The number
+of decoded frames must match the container-reported count; an early EOF or
+inconsistent count fails the entire evaluation rather than returning partial
+scores. Overall frame budget (30,000) is enforced *before each clip* so the
+next clip cannot silently exhaust resources. These checks are **not a
+guarantee of video-file integrity**: metadata itself can be wrong, and
+variable-frame-rate (VFR) videos may have timestamps that nominal FPS does
+not represent accurately. Prefer pre-validated constant-frame-rate (CFR)
+staged video when measuring latency, and manually verify frame timing and
+annotations before reporting research results.
+
 ## Command (PowerShell)
 
 ```powershell

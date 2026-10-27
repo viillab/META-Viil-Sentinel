@@ -120,6 +120,12 @@ nor stores landmark traces.
 .\.venv\Scripts\python.exe -m sentinel_edge.video_benchmark --manifest "D:\\staged-private\\manifest.json" --model "D:\\VIIL-Sentinel\\models\\pose_landmarker_lite.task" --confirm-consent
 ```
 
+The benchmark now checks valid nominal FPS, declared frame count, decoded
+frame count and remaining evaluation budget *before* reporting any metrics.
+An interrupted/invalid decoder or inconsistent metadata fails closed.
+VFR video timing cannot be validated from nominal FPS alone; use a known
+constant-frame-rate video for meaningful event-onset latency comparisons.
+
 The project also contains an automated **synthetic black-video**
 integration test; it is not a fall/no-fall benchmark on humans.
 
