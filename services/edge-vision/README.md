@@ -116,6 +116,29 @@ predeclared V1 selection remains unchanged.
 .\.venv\Scripts\python.exe -m sentinel_edge.model_quality --synthetic-demo --dev-crossval
 ```
 
+## MediaPipe multi-pose rejection reason audit (Member 1)
+
+The [real ASSIST-IoT pose rejection reason handoff](docs/POSE_REJECTION_REASONS_HANDOFF_2026-10-27.md)
+adds `python -m sentinel_edge.assist_external --mode reason-audit`,
+which streams the unchanged frozen joint V1 model with a separate
+**opt-in privacy-minimal reason taxonomy** for rejected pose frames.
+Both the original edge adapter and auto alert logic stay unchanged.
+Strict counters match all decoded frames; no images, landmarks or
+fitted weights enter Git.
+
+On 11 real reference MP4s, **860/860 rejected Fall frames** were
+`multiple_people` (MediaPipe returned more than one detected pose)
+versus ADL rejects: 252 `no_person`, 51 `multiple_people`,
+15 `out_of_frame`. This is not proof of real multiple humans; it
+may include duplicate detections. Another fully visible fainting
+Fall still had no heuristic/V1 fall candidates, so improving
+multi-pose coverage alone will not fix all missed falls. Exposed
+reference data cannot be a fresh independent test.
+
+```powershell
+.\.venv\Scripts\python.exe -m sentinel_edge.assist_external --help
+```
+
 ## Frozen ASSIST-IoT fall-miss attribution (Member 1)
 
 The [Fall-miss attribution research handoff](docs/FROZEN_FALL_MISS_ATTRIBUTION_HANDOFF_2026-10-27.md)
