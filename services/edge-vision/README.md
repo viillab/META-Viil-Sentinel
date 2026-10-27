@@ -23,6 +23,22 @@
 
 This is a heuristic demonstration; it does not establish clinical reliability. **Do not call the heuristic score a validated probability**. It cannot infer injuries, consciousness, severity, or whether emergency help is required.
 
+The first [real-human staged fall video evaluation](docs/IKAR_REAL_VIDEO_EVALUATION_2026-10-27.md)
+used licensed IKAR CC BY 4.0 recordings and detected only **1/8** positive clips
+with the original thresholds. This is an exploratory positive-only subset,
+NOT a generalizable fall accuracy estimate. Diagnostic gate counts now help
+investigate missed events without storing image or pose data.
+
+The new [Local Video Benchmark](docs/VIDEO_BENCHMARK.md) evaluates
+consented videos directly using local MediaPipe inference and clip-level
+labels without writing derived pose traces. It is distinct from the
+synthetic negative-control smoke test and cannot establish clinical accuracy.
+
+For the exact readiness checklist and dependency-isolated camera commands, see
+[Member 1 verification runbook](RUNBOOK.md). The latest MediaPipe optional
+video dependency installs its own compatible OpenCV package; avoid mixing
+multiple OpenCV wheels in the same Python environment.
+
 ## Setup and test
 
 From `D:\VIIL-Sentinel\services\edge-vision` with Python 3.11+:
@@ -53,7 +69,16 @@ Default mode never opens a display window, saves frames, sends notifications or 
 
 Official task reference: https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker/python
 
-## Handoff contract to Member 2
+## Member 1 → Member 2 Candidate Handoff v1
+
+The new [versioned metadata-only candidate contract](docs/CANDIDATE_HANDOFF_V1.md)
+exposes strictly labeled unverified fall candidates via local stdout JSONL.
+It forbids raw frames, private landmarks and unreviewed evidence references,
+and marks heuristic scores as uncalibrated. A standalone synthetic trace
+exporter and opt-in `--candidate-format v1 --confirm-consent` video runner
+mode can generate it. **No live Meta/Backend ingestion is implemented.**
+
+## Legacy Handoff contract to Member 2
 
 A candidate event has this shape (the numeric values are **illustrative only**, not measured):
 
