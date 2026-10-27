@@ -28,6 +28,7 @@ viil-edge-curate-caucafall = "sentinel_edge.caucafall_curator:main"
 viil-edge-research-compare = "sentinel_edge.model_quality:main"
 viil-edge-annotation-review = "sentinel_edge.annotation_review:main"
 viil-edge-reviewed-freeze = "sentinel_edge.reviewed_dataset_seal:main"
+viil-edge-train-private = "sentinel_edge.private_model_training:main"
 
 [tool.setuptools.packages.find]
 include = ["sentinel_edge*"]

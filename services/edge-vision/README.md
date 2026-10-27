@@ -116,6 +116,24 @@ predeclared V1 selection remains unchanged.
 .\.venv\Scripts\python.exe -m sentinel_edge.model_quality --synthetic-demo --dev-crossval
 ```
 
+## Actual REAL-video trained research model (private weights)
+
+The [real public-video training handoff](docs/REAL_PRIVATE_MODEL_TRAINING_HANDOFF_2026-10-27.md)
+adds `python -m sentinel_edge.private_model_training`, an opt-in
+train/validation subject-disjoint NumPy V1 training CLI on actual
+GMDCSA-24 or CAUCAFall publisher-labeled video. It uses the existing
+streamed MediaPipe pose extractor and saves only 30-dimensional
+weights, train-only mean/scaler, and validation-only threshold to
+Git-ignored `data/private/*.json` with strict finite-value validation,
+source manifest digests and a reload check. Neither footage, full pose
+windows nor weights are committed. The research model is **not wired to
+production inference or automatic alerts**, and labels have not been
+independently reviewed.
+
+```powershell
+.\.venv\Scripts\python.exe -m sentinel_edge.private_model_training --help
+```
+
 ## Research-only trained Temporal Logistic baseline
 
 A lightweight **NumPy-supervised model** can now be fitted on masked temporal
