@@ -82,6 +82,8 @@ def process_capture(
     output: TextIO | None = None, clock: Callable[[], float] = monotonic,
     on_frame: Callable[[PoseFrame], None] | None = None,
     event_encoder: Callable[[FallCandidateEvent], dict] | None = None,
+    on_event: Callable[[FallCandidateEvent], None] | None = None,
+    detector: TemporalFallDetector | None = None,
 ) -> StreamStats:
     """Read local frames and emit only candidate metadata to an output stream.
 
@@ -92,7 +94,7 @@ def process_capture(
     if max_frames < 0:
         raise ValueError("max_frames must be non-negative")
     output = output if output is not None else sys.stdout
-    detector = TemporalFallDetector()
+    detector = detector if detector is not None else TemporalFallDetector()
     started = clock()
     frame_number, invalid_poses, candidate_count = 0, 0, 0
     last_timestamp = -1
@@ -126,6 +128,8 @@ def process_capture(
             on_frame(frame)
         event = detector.process(frame)
         if event is not None:
+            if on_event is not None:
+                on_event(event)
             encoded = (event_encoder(event) if event_encoder is not None
                        else {"type": "FALL_CANDIDATE", **asdict(event)})
             print(json.dumps(encoded, allow_nan=False), file=output)
