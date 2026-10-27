@@ -2,11 +2,36 @@
 
 **Owner:** Member 1 (you)
 
-**Branch:** `member1/feature/edge-vision`
+**Member 1 branches:** `member1/feature/*`
 
-**Integration:** `preprod` (human-only `main`)
+**Integration:** `member/feature/preprod` (actual `preprod` and `main` promoted by human)
 
-**Status:** New, **unvalidated** pose-based fall-candidate heuristic. NOT a clinical or production safety detector.
+**Status:** Actual MediaPipe pose AI inference **works**; fall-candidate heuristics remain **unvalidated for reliable safety alerts**. NOT a clinical or production safety detector.
+
+## Research-driven model preparation (27 Oct 2026)
+
+New [research-to-engineering audit](docs/DEEP_RESEARCH_MOTION_AND_DATASET_PROTOCOL_2026-10-27.md)
+provides an experimental **bounded temporal motion-feature window** and
+`--motion-study` aggregate-only real-video diagnostics, plus a strict
+subject-/recording-/media-disjoint research manifest audit:
+
+```powershell
+python -m sentinel_edge.split_audit --manifest examples/synthetic/subject_disjoint_v2.example.json
+```
+
+These are **research scaffolding, not a trained TCN/GRU model**. Fall
+candidate production thresholds and outputs are unchanged; the original
+8-clip positive-only IKAR evaluation remains 1/8. No additional person
+images, models or subject metadata have been committed.
+
+## AI model readiness — verified
+
+See the [latest real runtime and model readiness audit](docs/MODEL_READINESS_AUDIT_2026-10-27.md):
+Pose Landmarker Lite loads and infers locally, but the fall event classifier is
+a heuristic with 1/8 detected staged falls in a tiny positive-only IKAR test.
+The latest video report adds a conservative `readiness_gate`, never granting
+automated alert/dispatch authorization. **Meta multimodal live inference is
+not implemented** (Backend `meta.py` uses an explicitly labeled mock).
 
 ## What has been implemented
 
@@ -22,6 +47,22 @@
 - Synthetic unit tests for fall-like transition, no-fall sitting, pre-existing lying posture, occlusion/gaps and metrics.
 
 This is a heuristic demonstration; it does not establish clinical reliability. **Do not call the heuristic score a validated probability**. It cannot infer injuries, consciousness, severity, or whether emergency help is required.
+
+The first [real-human staged fall video evaluation](docs/IKAR_REAL_VIDEO_EVALUATION_2026-10-27.md)
+used licensed IKAR CC BY 4.0 recordings and detected only **1/8** positive clips
+with the original thresholds. This is an exploratory positive-only subset,
+NOT a generalizable fall accuracy estimate. Diagnostic gate counts now help
+investigate missed events without storing image or pose data.
+
+The new [Local Video Benchmark](docs/VIDEO_BENCHMARK.md) evaluates
+consented videos directly using local MediaPipe inference and clip-level
+labels without writing derived pose traces. It is distinct from the
+synthetic negative-control smoke test and cannot establish clinical accuracy.
+
+For the exact readiness checklist and dependency-isolated camera commands, see
+[Member 1 verification runbook](RUNBOOK.md). The latest MediaPipe optional
+video dependency installs its own compatible OpenCV package; avoid mixing
+multiple OpenCV wheels in the same Python environment.
 
 ## Setup and test
 
@@ -53,7 +94,34 @@ Default mode never opens a display window, saves frames, sends notifications or 
 
 Official task reference: https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker/python
 
-## Handoff contract to Member 2
+## Optional resolution experiment (NOT production)
+
+Read the [real IKAR frame-size comparison](docs/RESOLUTION_EXPERIMENT_2026-10-27.md):
+original-resolution inference remained faster end-to-end than experimental
+640/480 px input caps in one local trial. The default is unchanged; the
+`--max-inference-side` flag is benchmark-only and must not be promoted without
+representative positive/negative validation on target devices.
+
+## Performance and disk footprint
+
+The default local video benchmark now evaluates detected events **as frames
+arrive** without retaining per-frame landmark dictionaries or running the
+fall detector a second time. A `--buffered-eval` reference mode remains
+for bit-for-bit report comparisons, and `--signal-diagnostics` keeps its
+specialized buffered path. See the [real IKAR performance audit](docs/PERFORMANCE_EFFICIENCY_2026-10-27.md)
+for reproducible wall time/CPU/RAM measurements and local disk inventory.
+No threshold or safety behavior was relaxed.
+
+## Member 1 → Member 2 Candidate Handoff v1
+
+The new [versioned metadata-only candidate contract](docs/CANDIDATE_HANDOFF_V1.md)
+exposes strictly labeled unverified fall candidates via local stdout JSONL.
+It forbids raw frames, private landmarks and unreviewed evidence references,
+and marks heuristic scores as uncalibrated. A standalone synthetic trace
+exporter and opt-in `--candidate-format v1 --confirm-consent` video runner
+mode can generate it. **No live Meta/Backend ingestion is implemented.**
+
+## Legacy Handoff contract to Member 2
 
 A candidate event has this shape (the numeric values are **illustrative only**, not measured):
 
