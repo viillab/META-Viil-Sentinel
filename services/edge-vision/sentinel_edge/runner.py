@@ -12,7 +12,9 @@ import sys
 from time import monotonic
 from typing import Any, Callable, TextIO
 
-from sentinel_edge.contracts import PoseFrame
+from sentinel_edge.contracts import FallCandidateEvent, PoseFrame
+from sentinel_edge.handoff import SOURCE_ID_PATTERN, to_envelope
+from sentinel_edge.model_smoke import _file_sha256
 from sentinel_edge.detector import TemporalFallDetector
 from sentinel_edge.pose_adapter import extract_torso_landmarks
 from sentinel_edge.pose_traces import frame_to_trace_record
@@ -32,6 +34,10 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--source", required=True, help="Camera integer (e.g. 0) or authorized video")
     parser.add_argument("--model", required=True, type=Path, help="Local MediaPipe pose .task model")
     parser.add_argument("--source-id", default="staged-camera-01")
+    parser.add_argument("--candidate-format", choices=["legacy", "v1"], default="legacy",
+                        help="Use versioned privacy-minimal Member2 handoff envelopes")
+    parser.add_argument("--confirm-consent", action="store_true",
+                        help="Explicitly authorize local v1 event export from camera/video")
     parser.add_argument("--max-frames", type=int, default=0, help="0: process until EOF/interrupt")
     parser.add_argument("--display", action="store_true", help="Display input frames locally; no recording")
     parser.add_argument("--trace-output", type=Path,
@@ -45,6 +51,11 @@ def parse_args(argv: list[str] | None = None):
         parser.error(f"Model file not found: {args.model}")
     if not args.source_id.strip() or len(args.source_id) > 128:
         parser.error("--source-id must be between 1 and 128 characters")
+    if args.candidate_format == "v1":
+        if not args.confirm_consent:
+            parser.error("--candidate-format v1 requires --confirm-consent")
+        if SOURCE_ID_PATTERN.fullmatch(args.source_id) is None:
+            parser.error("v1 source IDs must be pseudonymous ASCII slugs")
     if args.trace_output is not None:
         if not args.acknowledge_pose_privacy:
             parser.error("--trace-output requires --acknowledge-pose-privacy")
@@ -70,6 +81,7 @@ def process_capture(
     display: bool = False, trace_file: TextIO | None = None,
     output: TextIO | None = None, clock: Callable[[], float] = monotonic,
     on_frame: Callable[[PoseFrame], None] | None = None,
+    event_encoder: Callable[[FallCandidateEvent], dict] | None = None,
 ) -> StreamStats:
     """Read local frames and emit only candidate metadata to an output stream.
 
@@ -114,7 +126,9 @@ def process_capture(
             on_frame(frame)
         event = detector.process(frame)
         if event is not None:
-            print(json.dumps({"type": "FALL_CANDIDATE", **asdict(event)}), file=output)
+            encoded = (event_encoder(event) if event_encoder is not None
+                       else {"type": "FALL_CANDIDATE", **asdict(event)})
+            print(json.dumps(encoded, allow_nan=False), file=output)
             output.flush()
             candidate_count += 1
 
@@ -165,12 +179,21 @@ def main(argv: list[str] | None = None) -> int:
         landmarker = stack.enter_context(
             mp.tasks.vision.PoseLandmarker.create_from_options(options)
         )
+        encoder = None
+        if args.candidate_format == "v1":
+            provenance = "authorized_local_camera" if webcam else "consented_staged_video"
+            asset_hash = _file_sha256(args.model)
+            def encode_candidate(candidate: FallCandidateEvent) -> dict:
+                return to_envelope(
+                    candidate, input_provenance=provenance, model_sha256=asset_hash
+                ).to_dict()
+            encoder = encode_candidate
         try:
             stats = process_capture(
                 cap, cv2=cv2, mp=mp, landmarker=landmarker,
                 webcam=webcam, source_id=args.source_id,
                 max_frames=args.max_frames, display=args.display,
-                trace_file=trace_file,
+                trace_file=trace_file, event_encoder=encoder,
             )
         except KeyboardInterrupt:
             print("Interrupted by operator; local capture closed.", file=sys.stderr)
