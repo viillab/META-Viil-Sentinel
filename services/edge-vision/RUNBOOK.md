@@ -4,6 +4,16 @@ The local detector is a **non-clinical heuristic**, not an independently validat
 safety system. No automatic rescue dispatch or medical conclusions are permitted.
 All model and media handling in this module is local-only.
 
+## Publisher-labeled CAUCAFall data prep
+
+See [CAUCAFall local research protocol](docs/CAUCAFALL_RESEARCH_DATASET_2026-10-27.md).
+The local script `python -m sentinel_edge.caucafall_curator` uses exact
+publisher action annotations and a fixed train/val/test subject split to
+propose segments with `label_reviewed=false`. Derived training experiments
+using publisher labels must remain research-only, report pose-coverage
+exclusions, and cannot establish safe detection performance. Original
+video, annotations, manifests and derived signals remain in `data/private`.
+
 ## Private, annotated video-to-training-window export
 
 Read [Pose-to-Window Exporter protocol](docs/PRIVATE_WINDOW_EXPORT_2026-10-27.md).
