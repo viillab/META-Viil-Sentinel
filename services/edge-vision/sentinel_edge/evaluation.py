@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 import re
 
+from sentinel_edge.contracts import PoseFeatures
 from sentinel_edge.detector import DetectorConfig, TemporalFallDetector
 from sentinel_edge.metrics import summarize_binary
 from sentinel_edge.pose_traces import read_pose_trace
@@ -22,10 +23,13 @@ class ClipOutcome:
     expected_fall: bool
     predicted_fall: bool
     candidate_count: int
+    pre_onset_candidate_count: int
     first_candidate_ms: int | None
+    first_matching_candidate_ms: int | None
     annotated_onset_ms: int | None
     latency_ms: int | None
     analyzed_frames: int
+    observed_pose_frames: int
 
 
 def _load_manifest(path: Path) -> tuple[list[dict], str]:
@@ -51,6 +55,7 @@ def evaluate_manifest(
     outcomes: list[ClipOutcome] = []
     seen_ids: set[str] = set()
     false_candidates_in_negative_clips = 0
+    false_candidates_before_onset = 0
     negative_observed_ms = 0
 
     for item in clips:
@@ -85,12 +90,15 @@ def evaluate_manifest(
         last_time: int | None = None
         events: list[int] = []
         frames = 0
+        valid_pose_frames = 0
         for frame in read_pose_trace(resolved, source_id=clip_id):
             if first_time is None:
                 first_time = frame.timestamp_ms
             last_time = frame.timestamp_ms
             event = detector.process(frame)
             frames += 1
+            if PoseFeatures.from_frame(frame, detector.config.min_visibility) is not None:
+                valid_pose_frames += 1
             if event is not None:
                 events.append(event.timestamp_ms)
 
@@ -99,17 +107,26 @@ def evaluate_manifest(
             if first_time is not None and last_time is not None:
                 negative_observed_ms += max(0, last_time - first_time)
 
-        # First post-onset event is used only for latency, if onset annotated.
+        # With onset annotations, events before onset cannot count as a match.
+        if onset_ms is not None and (first_time is None or last_time is None or
+                                     not first_time <= onset_ms <= last_time):
+            raise ValueError(f"Clip {clip_id}: onset_ms outside the observed trace")
+        pre_onset = sum(t < onset_ms for t in events) if onset_ms is not None else 0
+        false_candidates_before_onset += pre_onset
         post_onset = next((t for t in events if onset_ms is not None and t >= onset_ms), None)
         outcomes.append(ClipOutcome(
             clip_id=clip_id,
             expected_fall=label,
-            predicted_fall=bool(events),
+            predicted_fall=(bool(events) if onset_ms is None else post_onset is not None),
             candidate_count=len(events),
+            pre_onset_candidate_count=pre_onset,
             first_candidate_ms=events[0] if events else None,
+            first_matching_candidate_ms=(post_onset if onset_ms is not None
+                                         else (events[0] if events else None)),
             annotated_onset_ms=onset_ms,
             latency_ms=post_onset - onset_ms if post_onset is not None and onset_ms is not None else None,
             analyzed_frames=frames,
+            observed_pose_frames=valid_pose_frames,
         ))
 
     metrics = summarize_binary(
@@ -125,6 +142,10 @@ def evaluate_manifest(
         "num_clips": len(outcomes),
         "metrics": asdict(metrics),
         "false_candidates_in_negative_clips": false_candidates_in_negative_clips,
+        "false_candidates_before_onset": false_candidates_before_onset,
+        "false_candidate_total_with_known_labels": (
+            false_candidates_in_negative_clips + false_candidates_before_onset
+        ),
         "negative_observed_hours": round(negative_observed_ms / 3_600_000, 6),
         "false_candidates_per_negative_hour": (
             round(false_candidates_in_negative_clips * 3_600_000 / negative_observed_ms, 4)
