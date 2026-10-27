@@ -15,6 +15,9 @@ from sentinel_edge.contracts import PoseFeatures
 from sentinel_edge.private_model_training import read_private_artifact
 from sentinel_edge.pose_rejection_diagnostics import REASONS
 from sentinel_edge.multipose_spatial_diagnostics import MULTIPOSE_CATEGORIES
+from sentinel_edge.temporal_pose_association import (
+    ASSOCIATION_CATEGORIES, MULTIPLE_CATEGORIES,
+)
 from sentinel_edge.public_dataset_ingest import _github_blob_sha1
 from sentinel_edge.temporal_training import pool_temporal_window
 from sentinel_edge.video_benchmark import collect_video_frames
@@ -167,17 +170,21 @@ def windows_of(duration_ms: int) -> list[tuple[int, int]]:
 
 def _evaluate_one(path: Path, group: str, activity: str, duration_ms: int,
                   pose_task: Path, model, *, collector=collect_video_frames,
+                  temporal_association_audit=False,
                   spatial_audit=False,
                   detailed_reasons=False,
                   diagnostics=False) -> dict:
     windows = [NearestFrameSampler(activity, start, end)
                for start, end in windows_of(duration_ms)]
+    if temporal_association_audit and not (spatial_audit and diagnostics):
+        raise ValueError('Temporal association requires full spatial diagnostics')
     if spatial_audit and not detailed_reasons:
         raise ValueError("Spatial analysis requires detailed pose reason audit")
     if detailed_reasons and not diagnostics:
         raise ValueError("Rejection reasons require failure diagnostics")
     reason_counts = Counter()
     spatial_counts = Counter()
+    temporal_counts = Counter()
     raw_torso_frames = geometric_valid_frames = 0
     def consume(frame):
         nonlocal raw_torso_frames, geometric_valid_frames
@@ -199,6 +206,12 @@ def _evaluate_one(path: Path, group: str, activity: str, duration_ms: int,
                 raise ValueError("Invalid geometry category")
             spatial_counts.update((category,))
         extra["multipose_category_consumer"] = consume_spatial
+    if temporal_association_audit:
+        def consume_temporal(category):
+            if category not in ASSOCIATION_CATEGORIES:
+                raise ValueError("Unknown temporal association category")
+            temporal_counts.update((category,))
+        extra["association_category_consumer"] = consume_temporal
     frames, stats = collector(
         path, clip_id=activity, model=pose_task, max_frames=6000,
         frame_consumer=consume, event_consumer=lambda _: None,
@@ -245,6 +258,14 @@ def _evaluate_one(path: Path, group: str, activity: str, duration_ms: int,
             result["multipose_spatial_categories"] = {
                 category: spatial_counts[category]
                 for category in MULTIPOSE_CATEGORIES
+            }
+        if temporal_association_audit:
+            if (sum(temporal_counts.values()) != stats["frames_processed"]
+                    or sum(temporal_counts[c] for c in MULTIPLE_CATEGORIES)
+                    != reason_counts["multiple_people"]):
+                raise ValueError("Temporal association count contradicts adapter")
+            result["temporal_association_categories"] = {
+                c: temporal_counts[c] for c in ASSOCIATION_CATEGORIES
             }
         result["pose_rejection_reasons"] = {
             reason: reason_counts[reason] for reason in REASONS
@@ -403,12 +424,52 @@ def aggregate_multipose_spatial(rows: list[dict], group: str) -> dict:
     }
 
 
+def aggregate_temporal_association(rows: list[dict], group: str) -> dict:
+    """Emit categorical aggregate only, never ephemeral tracking coordinates."""
+    if group not in ("adl", "fall"):
+        raise ValueError("Unknown temporal association class")
+    subset = [r for r in rows if r["publisher_class"] == group]
+    if not subset or any("temporal_association_categories" not in r for r in subset):
+        raise ValueError("Missing temporal association counters")
+    totals = Counter()
+    for row in subset:
+        cats = row["temporal_association_categories"]
+        reasons = row["pose_rejection_reasons"]
+        if (set(cats) != set(ASSOCIATION_CATEGORIES)
+                or any(type(v) is not int or v < 0 for v in cats.values())
+                or sum(cats.values()) != row["failure_diagnostic"]["decoded_frames"]
+                or sum(cats[c] for c in MULTIPLE_CATEGORIES)
+                != reasons["multiple_people"]
+                or (cats["single_anchor"] + cats["single_accepted_geometry_unusable"])
+                != reasons["accepted"]):
+            raise ValueError("Temporal association counts inconsistent")
+        totals.update(cats)
+    return {
+        "videos": len(subset),
+        "decoded_frames": sum(totals.values()),
+        "returned_multi_pose_frames": sum(totals[c] for c in MULTIPLE_CATEGORIES),
+        "strict_accepted_single_frames": (
+            totals["single_anchor"] + totals["single_accepted_geometry_unusable"]
+        ),
+        "short_anchor_unique_candidate_frames": (
+            totals["multiple_short_anchor_unique_candidate"]
+        ),
+        "categorical_counts": {c: totals[c] for c in ASSOCIATION_CATEGORIES},
+        "unverified_identity_and_actor_count": True,
+        "pose_selection_or_alert_change": False,
+        "track_coordinates_persisted": False,
+    }
+
+
 def evaluate_external(root: Path, pose_task: Path, frozen_model_path: Path,
                       report_path: Path, *, collector=collect_video_frames,
+                      temporal_association_audit=False,
                       detailed_reasons=False,
                       spatial_audit=False,
                       diagnostics=False) -> dict:
     """One-shot source-frozen external video stress; NEVER trains or tunes."""
+    if temporal_association_audit and not spatial_audit:
+        raise ValueError('Temporal audit requires spatial pose-reason audit')
     if spatial_audit and not (detailed_reasons and diagnostics):
         raise ValueError("Spatial audit requires both reason and frame diagnostics")
     root = private_root(root).resolve(strict=True)
@@ -462,7 +523,8 @@ def evaluate_external(root: Path, pose_task: Path, frozen_model_path: Path,
         _evaluate_one(path, group, activity, duration, pose_task,
                       model, collector=collector, diagnostics=diagnostics,
                       detailed_reasons=detailed_reasons,
-                      spatial_audit=spatial_audit)
+                      spatial_audit=spatial_audit,
+                      temporal_association_audit=temporal_association_audit)
         for path, group, activity, duration in plan
     ]
     by_class = {
@@ -507,6 +569,12 @@ def evaluate_external(root: Path, pose_task: Path, frozen_model_path: Path,
             for group in ("adl", "fall")
         }
         report["spatial_categories_are_not_real_person_counts"] = True
+    if temporal_association_audit:
+        report["temporal_association_summary"] = {
+            group: aggregate_temporal_association(rows, group)
+            for group in ("adl", "fall")
+        }
+        report["association_candidates_never_replace_strict_pose"] = True
     with report_path.open("x", encoding="utf8") as out:
         json.dump(report, out, indent=2)
     return report
@@ -515,7 +583,7 @@ def evaluate_external(root: Path, pose_task: Path, frozen_model_path: Path,
 def main(argv=None) -> int:
     parser = ArgumentParser(description="Externally sourced frozen-video research only")
     parser.add_argument("--mode", choices=("download", "evaluate", "diagnose",
-                                            "reason-audit", "spatial-audit"), required=True)
+                                            "reason-audit", "spatial-audit", "association-audit"), required=True)
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--model", type=Path)
     parser.add_argument("--pose-task", type=Path)
@@ -535,9 +603,12 @@ def main(argv=None) -> int:
                 parser.error("evaluate requires --model, --pose-task and --report")
             result = evaluate_external(
                 args.root, args.pose_task, args.model, args.report,
-                diagnostics=(args.mode in ("diagnose", "reason-audit", "spatial-audit")),
-                detailed_reasons=(args.mode in ("reason-audit", "spatial-audit")),
-                spatial_audit=(args.mode == "spatial-audit"),
+                diagnostics=(args.mode in ("diagnose", "reason-audit", "spatial-audit",
+                                           "association-audit")),
+                detailed_reasons=(args.mode in ("reason-audit", "spatial-audit",
+                                                "association-audit")),
+                spatial_audit=(args.mode in ("spatial-audit", "association-audit")),
+                temporal_association_audit=(args.mode == "association-audit"),
             )
     except (OSError, ValueError, RuntimeError, KeyError, TypeError) as exc:
         parser.error("External frozen evaluation refused: " + str(exc))

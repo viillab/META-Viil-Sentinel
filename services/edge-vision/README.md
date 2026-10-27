@@ -116,6 +116,28 @@ predeclared V1 selection remains unchanged.
 .\.venv\Scripts\python.exe -m sentinel_edge.model_quality --synthetic-demo --dev-crossval
 ```
 
+## Offline temporal multi-pose association research (Member 1)
+
+The [temporal association engineering handoff](docs/TEMPORAL_MULTIPOSE_ASSOCIATION_HANDOFF_2026-10-27.md)
+adds `python -m sentinel_edge.assist_external --mode association-audit`.
+It measures tentative short-horizon continuity across multiple MediaPipe
+torso hypotheses **without selecting or updating any person pose for the
+actual fall detector**. An in-memory strict single-person anchor expires
+after six frames; apparent unique matches, missing anchors and ambiguous
+multi-pose frames are recorded as counts only. Candidate continuity
+**does not prove person identity**, and the original production
+multi-person abstention and model/threshold are unchanged. On the actual
+11 ASSIST public reference MP4s it counted **108 tentative short-anchor
+Fall multi-pose candidates out of 860**, while 742 multi-pose frames
+had no current strict single-person anchor; ADL had 3 such tentative
+candidates among 51 multi-pose frames. This is a diagnostic,
+**not recovered PoseFrames or improved Fall event recall**. The source
+MP4s and offline numeric weights stay locally private.
+
+```powershell
+.\.venv\Scripts\python.exe -m sentinel_edge.assist_external --help
+```
+
 ## Frozen multi-pose geometry audit (Member 1)
 
 The [real-source spatial geometry handoff](docs/FROZEN_MULTIPOSE_SPATIAL_HANDOFF_2026-10-27.md)

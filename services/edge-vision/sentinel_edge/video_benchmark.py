@@ -41,6 +41,7 @@ def collect_video_frames(
     max_inference_side: int = 0,
     pose_reason_consumer: Callable[[str], None] | None = None,
     multipose_category_consumer: Callable[[str], None] | None = None,
+    association_category_consumer: Callable[[str], None] | None = None,
 ) -> tuple[list[PoseFrame], dict]:
     """Process one file using an independent MediaPipe task instance.
 
@@ -85,6 +86,8 @@ def collect_video_frames(
         )
         if multipose_category_consumer is not None:
             diagnostic_options["multipose_category_consumer"] = multipose_category_consumer
+        if association_category_consumer is not None:
+            diagnostic_options["association_category_consumer"] = association_category_consumer
         stats = process_capture(
             capture, cv2=cv2, mp=mp, landmarker=landmark_model,
             webcam=False, source_id=clip_id, max_frames=max_frames + 1,
