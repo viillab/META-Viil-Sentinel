@@ -14,7 +14,7 @@ Video → Edge fall candidate → Evidence extraction → Meta multimodal incide
 | Review state machine + audit trail | Implemented | Human-controlled demo workflow |
 | Mock incident interpretation | Implemented | Clearly labelled simulation only |
 | Meta Model API | Interface defined | **Not yet connected** |
-| Webcam/recorded video/pose estimation | Contract defined | **Not implemented** |
+| Webcam/recorded video/pose estimation | Temporal pose heuristic and optional MediaPipe video runner added (Member 1) | **Unvalidated heuristic; requires external pose model and authorized recordings** |
 | React caregiver dashboard | Implemented | Simulated events via API |
 | In-app notifications | Simulated feed | External channels not implemented |
 | Evaluation | Protocol documented | Benchmarks pending |
@@ -50,6 +50,7 @@ Open http://127.0.0.1:5173. Click **Generate staged incident** to test the mock 
 ## Architecture
 
 - `services/api`: Small FastAPI app with schemas, workflow, in-memory store and mock interpreter.
+- `services/edge-vision`: Member 1 pose-feature temporal heuristic, optional MediaPipe webcam/video runner, synthetic tests and evaluation metrics; see its README.
 - `apps/dashboard`: React + TypeScript caregiver demonstration UI.
 - `services/edge-vision`: Planned webcam/video/pose + temporal classifier interface.
 - `services/meta-intelligence`: Planned official Meta API adapter and schema validation.

@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "viil-sentinel-edge"
+version = "0.1.0"
+description = "Prototype-only temporal pose fall-candidate event extraction"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+video = ["opencv-python>=4.10,<5", "mediapipe>=0.10.20,<0.11"]
+dev = ["pytest>=8,<10", "ruff>=0.8,<1.0"]
+
+[project.scripts]
+viil-edge = "sentinel_edge.runner:main"
+
+[tool.setuptools.packages.find]
+include = ["sentinel_edge*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
