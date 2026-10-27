@@ -81,6 +81,67 @@ def local_source(root: Path, filename: str) -> Path:
     return resolved
 
 
+def clip_outcome_from_counts(
+    *, clip_id: str, expected_fall: bool, onset_ms: int | None,
+    times: list[int], analyzed: int, valid_pose_frames: int,
+    first_time: int | None, last_time: int | None,
+) -> ClipOutcome:
+    """Common finalizer keeps incremental and trace scoring semantics identical."""
+    if first_time is None or last_time is None:
+        raise ValueError(f"Clip {clip_id}: trace has no frames")
+    if onset_ms is not None and not first_time <= onset_ms <= last_time:
+        raise ValueError(f"Clip {clip_id}: onset_ms outside the observed trace")
+    before = sum(t < onset_ms for t in times) if onset_ms is not None else 0
+    post = next((t for t in times if onset_ms is not None and t >= onset_ms), None)
+    match = bool(times) if onset_ms is None else post is not None
+    return ClipOutcome(
+        clip_id=clip_id, expected_fall=expected_fall, predicted_fall=match,
+        candidate_count=len(times), pre_onset_candidate_count=before,
+        first_candidate_ms=times[0] if times else None,
+        first_matching_candidate_ms=post if onset_ms is not None
+        else (times[0] if times else None),
+        annotated_onset_ms=onset_ms,
+        latency_ms=post - onset_ms if post is not None and onset_ms is not None else None,
+        analyzed_frames=analyzed, observed_pose_frames=valid_pose_frames,
+        first_frame_ms=first_time, last_frame_ms=last_time,
+    )
+
+
+class StreamingClipAccumulator:
+    """Constant-memory pose scoring using the SAME detector events from live inference.
+
+    Holds only O(number_of_events) timestamps and scalar counts.
+    Does not store poses, images, raw frame data or private file paths.
+    """
+    def __init__(self, *, config: DetectorConfig | None = None):
+        self.config = config or DetectorConfig()
+        self.first_time: int | None = None
+        self.last_time: int | None = None
+        self.analyzed = 0
+        self.valid_pose_frames = 0
+        self.times: list[int] = []
+
+    def on_frame(self, frame: PoseFrame) -> None:
+        if self.first_time is None:
+            self.first_time = frame.timestamp_ms
+        self.last_time = frame.timestamp_ms
+        self.analyzed += 1
+        if PoseFeatures.from_frame(frame, self.config.min_visibility) is not None:
+            self.valid_pose_frames += 1
+
+    def on_event(self, event) -> None:
+        self.times.append(event.timestamp_ms)
+
+    def finish(self, *, clip_id: str, expected_fall: bool,
+               onset_ms: int | None = None) -> ClipOutcome:
+        return clip_outcome_from_counts(
+            clip_id=clip_id, expected_fall=expected_fall, onset_ms=onset_ms,
+            times=self.times, analyzed=self.analyzed,
+            valid_pose_frames=self.valid_pose_frames,
+            first_time=self.first_time, last_time=self.last_time,
+        )
+
+
 def evaluate_clip_frames(
     frames: Iterable[PoseFrame], *, clip_id: str, expected_fall: bool,
     onset_ms: int | None = None, config: DetectorConfig | None = None
@@ -102,27 +163,10 @@ def evaluate_clip_frames(
             valid_pose_frames += 1
         if event is not None:
             times.append(event.timestamp_ms)
-    if first_time is None or last_time is None:
-        raise ValueError(f"Clip {clip_id}: trace has no frames")
-    if onset_ms is not None and not first_time <= onset_ms <= last_time:
-        raise ValueError(f"Clip {clip_id}: onset_ms outside the observed trace")
-    before = sum(t < onset_ms for t in times) if onset_ms is not None else 0
-    post = next((t for t in times if onset_ms is not None and t >= onset_ms), None)
-    match = bool(times) if onset_ms is None else post is not None
-    return ClipOutcome(
-        clip_id=clip_id,
-        expected_fall=expected_fall,
-        predicted_fall=match,
-        candidate_count=len(times),
-        pre_onset_candidate_count=before,
-        first_candidate_ms=times[0] if times else None,
-        first_matching_candidate_ms=post if onset_ms is not None else (times[0] if times else None),
-        annotated_onset_ms=onset_ms,
-        latency_ms=post - onset_ms if post is not None and onset_ms is not None else None,
-        analyzed_frames=analyzed,
-        observed_pose_frames=valid_pose_frames,
-        first_frame_ms=first_time,
-        last_frame_ms=last_time,
+    return clip_outcome_from_counts(
+        clip_id=clip_id, expected_fall=expected_fall, onset_ms=onset_ms,
+        times=times, analyzed=analyzed, valid_pose_frames=valid_pose_frames,
+        first_time=first_time, last_time=last_time,
     )
 
 

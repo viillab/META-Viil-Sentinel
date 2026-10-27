@@ -167,4 +167,6 @@ def test_actual_mediapipe_decodes_a_generated_no_person_video(tmp_path):
     assert report["num_clips"] == 1
     assert report["metrics"]["true_negative"] == 1
     assert report["unavailable_pose_frames"] == 12
+    buffered = evaluate_video_manifest(manifest, model, max_frames=20, buffered_eval=True)
+    assert buffered == report  # Real model, exactly identical events/metrics.
     assert not list(tmp_path.glob("*.pose.jsonl"))

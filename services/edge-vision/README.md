@@ -69,6 +69,16 @@ Default mode never opens a display window, saves frames, sends notifications or 
 
 Official task reference: https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker/python
 
+## Performance and disk footprint
+
+The default local video benchmark now evaluates detected events **as frames
+arrive** without retaining per-frame landmark dictionaries or running the
+fall detector a second time. A `--buffered-eval` reference mode remains
+for bit-for-bit report comparisons, and `--signal-diagnostics` keeps its
+specialized buffered path. See the [real IKAR performance audit](docs/PERFORMANCE_EFFICIENCY_2026-10-27.md)
+for reproducible wall time/CPU/RAM measurements and local disk inventory.
+No threshold or safety behavior was relaxed.
+
 ## Member 1 → Member 2 Candidate Handoff v1
 
 The new [versioned metadata-only candidate contract](docs/CANDIDATE_HANDOFF_V1.md)

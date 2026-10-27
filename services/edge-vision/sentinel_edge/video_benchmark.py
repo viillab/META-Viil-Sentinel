@@ -11,9 +11,12 @@ import json
 from pathlib import Path
 
 from sentinel_edge.contracts import PoseFrame
-from sentinel_edge.detector import DetectorConfig
+from collections.abc import Callable
+from sentinel_edge.contracts import FallCandidateEvent
+from sentinel_edge.detector import DetectorConfig, TemporalFallDetector
 from sentinel_edge.evaluation import (
-    evaluate_clip_frames, load_manifest, local_source, summarize_clips, validate_clip,
+    StreamingClipAccumulator, evaluate_clip_frames, load_manifest, local_source,
+    summarize_clips, validate_clip,
 )
 from sentinel_edge.model_smoke import _file_sha256
 from sentinel_edge.runner import process_capture
@@ -29,6 +32,9 @@ MAX_TOTAL_FRAMES = 30_000
 def collect_video_frames(
     video: Path, *, clip_id: str, model: Path, max_frames: int = MAX_FRAMES,
     cv2=None, mp=None,
+    frame_consumer: Callable[[PoseFrame], None] | None = None,
+    event_consumer: Callable[[FallCandidateEvent], None] | None = None,
+    config: DetectorConfig | None = None,
 ) -> tuple[list[PoseFrame], dict]:
     """Process one file using an independent MediaPipe task instance.
 
@@ -42,6 +48,8 @@ def collect_video_frames(
     if mp is None:
         import mediapipe as mp
 
+    if (frame_consumer is None) != (event_consumer is None):
+        raise ValueError("frame_consumer and event_consumer must be paired")
     frames: list[PoseFrame] = []
     with ExitStack() as stack:
         capture = cv2.VideoCapture(str(video))
@@ -67,7 +75,10 @@ def collect_video_frames(
         stats = process_capture(
             capture, cv2=cv2, mp=mp, landmarker=landmark_model,
             webcam=False, source_id=clip_id, max_frames=max_frames + 1,
-            display=False, output=StringIO(), on_frame=frames.append,
+            display=False, output=StringIO(),
+            on_frame=frame_consumer if frame_consumer is not None else frames.append,
+            on_event=event_consumer,
+            detector=TemporalFallDetector(config) if config is not None else None,
         )
     require_complete_decode(
         clip_id=clip_id, expected=declared_frames, decoded=stats.frames_processed
@@ -103,6 +114,7 @@ def evaluate_video_manifest(
     manifest_path: Path, model: Path, *,
     max_frames: int = MAX_FRAMES, config: DetectorConfig | None = None,
     collector=collect_video_frames, include_diagnostics: bool = False,
+    buffered_eval: bool = False,
 ) -> dict:
     if not 1 <= max_frames <= MAX_FRAMES:
         raise ValueError("max_frames must be 1..6000")
@@ -121,24 +133,50 @@ def evaluate_video_manifest(
         # Each collector receives only the remaining budget. Oversized
         # clips are rejected instead of silently evaluating their start.
         limit = min(max_frames, remaining)
-        frames, stats = collector(video, clip_id=clip_id, model=model, max_frames=limit)
+        # The production fast path consumes each PoseFrame and detector event
+        # once in callbacks. It does not retain an entire clip in memory or
+        # run the temporal detector a second time.
+        streamed = (collector is collect_video_frames and not include_diagnostics
+                    and not buffered_eval)
+        if streamed:
+            accumulator = StreamingClipAccumulator(config=config)
+            frames, stats = collector(
+                video, clip_id=clip_id, model=model, max_frames=limit,
+                frame_consumer=accumulator.on_frame,
+                event_consumer=accumulator.on_event, config=config,
+            )
+        else:
+            # Injected collectors retain backwards-compatible test semantics.
+            # Optional detailed diagnostics currently require the full pose list.
+            frames, stats = collector(
+                video, clip_id=clip_id, model=model, max_frames=limit
+            )
         decoded = stats["frames_processed"]
         invalid = stats["invalid_pose_frames"]
         if (type(decoded) is not int or type(invalid) is not int
                 or decoded < 1 or decoded > limit
-                or invalid < 0 or invalid > decoded or len(frames) != decoded):
+                or invalid < 0 or invalid > decoded):
             raise ValueError(f"Clip {clip_id}: inconsistent collected-frame statistics")
+        if streamed:
+            if (frames or accumulator.analyzed != decoded
+                    or len(accumulator.times) != stats["candidate_events"]):
+                raise ValueError(f"Clip {clip_id}: inconsistent streamed frame/event counts")
+            outcome = accumulator.finish(
+                clip_id=clip_id, expected_fall=label, onset_ms=onset
+            )
+        else:
+            if len(frames) != decoded:
+                raise ValueError(f"Clip {clip_id}: inconsistent collected-frame statistics")
+            outcome = evaluate_clip_frames(
+                frames, clip_id=clip_id, expected_fall=label, onset_ms=onset, config=config
+            )
+            if include_diagnostics:
+                diagnostics.append({
+                    "clip_id": clip_id, **diagnose_pose_signals(frames, config),
+                })
         total += decoded
         no_pose += invalid
-        outcomes.append(evaluate_clip_frames(
-            frames, clip_id=clip_id, expected_fall=label, onset_ms=onset, config=config,
-        ))
-        if include_diagnostics:
-            diagnostics.append({
-                "clip_id": clip_id,
-                **diagnose_pose_signals(frames, config),
-            })
-        # RAM containing derived landmark coordinates is released per clip.
+        outcomes.append(outcome)
         del frames
 
     report = summarize_clips(
@@ -178,6 +216,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--confirm-consent", action="store_true",
                         help="Confirm authorization to analyze all video subjects and files")
     parser.add_argument("--max-frames", type=int, default=MAX_FRAMES)
+    parser.add_argument("--profile-resource", action="store_true",
+                        help="Opt-in own-process RAM/CPU sample; requires optional psutil")
+    parser.add_argument("--buffered-eval", action="store_true",
+                        help="Legacy buffered reference path for performance comparison")
     parser.add_argument("--signal-diagnostics", action="store_true",
                         help="Include aggregate-only per-clip detector gate counts")
     parser.add_argument("--min-hip-descent", type=float, default=0.13)
@@ -190,6 +232,7 @@ def main(argv: list[str] | None = None) -> int:
         result = evaluate_video_manifest(
             args.manifest, args.model, max_frames=args.max_frames,
             include_diagnostics=args.signal_diagnostics,
+            buffered_eval=args.buffered_eval,
             config=DetectorConfig(
                 min_hip_descent=args.min_hip_descent,
                 horizontal_min_angle_deg=args.horizontal_min_angle_deg,
@@ -198,6 +241,23 @@ def main(argv: list[str] | None = None) -> int:
         )
     except (ValueError, OSError, ImportError, json.JSONDecodeError) as exc:
         parser.error(f"Evaluation failed: {exc}")
+    if args.profile_resource:
+        try:
+            import psutil
+        except ImportError:
+            result["resource_profile"] = {"available": False,
+                                          "reason": "optional psutil not installed"}
+        else:
+            process = psutil.Process()
+            memory = process.memory_info()
+            cpu = process.cpu_times()
+            result["resource_profile"] = {
+                "available": True,
+                "peak_working_set_mb": round(getattr(memory, "peak_wset", memory.rss)
+                                             / 1048576, 2),
+                "cpu_seconds": round(cpu.user + cpu.system, 3),
+                "measurement": "inside video benchmark process; native RAM included",
+            }
     print(json.dumps(result, indent=2))
     return 0
 

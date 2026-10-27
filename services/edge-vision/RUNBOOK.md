@@ -138,6 +138,18 @@ future *authenticated* ingestion responsibilities. The existing
 `/api/v1/incidents/demo` endpoint remains simulation-only and must not
 receive actual Edge candidate events.
 
+## Optional performance and disk audit
+
+See [Performance, RAM and disk audit](docs/PERFORMANCE_EFFICIENCY_2026-10-27.md).
+The default benchmark streams aggregate detections with bounded in-memory
+state. Use `--buffered-eval` only for reference comparisons and
+`--signal-diagnostics` for detailed aggregate gate counts. For machine
+measurement, install optional `psutil` into the **dev-only** virtual
+environment and run `scripts/profile_edge.py`; it does not upload media.
+Root `.dockerignore` prevents local datasets, model weights, `.venv`,
+`node_modules` and `.git` entering Docker build contexts. No local files
+are automatically deleted or compressed.
+
 ## Real-human staged fall video baseline (IKAR)
 
 See [IKAR real video result](docs/IKAR_REAL_VIDEO_EVALUATION_2026-10-27.md)
