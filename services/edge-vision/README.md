@@ -116,6 +116,36 @@ predeclared V1 selection remains unchanged.
 .\.venv\Scripts\python.exe -m sentinel_edge.model_quality --synthetic-demo --dev-crossval
 ```
 
+## New IKAR 2026 public Fall-only external stress (Member 1)
+
+The [IKAR source-frozen intake and measured stress handoff](docs/IKAR_2026_FROZEN_PUBLIC_STRESS_HANDOFF.md)
+integrates a **new** September 2026 AGH University of Krakow
+[CC BY 4.0 IKAR dataset](https://doi.org/10.58032/AGH/A1NZPE).
+The reproducible `python -m sentinel_edge.ikar_domain_stress` CLI
+verifies official Dataverse 1.0 metadata and a 127.3 MB archive
+using official MD5 and pinned SHA256, safely extracts only the
+**two prespecified lowest-indexed examples** from each of its four
+staged Fall types, and runs the **unaltered** private joint V1
+research model. Raw video/annotation files and reports are
+strictly private and Git-ignored, with no source labels converted
+into reviewed event ground truth.
+
+On the first actual 8-video domain stress, 889 real frames were
+decoded, 831 accepted by the strict Pose adapter, and 8/8
+nonoverlapping sample windows were pose-eligible. Frozen V1 yielded
+video-level Fall candidates in **3/8** publisher Fall clips
+(2 slips, 1 blackout, no trips/fainting); the legacy heuristic
+emitted one event. This **is NOT event recall or accuracy**:
+the source has **278 staged FALL videos and NO ADL**, spatial
+bounding-box labels rather than verified Fall onset timestamps,
+and no reliable mapping of IDs to individual subjects. This
+already-viewed subset may never be used to tune a model and
+called untouched test data. Production alerts were not changed.
+
+```powershell
+.\.venv\Scripts\python.exe -m sentinel_edge.ikar_domain_stress --help
+```
+
 ## Actual NumPy Tiny MLP research training (Member 1)
 
 The [Tiny MLP real-video research training SOP](docs/NUMPY_TINY_MLP_REAL_TRAINING_HANDOFF_2026-10-27.md)
