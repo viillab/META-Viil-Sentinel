@@ -17,6 +17,14 @@ python -m sentinel_edge.evaluation --manifest examples/synthetic/manifest.json
 
 The example's synthetic F1 score is not a real-world performance claim.
 
+**Onset-matching update:** For clips with an annotated onset_ms, a candidate
+before onset is classified as premature and is NOT credited as a detected fall.
+The report now includes pre_onset_candidate_count, first_matching_candidate_ms,
+observed_pose_frames and false_candidates_before_onset. Ground-truth onset
+must lie inside the recorded trace. Missing/occluded pose clears previous
+upright evidence to prevent stale posture history from creating an event.
+Clips without onset annotations retain coarse clip-level matching only.
+
 ## Stage 2 — Isolated local video dependencies
 
 Using a local Python 3.11+ virtual environment (do not override system packages).
@@ -98,6 +106,7 @@ separate integration tasks and are **not implemented in this branch**.
 
 ## Git ownership
 
-The work belongs to member1/feature/runner-hardening.
-**Human user performs promotion into preprod manually.**
-No agent changes to preprod or main in this task.
+The latest work belongs to member1/feature/event-robustness.
+Validated Member 1 work is merged into the separate integration branch
+member/feature/preprod on explicit user instruction. This is NOT the actual
+preprod branch. Only the human promotes changes into preprod or main.
