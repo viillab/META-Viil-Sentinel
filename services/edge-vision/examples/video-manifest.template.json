@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "permission_basis": "REPLACE with actual consent and legal usage basis",
+  "clips": [
+    {
+      "id": "staged_fall_example",
+      "video": "replace_with_consented_fall.mp4",
+      "expected_fall": true,
+      "onset_ms": 1800
+    },
+    {
+      "id": "staged_sitting_example",
+      "video": "replace_with_consented_sitting.mp4",
+      "expected_fall": false
+    }
+  ]
+}

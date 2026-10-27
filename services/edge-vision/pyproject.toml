@@ -18,6 +18,7 @@ viil-edge = "sentinel_edge.runner:main"
 viil-edge-doctor = "sentinel_edge.doctor:main"
 viil-edge-evaluate = "sentinel_edge.evaluation:main"
 viil-edge-model-smoke = "sentinel_edge.model_smoke:main"
+viil-edge-video-benchmark = "sentinel_edge.video_benchmark:main"
 
 [tool.setuptools.packages.find]
 include = ["sentinel_edge*"]
