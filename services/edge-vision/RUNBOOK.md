@@ -138,6 +138,16 @@ future *authenticated* ingestion responsibilities. The existing
 `/api/v1/incidents/demo` endpoint remains simulation-only and must not
 receive actual Edge candidate events.
 
+## Optional input-size performance experiments
+
+Read [resolution experiment](docs/RESOLUTION_EXPERIMENT_2026-10-27.md)
+for a complete real-video comparison and example commands. The offline
+`sentinel_edge.video_benchmark --max-inference-side 640` option changes the
+input to MediaPipe for **experimental measurements only**. The default 0
+keeps original pixels, real-world person-count handling and temporal
+thresholds unchanged. Reducing frame size has **not** proven a latency
+improvement or improvement in fall detection quality.
+
 ## Optional performance and disk audit
 
 See [Performance, RAM and disk audit](docs/PERFORMANCE_EFFICIENCY_2026-10-27.md).

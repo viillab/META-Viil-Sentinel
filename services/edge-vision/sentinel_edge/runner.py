@@ -17,6 +17,7 @@ from sentinel_edge.handoff import SOURCE_ID_PATTERN, to_envelope
 from sentinel_edge.model_smoke import _file_sha256
 from sentinel_edge.detector import TemporalFallDetector
 from sentinel_edge.pose_adapter import extract_torso_landmarks
+from sentinel_edge.frame_resize import resize_for_inference, validate_max_side
 from sentinel_edge.pose_traces import frame_to_trace_record
 
 
@@ -84,6 +85,7 @@ def process_capture(
     event_encoder: Callable[[FallCandidateEvent], dict] | None = None,
     on_event: Callable[[FallCandidateEvent], None] | None = None,
     detector: TemporalFallDetector | None = None,
+    max_inference_side: int = 0,
 ) -> StreamStats:
     """Read local frames and emit only candidate metadata to an output stream.
 
@@ -93,6 +95,7 @@ def process_capture(
     """
     if max_frames < 0:
         raise ValueError("max_frames must be non-negative")
+    validate_max_side(max_inference_side)
     output = output if output is not None else sys.stdout
     detector = detector if detector is not None else TemporalFallDetector()
     started = clock()
@@ -111,7 +114,8 @@ def process_capture(
             if webcam else timestamp_for_frame(frame_number, fps, last_timestamp)
         )
         last_timestamp = timestamp
-        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+        inference_bgr = resize_for_inference(bgr, cv2, max_side=max_inference_side)
+        rgb = cv2.cvtColor(inference_bgr, cv2.COLOR_BGR2RGB)
         image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
         result = landmarker.detect_for_video(image, timestamp)
         landmarks = extract_torso_landmarks(result)
