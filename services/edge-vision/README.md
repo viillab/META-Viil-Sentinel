@@ -23,6 +23,12 @@
 
 This is a heuristic demonstration; it does not establish clinical reliability. **Do not call the heuristic score a validated probability**. It cannot infer injuries, consciousness, severity, or whether emergency help is required.
 
+The first [real-human staged fall video evaluation](docs/IKAR_REAL_VIDEO_EVALUATION_2026-10-27.md)
+used licensed IKAR CC BY 4.0 recordings and detected only **1/8** positive clips
+with the original thresholds. This is an exploratory positive-only subset,
+NOT a generalizable fall accuracy estimate. Diagnostic gate counts now help
+investigate missed events without storing image or pose data.
+
 The new [Local Video Benchmark](docs/VIDEO_BENCHMARK.md) evaluates
 consented videos directly using local MediaPipe inference and clip-level
 labels without writing derived pose traces. It is distinct from the

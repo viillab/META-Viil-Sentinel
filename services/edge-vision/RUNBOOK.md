@@ -138,6 +138,17 @@ future *authenticated* ingestion responsibilities. The existing
 `/api/v1/incidents/demo` endpoint remains simulation-only and must not
 receive actual Edge candidate events.
 
+## Real-human staged fall video baseline (IKAR)
+
+See [IKAR real video result](docs/IKAR_REAL_VIDEO_EVALUATION_2026-10-27.md)
+for CC BY 4.0 attribution, verified archive MD5, reproducible private-only
+sampling, 8 manually staged human fall clips, on-device MediaPipe evaluation,
+and an observed 1/8 detection rate. This dataset contains no negative ADL
+clips, so do not infer false-positive rate or meaningful deployment safety.
+The optional `--signal-diagnostics` outputs only per-clip gate *counts* (no
+images, no raw keypoints), to support failures analysis without threshold
+fitting on the same held-out evaluation clips.
+
 ## Member 2 integration contract
 
 Candidate events contain source identifier, timestamp, *heuristic*
