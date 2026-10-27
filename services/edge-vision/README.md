@@ -116,6 +116,33 @@ predeclared V1 selection remains unchanged.
 .\.venv\Scripts\python.exe -m sentinel_edge.model_quality --synthetic-demo --dev-crossval
 ```
 
+## Two-reviewer event-level Fall benchmark (Member 1)
+
+The [multi-onset event-review SOP](docs/REVIEWED_MULTI_EVENT_BENCHMARK_HANDOFF_2026-10-27.md)
+adds `python -m sentinel_edge.reviewed_event_benchmark` with
+`prepare`, `capture` and `score` modes. Source media from the
+original pinned public ASSIST-IoT reference videos is verified before
+output. `prepare` makes exactly TWO **blank, unapproved** manual
+review slots per video; no publisher action name becomes ground truth.
+`capture` records bounded timestamp-only candidate evidence from
+the unchanged original temporal heuristic. `score` refuses to
+calculate any event recall until two distinct independently attested
+full-video reviews with matching source digests and agreed multiple
+Fall onsets are provided for **every** clip.
+
+Matching is one-to-one within an explicit -250 ms/+2,000 ms interval,
+with redundant/early/late candidates accounted for separately.
+Full-reviewed negative-video hours are shown alongside any false
+candidate rate; tiny staged-reference recording durations must not
+be called real-world false alarm reliability. No private video,
+reviewer entries, model weights, pose tracks or timestamp evidence
+are committed; the trained joint V1 window-level model is not
+misrepresented as a live event-alert predictor.
+
+```powershell
+.\.venv\Scripts\python.exe -m sentinel_edge.reviewed_event_benchmark --help
+```
+
 ## Offline temporal multi-pose association research (Member 1)
 
 The [temporal association engineering handoff](docs/TEMPORAL_MULTIPOSE_ASSOCIATION_HANDOFF_2026-10-27.md)

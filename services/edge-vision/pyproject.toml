@@ -31,6 +31,7 @@ viil-edge-reviewed-freeze = "sentinel_edge.reviewed_dataset_seal:main"
 viil-edge-train-private = "sentinel_edge.private_model_training:main"
 viil-edge-train-joint = "sentinel_edge.joint_dataset_training:main"
 viil-edge-assist-external = "sentinel_edge.assist_external:main"
+viil-edge-reviewed-events = "sentinel_edge.reviewed_event_benchmark:main"
 
 [tool.setuptools.packages.find]
 include = ["sentinel_edge*"]
