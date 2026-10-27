@@ -20,6 +20,7 @@ from sentinel_edge.evaluation import (
 )
 from sentinel_edge.model_smoke import _file_sha256
 from sentinel_edge.runner import process_capture
+from sentinel_edge.frame_resize import validate_max_side
 from sentinel_edge.signal_diagnostics import diagnose_pose_signals
 from sentinel_edge.video_metadata import expected_frame_count, require_complete_decode
 
@@ -35,6 +36,7 @@ def collect_video_frames(
     frame_consumer: Callable[[PoseFrame], None] | None = None,
     event_consumer: Callable[[FallCandidateEvent], None] | None = None,
     config: DetectorConfig | None = None,
+    max_inference_side: int = 0,
 ) -> tuple[list[PoseFrame], dict]:
     """Process one file using an independent MediaPipe task instance.
 
@@ -43,6 +45,7 @@ def collect_video_frames(
     """
     if not 1 <= max_frames <= MAX_FRAMES:
         raise ValueError("max_frames must be 1..6000")
+    validate_max_side(max_inference_side)
     if cv2 is None:
         import cv2
     if mp is None:
@@ -79,6 +82,7 @@ def collect_video_frames(
             on_frame=frame_consumer if frame_consumer is not None else frames.append,
             on_event=event_consumer,
             detector=TemporalFallDetector(config) if config is not None else None,
+            max_inference_side=max_inference_side,
         )
     require_complete_decode(
         clip_id=clip_id, expected=declared_frames, decoded=stats.frames_processed
@@ -114,10 +118,13 @@ def evaluate_video_manifest(
     manifest_path: Path, model: Path, *,
     max_frames: int = MAX_FRAMES, config: DetectorConfig | None = None,
     collector=collect_video_frames, include_diagnostics: bool = False,
-    buffered_eval: bool = False,
+    buffered_eval: bool = False, max_inference_side: int = 0,
 ) -> dict:
     if not 1 <= max_frames <= MAX_FRAMES:
         raise ValueError("max_frames must be 1..6000")
+    validate_max_side(max_inference_side)
+    if max_inference_side and collector is not collect_video_frames:
+        raise ValueError("Resolution experiments require the real local video collector")
     resolved_clips, consent_declared = validate_video_manifest(manifest_path)
     if model.suffix.lower() != ".task" or not model.is_file() or model.stat().st_size == 0:
         raise ValueError("A non-empty, locally licensed .task model is required")
@@ -144,13 +151,20 @@ def evaluate_video_manifest(
                 video, clip_id=clip_id, model=model, max_frames=limit,
                 frame_consumer=accumulator.on_frame,
                 event_consumer=accumulator.on_event, config=config,
+                max_inference_side=max_inference_side,
             )
         else:
             # Injected collectors retain backwards-compatible test semantics.
             # Optional detailed diagnostics currently require the full pose list.
-            frames, stats = collector(
-                video, clip_id=clip_id, model=model, max_frames=limit
-            )
+            if max_inference_side and collector is collect_video_frames:
+                frames, stats = collector(
+                    video, clip_id=clip_id, model=model, max_frames=limit,
+                    max_inference_side=max_inference_side,
+                )
+            else:
+                frames, stats = collector(
+                    video, clip_id=clip_id, model=model, max_frames=limit
+                )
         decoded = stats["frames_processed"]
         invalid = stats["invalid_pose_frames"]
         if (type(decoded) is not int or type(invalid) is not int
@@ -186,6 +200,8 @@ def evaluate_video_manifest(
     )
     report.update({
         "input_type": "video-files",
+        "inference_max_side_px": max_inference_side,
+        "experimental_resolution": max_inference_side != 0,
         "pose_frames_written_to_disk": False,
         "raw_frames_written_to_disk": False,
         "remote_inference": False,
@@ -218,6 +234,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-frames", type=int, default=MAX_FRAMES)
     parser.add_argument("--profile-resource", action="store_true",
                         help="Opt-in own-process RAM/CPU sample; requires optional psutil")
+    parser.add_argument("--max-inference-side", type=int, default=0,
+                        help="EXPERIMENT ONLY: 0=original input, 256..4096 caps frame side")
     parser.add_argument("--buffered-eval", action="store_true",
                         help="Legacy buffered reference path for performance comparison")
     parser.add_argument("--signal-diagnostics", action="store_true",
@@ -233,6 +251,7 @@ def main(argv: list[str] | None = None) -> int:
             args.manifest, args.model, max_frames=args.max_frames,
             include_diagnostics=args.signal_diagnostics,
             buffered_eval=args.buffered_eval,
+            max_inference_side=args.max_inference_side,
             config=DetectorConfig(
                 min_hip_descent=args.min_hip_descent,
                 horizontal_min_angle_deg=args.horizontal_min_angle_deg,

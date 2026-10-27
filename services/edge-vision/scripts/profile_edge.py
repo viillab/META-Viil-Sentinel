@@ -12,12 +12,15 @@ import sys
 from time import perf_counter
 
 
-def run_once(manifest: Path, model: Path, *, buffered: bool = False) -> dict:
+def run_once(manifest: Path, model: Path, *, buffered: bool = False,
+             max_inference_side: int = 0) -> dict:
     cmd = [sys.executable, "-m", "sentinel_edge.video_benchmark",
            "--manifest", str(manifest), "--model", str(model),
            "--confirm-consent", "--profile-resource"]
     if buffered:
         cmd.append("--buffered-eval")
+    if max_inference_side:
+        cmd.extend(["--max-inference-side", str(max_inference_side)])
     start = perf_counter()
     process = subprocess.run(
         cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
@@ -31,6 +34,7 @@ def run_once(manifest: Path, model: Path, *, buffered: bool = False) -> dict:
     resource = result.get("resource_profile", {})
     return {
         "evaluation_path": "buffered" if buffered else "streaming",
+        "inference_max_side_px": max_inference_side,
         "elapsed_s": round(elapsed, 3),
         "peak_working_set_mb": resource.get("peak_working_set_mb"),
         "cpu_seconds": resource.get("cpu_seconds"),
@@ -61,12 +65,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--model", type=Path, required=True)
     parser.add_argument("--confirm-consent", action="store_true")
     parser.add_argument("--buffered-reference", action="store_true")
+    parser.add_argument("--max-inference-side", type=int, default=0)
     parser.add_argument("--disk-summary", action="store_true")
     args = parser.parse_args(argv)
     if not args.confirm_consent:
         parser.error("--confirm-consent is required")
     try:
-        result = run_once(args.manifest, args.model, buffered=args.buffered_reference)
+        result = run_once(args.manifest, args.model, buffered=args.buffered_reference,
+                          max_inference_side=args.max_inference_side)
         if args.disk_summary:
             paths = {
                 "model_file": args.model,

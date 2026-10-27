@@ -69,6 +69,14 @@ Default mode never opens a display window, saves frames, sends notifications or 
 
 Official task reference: https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker/python
 
+## Optional resolution experiment (NOT production)
+
+Read the [real IKAR frame-size comparison](docs/RESOLUTION_EXPERIMENT_2026-10-27.md):
+original-resolution inference remained faster end-to-end than experimental
+640/480 px input caps in one local trial. The default is unchanged; the
+`--max-inference-side` flag is benchmark-only and must not be promoted without
+representative positive/negative validation on target devices.
+
 ## Performance and disk footprint
 
 The default local video benchmark now evaluates detected events **as frames
