@@ -17,6 +17,7 @@ from sentinel_edge.evaluation import (
 )
 from sentinel_edge.model_smoke import _file_sha256
 from sentinel_edge.runner import process_capture
+from sentinel_edge.video_metadata import expected_frame_count, require_complete_decode
 
 VIDEO_SUFFIXES = {".mp4", ".avi", ".mov", ".mkv", ".webm"}
 MAX_VIDEO_BYTES = 512 * 1024 * 1024  # No arbitrary multi-gigabyte uploads/processing.
@@ -47,6 +48,11 @@ def collect_video_frames(
             capture.release()
             raise ValueError(f"Clip {clip_id}: cannot decode video")
         stack.callback(capture.release)
+        # Fail closed on missing timing/count metadata or an excessive
+        # declared clip length before loading a large inference model.
+        declared_frames = expected_frame_count(
+            capture, cv2, clip_id=clip_id, max_frames=max_frames
+        )
         options = mp.tasks.vision.PoseLandmarkerOptions(
             base_options=mp.tasks.BaseOptions(model_asset_path=str(model.resolve())),
             running_mode=mp.tasks.vision.RunningMode.VIDEO,
@@ -62,8 +68,9 @@ def collect_video_frames(
             webcam=False, source_id=clip_id, max_frames=max_frames + 1,
             display=False, output=StringIO(), on_frame=frames.append,
         )
-    if stats.frames_processed == 0:
-        raise ValueError(f"Clip {clip_id}: no decodable frames")
+    require_complete_decode(
+        clip_id=clip_id, expected=declared_frames, decoded=stats.frames_processed
+    )
     if stats.frames_processed > max_frames:
         raise ValueError(f"Clip {clip_id}: exceeds maximum of {max_frames} frames")
     return frames, {
@@ -106,11 +113,21 @@ def evaluate_video_manifest(
     total = 0
     no_pose = 0
     for clip_id, video, label, onset in resolved_clips:
-        frames, stats = collector(video, clip_id=clip_id, model=model, max_frames=max_frames)
-        total += stats["frames_processed"]
-        no_pose += stats["invalid_pose_frames"]
-        if total > MAX_TOTAL_FRAMES:
+        remaining = MAX_TOTAL_FRAMES - total
+        if remaining <= 0:
             raise ValueError("Evaluation exceeds total frame budget (30000)")
+        # Each collector receives only the remaining budget. Oversized
+        # clips are rejected instead of silently evaluating their start.
+        limit = min(max_frames, remaining)
+        frames, stats = collector(video, clip_id=clip_id, model=model, max_frames=limit)
+        decoded = stats["frames_processed"]
+        invalid = stats["invalid_pose_frames"]
+        if (type(decoded) is not int or type(invalid) is not int
+                or decoded < 1 or decoded > limit
+                or invalid < 0 or invalid > decoded or len(frames) != decoded):
+            raise ValueError(f"Clip {clip_id}: inconsistent collected-frame statistics")
+        total += decoded
+        no_pose += invalid
         outcomes.append(evaluate_clip_frames(
             frames, clip_id=clip_id, expected_fall=label, onset_ms=onset, config=config,
         ))
