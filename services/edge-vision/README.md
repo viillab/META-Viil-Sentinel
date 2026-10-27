@@ -116,6 +116,28 @@ predeclared V1 selection remains unchanged.
 .\.venv\Scripts\python.exe -m sentinel_edge.model_quality --synthetic-demo --dev-crossval
 ```
 
+## Joint public-dataset training (Member 1)
+
+The [real CAUCAFall + GMDCSA-24 joint V1 training guide](docs/CROSS_DATASET_REAL_TRAINING_HANDOFF_2026-10-27.md)
+adds `python -m sentinel_edge.joint_dataset_training`: a
+**real-video**, opt-in **research-only** joint model. Both publisher
+sources undergo actual MediaPipe and SHA-256 video checks, followed by
+a **combined** subject/recording/media split audit. Only TRAIN subjects
+fit the shared 30D V1 logistic weights; only VAL subjects select one
+threshold. A private JSON artifact is saved, reloaded and verified.
+
+The actual 56-video run had **51 pose-eligible clips, 31 TRAIN, 10 VAL,
+10 previously exposed TEST**, with a validation-selected threshold of
+**0.53**. Existing exposed TEST diagnostics yielded TP 3/FN 3/FP 0/TN 4
+across both sources; these **are not new independent Test results**.
+No human action-label review, safety validation or live alert promotion
+is implied. Sensitive video, features and weights stay under ignored
+`data/private`.
+
+```powershell
+.\.venv\Scripts\python.exe -m sentinel_edge.joint_dataset_training --help
+```
+
 ## Actual REAL-video trained research model (private weights)
 
 The [real public-video training handoff](docs/REAL_PRIVATE_MODEL_TRAINING_HANDOFF_2026-10-27.md)

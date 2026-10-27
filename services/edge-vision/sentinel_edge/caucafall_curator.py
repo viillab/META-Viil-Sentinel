@@ -264,7 +264,8 @@ def _wilson_95(hits: int, n: int) -> dict:
 
 def publisher_label_pilot(root: Path, model: Path, groups: dict,
                           proposals: dict, *, collector=None, trainer=None,
-                          dataset_origin="CAUCAFall OmniFall publisher action annotations") -> dict:
+                          dataset_origin="CAUCAFall OmniFall publisher action annotations",
+                          collect_only=False) -> dict:
     """Opt-in REAL publisher-labeled, *unreviewed* pilot: no production claims.
 
     Unlike window_export, this uses publisher's action annotations as-is and
@@ -324,6 +325,9 @@ def publisher_label_pilot(root: Path, model: Path, groups: dict,
         item for item in groups["clips"] if item["clip_id"] in accepted
     ]
     audit_subject_splits(eligible_groups)  # Fail if either label vanishes.
+    if collect_only:
+        # Research-only in-memory video features, no model fit or test scoring.
+        return eligible_groups, windows
     _, result = (trainer or train_and_evaluate)(eligible_groups, windows)
     heldout = [item for item in eligible_groups["clips"] if item["split"] == "test"]
     result["original_heuristic_heldout_test_same_clips"] = _metrics(
