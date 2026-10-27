@@ -4,6 +4,17 @@ The local detector is a **non-clinical heuristic**, not an independently validat
 safety system. No automatic rescue dispatch or medical conclusions are permitted.
 All model and media handling in this module is local-only.
 
+## Current AI model status
+
+The [model readiness audit](docs/MODEL_READINESS_AUDIT_2026-10-27.md) confirms
+actual MediaPipe Pose inference on-device and real staged-human video evaluation.
+It does NOT establish safe fall detection accuracy: 1/8 actual staged falls
+were recognized and IKAR's selected clips contain no normal activity negatives.
+Offline `video_benchmark` now includes `readiness_gate` evidence gaps to prevent
+mistaking successful inference for safe real-world alerts. The Meta Backend
+interpreter remains **mock only** and requires a separate Member 2 live API
+integration. No autonomous emergency actions are authorized.
+
 ## Stage 1 — Reproducible code verification (no camera)
 
 In PowerShell, run:
