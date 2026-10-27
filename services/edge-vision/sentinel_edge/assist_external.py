@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 
 from sentinel_edge.caucafall_curator import _video_metadata, _sha256_file
+from sentinel_edge.contracts import PoseFeatures
 from sentinel_edge.private_model_training import read_private_artifact
 from sentinel_edge.public_dataset_ingest import _github_blob_sha1
 from sentinel_edge.temporal_training import pool_temporal_window
@@ -162,10 +163,16 @@ def windows_of(duration_ms: int) -> list[tuple[int, int]]:
 
 
 def _evaluate_one(path: Path, group: str, activity: str, duration_ms: int,
-                  pose_task: Path, model, *, collector=collect_video_frames) -> dict:
+                  pose_task: Path, model, *, collector=collect_video_frames,
+                  diagnostics=False) -> dict:
     windows = [NearestFrameSampler(activity, start, end)
                for start, end in windows_of(duration_ms)]
+    raw_torso_frames = geometric_valid_frames = 0
     def consume(frame):
+        nonlocal raw_torso_frames, geometric_valid_frames
+        if diagnostics:
+            raw_torso_frames += bool(frame.landmarks)
+            geometric_valid_frames += (PoseFeatures.from_frame(frame, .55) is not None)
         for sampler in windows:
             sampler.on_frame(frame)
     frames, stats = collector(
@@ -175,6 +182,8 @@ def _evaluate_one(path: Path, group: str, activity: str, duration_ms: int,
     if frames or stats["frames_processed"] != windows[0].frames_processed:
         raise ValueError("Inconsistent pose stream frame counts")
     successes, abstentions = [], 0
+    sampled_visible = 0
+    margin_bands = {"clearly_below": 0, "near_below": 0, "candidate": 0}
     for sampler in windows:
         try:
             features = sampler.finish()
@@ -183,9 +192,15 @@ def _evaluate_one(path: Path, group: str, activity: str, duration_ms: int,
                 raise
             abstentions += 1
             continue
-        probability = model.predict_probability(pool_temporal_window(features))
+        probability = float(model.predict_probability(pool_temporal_window(features)))
+        if diagnostics:
+            sampled_visible += sum(row[-1] == 1 for row in features)
+            band = ("candidate" if probability >= model.threshold else
+                    "near_below" if probability >= model.threshold - .2 else
+                    "clearly_below")
+            margin_bands[band] += 1
         successes.append(float(probability))
-    return {"activity": activity, "publisher_class": group,
+    result = {"activity": activity, "publisher_class": group,
             "selected_windows": len(windows),
             "pose_eligible_windows": len(successes),
             "pose_abstentions": abstentions,
@@ -193,6 +208,25 @@ def _evaluate_one(path: Path, group: str, activity: str, duration_ms: int,
                 any(p >= model.threshold for p in successes) if successes else None
             ),
             "fully_pose_covered": abstentions == 0}
+    if diagnostics:
+        if not (0 <= geometric_valid_frames <= raw_torso_frames <= stats["frames_processed"]):
+            raise ValueError("Contradictory pose pipeline counters")
+        if sum(margin_bands.values()) != len(successes):
+            raise ValueError("Diagnostic score groups must match eligible windows")
+        if not 0 <= stats["candidate_events"] <= stats["frames_processed"]:
+            raise ValueError("Invalid legacy heuristic event count")
+        result["failure_diagnostic"] = {
+            "decoded_frames": stats["frames_processed"],
+            "torso_adapter_available_frames": raw_torso_frames,
+            "motion_geometry_eligible_frames": geometric_valid_frames,
+            "unavailable_at_adapter_frames": stats["frames_processed"] - raw_torso_frames,
+            "unavailable_at_geometry_after_adapter": raw_torso_frames - geometric_valid_frames,
+            "eligible_window_sampled_visible_frames": sampled_visible,
+            "legacy_heuristic_event_count": stats["candidate_events"],
+            "frozen_score_bands": margin_bands,
+            "pose_missing_windows_not_scored": abstentions,
+        }
+    return result
 
 
 def summarize_class(rows: list[dict], group: str) -> dict:
@@ -220,8 +254,57 @@ def summarize_class(rows: list[dict], group: str) -> dict:
     }
 
 
+def summarize_failure_diagnostics(rows: list[dict], group: str) -> dict:
+    """Aggregate counts only: never pose vectors or personal time traces.
+
+    Adapter emptiness can have multiple causes (including ambiguous second
+    person, low confidence, off-image pose). This cannot establish causality.
+    """
+    if group not in ("adl", "fall"):
+        raise ValueError("Invalid diagnostic reference group")
+    subset = [r for r in rows if r["publisher_class"] == group]
+    if not subset or any("failure_diagnostic" not in r for r in subset):
+        raise ValueError("All diagnostic activities must have complete counters")
+    diag = [r["failure_diagnostic"] for r in subset]
+    keys = ("decoded_frames", "torso_adapter_available_frames",
+            "motion_geometry_eligible_frames", "unavailable_at_adapter_frames",
+            "unavailable_at_geometry_after_adapter",
+            "eligible_window_sampled_visible_frames", "legacy_heuristic_event_count")
+    totals = {k: sum(x[k] for x in diag) for k in keys}
+    bands = {
+        name: sum(x["frozen_score_bands"][name] for x in diag)
+        for name in ("clearly_below", "near_below", "candidate")
+    }
+    if (totals["motion_geometry_eligible_frames"] > totals["decoded_frames"]
+            or totals["torso_adapter_available_frames"] > totals["decoded_frames"]
+            or totals["unavailable_at_adapter_frames"] +
+            totals["torso_adapter_available_frames"] != totals["decoded_frames"]
+            or totals["unavailable_at_geometry_after_adapter"] +
+            totals["motion_geometry_eligible_frames"] !=
+            totals["torso_adapter_available_frames"]
+            or sum(bands.values()) != sum(r["pose_eligible_windows"] for r in subset)):
+        raise ValueError("Inconsistent diagnostic aggregate counts")
+    return {
+        "reference_videos": len(subset),
+        **totals,
+        "frozen_classifier_score_bands": bands,
+        "videos_with_original_heuristic_candidates": sum(
+            d["legacy_heuristic_event_count"] > 0 for d in diag
+        ),
+        "videos_with_frozen_classification_candidates": sum(
+            r["any_window_fall_candidate"] is True for r in subset
+        ),
+        "videos_with_partial_pose_coverage": sum(
+            not r["fully_pose_covered"] for r in subset
+        ),
+        "cause_not_identified_from_counts_alone": True,
+        "original_heuristic_and_classification_not_same_event_contract": True,
+    }
+
+
 def evaluate_external(root: Path, pose_task: Path, frozen_model_path: Path,
-                      report_path: Path, *, collector=collect_video_frames) -> dict:
+                      report_path: Path, *, collector=collect_video_frames,
+                      diagnostics=False) -> dict:
     """One-shot source-frozen external video stress; NEVER trains or tunes."""
     root = private_root(root).resolve(strict=True)
     if not root.is_dir():
@@ -272,14 +355,15 @@ def evaluate_external(root: Path, pose_task: Path, frozen_model_path: Path,
         raise ValueError("Repeated reference video activity")
     rows = [
         _evaluate_one(path, group, activity, duration, pose_task,
-                      model, collector=collector)
+                      model, collector=collector, diagnostics=diagnostics)
         for path, group, activity, duration in plan
     ]
     by_class = {
         group: summarize_class(rows, group) for group in ("adl", "fall")
     }
     report = {
-        "mode": "research_only_external_frozen_reference_video_stress",
+        "mode": ("research_only_external_frozen_failure_diagnostics" if diagnostics
+                 else "research_only_external_frozen_reference_video_stress"),
         "source": DATASET, "source_commit": PINNED_COMMIT, "license": SOURCE_LICENSE,
         "model_origin": "joint_cauca_gmdcsa_v1_prior_trained",
         "model_sha256": EXPECTED_MODEL_SHA256,
@@ -298,6 +382,12 @@ def evaluate_external(root: Path, pose_task: Path, frozen_model_path: Path,
         # Public action labels only, no faces, pose windows or individual scores.
         "activity_outcomes": rows,
     }
+    if diagnostics:
+        report["failure_attribution"] = {
+            group: summarize_failure_diagnostics(rows, group)
+            for group in ("adl", "fall")
+        }
+        report["diagnostic_only_not_causal_proof"] = True
     with report_path.open("x", encoding="utf8") as out:
         json.dump(report, out, indent=2)
     return report
@@ -305,7 +395,7 @@ def evaluate_external(root: Path, pose_task: Path, frozen_model_path: Path,
 
 def main(argv=None) -> int:
     parser = ArgumentParser(description="Externally sourced frozen-video research only")
-    parser.add_argument("--mode", choices=("download", "evaluate"), required=True)
+    parser.add_argument("--mode", choices=("download", "evaluate", "diagnose"), required=True)
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--model", type=Path)
     parser.add_argument("--pose-task", type=Path)
@@ -323,7 +413,10 @@ def main(argv=None) -> int:
         else:
             if not all((args.model, args.pose_task, args.report)):
                 parser.error("evaluate requires --model, --pose-task and --report")
-            result = evaluate_external(args.root, args.pose_task, args.model, args.report)
+            result = evaluate_external(
+                args.root, args.pose_task, args.model, args.report,
+                diagnostics=(args.mode == "diagnose"),
+            )
     except (OSError, ValueError, RuntimeError, KeyError, TypeError) as exc:
         parser.error("External frozen evaluation refused: " + str(exc))
     print(json.dumps(result, indent=2, sort_keys=True))

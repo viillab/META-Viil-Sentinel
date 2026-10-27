@@ -116,6 +116,30 @@ predeclared V1 selection remains unchanged.
 .\.venv\Scripts\python.exe -m sentinel_edge.model_quality --synthetic-demo --dev-crossval
 ```
 
+## Frozen ASSIST-IoT fall-miss attribution (Member 1)
+
+The [Fall-miss attribution research handoff](docs/FROZEN_FALL_MISS_ATTRIBUTION_HANDOFF_2026-10-27.md)
+adds `python -m sentinel_edge.assist_external --mode diagnose`.
+It streams the **same source-verified 11 ASSIST-IoT videos** with the
+**unchanged** joint V1 model/threshold, counting the Torso adapter
+coverage, geometry validity, sampled 30-bin motion coverage,
+un-calibrated frozen model score bands and **original heuristic
+candidate events**. It does not persist poses, media, windows or
+fitted weights and does not modify real-time alerts.
+
+Real external 27 Oct observations: the Fall clips yielded **698
+adapter-eligible frames out of 1,558**, compared with 1,520/1,838
+in challenging ADL. Two Falls had incomplete pose-window coverage,
+yet a third staged fainting Fall had 453/453 torso-valid frames
+and still no candidate from either the V1 model or heuristic.
+This is research diagnostic evidence, **not independently reviewed
+fall-onset accuracy**, a threshold-tuning opportunity or approval
+to deploy fall alarms.
+
+```powershell
+.\.venv\Scripts\python.exe -m sentinel_edge.assist_external --help
+```
+
 ## Frozen ASSIST-IoT external video stress test (Member 1)
 
 The [source-pinned external benchmark SOP](docs/ASSIST_IOT_EXTERNAL_FROZEN_HANDOFF_2026-10-27.md)
