@@ -63,7 +63,16 @@ Default mode never opens a display window, saves frames, sends notifications or 
 
 Official task reference: https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker/python
 
-## Handoff contract to Member 2
+## Member 1 → Member 2 Candidate Handoff v1
+
+The new [versioned metadata-only candidate contract](docs/CANDIDATE_HANDOFF_V1.md)
+exposes strictly labeled unverified fall candidates via local stdout JSONL.
+It forbids raw frames, private landmarks and unreviewed evidence references,
+and marks heuristic scores as uncalibrated. A standalone synthetic trace
+exporter and opt-in `--candidate-format v1 --confirm-consent` video runner
+mode can generate it. **No live Meta/Backend ingestion is implemented.**
+
+## Legacy Handoff contract to Member 2
 
 A candidate event has this shape (the numeric values are **illustrative only**, not measured):
 

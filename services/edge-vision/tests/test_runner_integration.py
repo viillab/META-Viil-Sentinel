@@ -5,6 +5,7 @@ from types import SimpleNamespace as NS
 
 import pytest
 
+from sentinel_edge.handoff import to_envelope
 from sentinel_edge.runner import process_capture, timestamp_for_frame
 
 
@@ -134,3 +135,27 @@ def test_timestamp_fps_validation():
         timestamp_for_frame(3, float("nan"), 1)
     with pytest.raises(ValueError):
         timestamp_for_frame(3, float("inf"), 1)
+
+
+def test_fake_local_video_can_emit_versioned_unverified_contract():
+    sink = StringIO()
+    stats = process_capture(
+        FakeCapture(range(9)), cv2=FakeCv2, mp=FakeMp,
+        landmarker=FakeLandmarker(), webcam=False,
+        source_id="fake-test", output=sink,
+        event_encoder=lambda event: to_envelope(
+            event, input_provenance="consented_staged_video",
+            model_sha256="a" * 64,
+        ).to_dict(),
+    )
+    assert stats.candidate_events == 1
+    envelope = json.loads(sink.getvalue())
+    assert envelope["schema_version"] == "viil.edge.candidate.v1"
+    assert envelope["source_timestamp_ms"] == 800
+    assert envelope["source_id"] == "fake-test"
+    assert envelope["model_sha256"] == "a" * 64
+    assert envelope["simulated"] is False
+    assert envelope["confirmed_fall"] is False
+    assert envelope["human_review_required"] is True
+    assert envelope["evidence_refs"] == []
+    assert "evidence_notes" not in envelope

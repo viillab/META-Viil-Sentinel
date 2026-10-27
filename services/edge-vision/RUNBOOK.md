@@ -129,6 +129,15 @@ constant-frame-rate video for meaningful event-onset latency comparisons.
 The project also contains an automated **synthetic black-video**
 integration test; it is not a fall/no-fall benchmark on humans.
 
+## Stage 7 — Versioned, local-only candidate handoff for Member 2
+
+See [Candidate handoff v1](docs/CANDIDATE_HANDOFF_V1.md) for strict
+schema, synthetic test command, local MediaPipe runner `--candidate-format v1`,
+provenance, relative timestamps, uncalibrated scoring and Member2's
+future *authenticated* ingestion responsibilities. The existing
+`/api/v1/incidents/demo` endpoint remains simulation-only and must not
+receive actual Edge candidate events.
+
 ## Member 2 integration contract
 
 Candidate events contain source identifier, timestamp, *heuristic*

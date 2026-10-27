@@ -1,0 +1,20 @@
+{
+  "schema_version": "viil.edge.candidate.v1",
+  "event_type": "FALL_CANDIDATE",
+  "event_id": "00000000-0000-4000-8000-000000000001",
+  "source_id": "synthetic-clip-01",
+  "source_timestamp_ms": 880,
+  "timestamp_basis": "relative_to_source_start",
+  "detector": "temporal-pose-heuristic-v0.1",
+  "model_sha256": null,
+  "input_provenance": "synthetic_pose_trace",
+  "detector_score": 0.8,
+  "detector_score_type": "uncalibrated_heuristic",
+  "score_calibrated": false,
+  "confirmed_fall": false,
+  "human_review_required": true,
+  "medical_assessment_performed": false,
+  "simulated": true,
+  "evidence_refs": [],
+  "delivery_mode": "local_stdout_only"
+}
