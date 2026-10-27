@@ -2,11 +2,20 @@
 
 **Owner:** Member 1 (you)
 
-**Branch:** `member1/feature/edge-vision`
+**Member 1 branches:** `member1/feature/*`
 
-**Integration:** `preprod` (human-only `main`)
+**Integration:** `member/feature/preprod` (actual `preprod` and `main` promoted by human)
 
-**Status:** New, **unvalidated** pose-based fall-candidate heuristic. NOT a clinical or production safety detector.
+**Status:** Actual MediaPipe pose AI inference **works**; fall-candidate heuristics remain **unvalidated for reliable safety alerts**. NOT a clinical or production safety detector.
+
+## AI model readiness — verified
+
+See the [latest real runtime and model readiness audit](docs/MODEL_READINESS_AUDIT_2026-10-27.md):
+Pose Landmarker Lite loads and infers locally, but the fall event classifier is
+a heuristic with 1/8 detected staged falls in a tiny positive-only IKAR test.
+The latest video report adds a conservative `readiness_gate`, never granting
+automated alert/dispatch authorization. **Meta multimodal live inference is
+not implemented** (Backend `meta.py` uses an explicitly labeled mock).
 
 ## What has been implemented
 

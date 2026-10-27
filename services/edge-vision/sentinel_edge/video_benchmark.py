@@ -19,6 +19,7 @@ from sentinel_edge.evaluation import (
     summarize_clips, validate_clip,
 )
 from sentinel_edge.model_smoke import _file_sha256
+from sentinel_edge.readiness import benchmark_readiness
 from sentinel_edge.runner import process_capture
 from sentinel_edge.frame_resize import validate_max_side
 from sentinel_edge.signal_diagnostics import diagnose_pose_signals
@@ -219,6 +220,7 @@ def evaluate_video_manifest(
             "Gate counts are descriptive only, not ground-truth onset detection or "
             "proof of the cause of missed events."
         )
+    report["readiness_gate"] = benchmark_readiness(report)
     return report
 
 
