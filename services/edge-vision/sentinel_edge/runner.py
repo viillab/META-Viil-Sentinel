@@ -19,6 +19,7 @@ from sentinel_edge.detector import TemporalFallDetector
 from sentinel_edge.pose_adapter import extract_torso_landmarks
 from sentinel_edge.pose_rejection_diagnostics import pose_adapter_reason
 from sentinel_edge.multipose_spatial_diagnostics import multipose_spatial_category
+from sentinel_edge.temporal_pose_association import OfflineAssociationObserver
 from sentinel_edge.frame_resize import resize_for_inference, validate_max_side
 from sentinel_edge.pose_traces import frame_to_trace_record
 
@@ -86,6 +87,7 @@ def process_capture(
     on_frame: Callable[[PoseFrame], None] | None = None,
     pose_reason_consumer: Callable[[str], None] | None = None,
     multipose_category_consumer: Callable[[str], None] | None = None,
+    association_category_consumer: Callable[[str], None] | None = None,
     event_encoder: Callable[[FallCandidateEvent], dict] | None = None,
     on_event: Callable[[FallCandidateEvent], None] | None = None,
     detector: TemporalFallDetector | None = None,
@@ -105,6 +107,10 @@ def process_capture(
     started = clock()
     frame_number, invalid_poses, candidate_count = 0, 0, 0
     last_timestamp = -1
+    association_observer = (
+        OfflineAssociationObserver() if association_category_consumer is not None
+        else None
+    )
     fps = float(cap.get(cv2.CAP_PROP_FPS))
     if not 0 < fps < 240:
         fps = 30.0
@@ -127,6 +133,8 @@ def process_capture(
             pose_reason_consumer(pose_adapter_reason(result))
         if multipose_category_consumer is not None:
             multipose_category_consumer(multipose_spatial_category(result))
+        if association_observer is not None:
+            association_category_consumer(association_observer.observe(result))
         if not landmarks:
             invalid_poses += 1
         frame = PoseFrame(
