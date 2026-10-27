@@ -67,6 +67,22 @@ publisher-labeled research scores remain unreviewed, and data must not be
 presented as independently validated until humans complete real visual review.
 Private review files and derived pose remain ignored under `data/private`.
 
+## Freeze & verify independently reviewed datasets before pose export
+
+A [private unsigned SHA-256 dataset freeze guide](docs/REVIEWED_DATASET_FREEZE_HANDOFF_2026-10-27.md)
+adds `python -m sentinel_edge.reviewed_dataset_seal` with three explicitly
+acknowledged offline modes: **freeze**, **verify** and **export**. It checks
+the complete two-person review, subject split separation, video hashes and
+canonical fingerprints of all input manifests, then rejects changed inputs
+before sensitive pose export. Raw media, review records, derived windows
+and hashes are restricted to ignored `data/private`. This is a drift-check
+and does NOT prove reviewer identity, participant consent, or clinical safety.
+
+As of 27 October 2026, CAUCAFall has 40 selected clips but zero independently
+reviewed labels: the freeze path must correctly reject them until legitimate
+human review is completed. Previously reported prototype scores are *not*
+evidence that this approval step has been passed.
+
 ## Lightweight V1/V2 model-quality comparison (Member 1 handoff)
 
 The [V2 implementation and next-developer handoff](docs/MEMBER1_MODEL_QUALITY_V2_HANDOFF_2026-10-27.md)
