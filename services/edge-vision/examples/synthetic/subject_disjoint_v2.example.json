@@ -1,0 +1,54 @@
+{
+  "version": 2,
+  "permission_basis": "FICTIONAL synthetic metadata only; NOT a license for any human footage",
+  "clips": [
+    {
+      "clip_id": "synthetic-train-fall",
+      "dataset_id": "fictional",
+      "subject_id": "synthetic-subject-train",
+      "recording_id": "synthetic-take-train-fall",
+      "split": "train",
+      "expected_fall": true
+    },
+    {
+      "clip_id": "synthetic-train-adl",
+      "dataset_id": "fictional",
+      "subject_id": "synthetic-subject-train",
+      "recording_id": "synthetic-take-train-adl",
+      "split": "train",
+      "expected_fall": false
+    },
+    {
+      "clip_id": "synthetic-val-fall",
+      "dataset_id": "fictional",
+      "subject_id": "synthetic-subject-val",
+      "recording_id": "synthetic-take-val-fall",
+      "split": "val",
+      "expected_fall": true
+    },
+    {
+      "clip_id": "synthetic-val-adl",
+      "dataset_id": "fictional",
+      "subject_id": "synthetic-subject-val",
+      "recording_id": "synthetic-take-val-adl",
+      "split": "val",
+      "expected_fall": false
+    },
+    {
+      "clip_id": "synthetic-test-fall",
+      "dataset_id": "fictional",
+      "subject_id": "synthetic-subject-test",
+      "recording_id": "synthetic-take-test-fall",
+      "split": "test",
+      "expected_fall": true
+    },
+    {
+      "clip_id": "synthetic-test-adl",
+      "dataset_id": "fictional",
+      "subject_id": "synthetic-subject-test",
+      "recording_id": "synthetic-take-test-adl",
+      "split": "test",
+      "expected_fall": false
+    }
+  ]
+}
