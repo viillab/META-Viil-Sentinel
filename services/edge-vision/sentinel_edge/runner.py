@@ -69,6 +69,7 @@ def process_capture(
     webcam: bool, source_id: str, max_frames: int = 0,
     display: bool = False, trace_file: TextIO | None = None,
     output: TextIO | None = None, clock: Callable[[], float] = monotonic,
+    on_frame: Callable[[PoseFrame], None] | None = None,
 ) -> StreamStats:
     """Read local frames and emit only candidate metadata to an output stream.
 
@@ -109,6 +110,8 @@ def process_capture(
         )
         if trace_file is not None:
             trace_file.write(frame_to_trace_record(frame) + "\n")
+        if on_frame is not None:
+            on_frame(frame)
         event = detector.process(frame)
         if event is not None:
             print(json.dumps({"type": "FALL_CANDIDATE", **asdict(event)}), file=output)

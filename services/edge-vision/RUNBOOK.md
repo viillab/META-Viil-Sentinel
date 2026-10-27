@@ -107,6 +107,22 @@ measure fall detection sensitivity, real-person accuracy or false alarms.
 .\.venv\Scripts\python.exe -m sentinel_edge.model_smoke --model "D:\\VIIL-Sentinel\\models\\pose_landmarker_lite.task" --frames 30
 ```
 
+## Stage 6 — Video-to-MediaPipe-to-ground-truth scoring (local only)
+
+See [Video benchmark procedure](docs/VIDEO_BENCHMARK.md) for the
+manifest schema, explicit consent step, per-clip frame limits and
+reported metrics. Unlike the JSONL evaluator, this command decodes
+consented local video with the **real on-device MediaPipe model** and
+uses temporary in-memory PoseFrames; it neither saves captured frames
+nor stores landmark traces.
+
+```powershell
+.\.venv\Scripts\python.exe -m sentinel_edge.video_benchmark --manifest "D:\\staged-private\\manifest.json" --model "D:\\VIIL-Sentinel\\models\\pose_landmarker_lite.task" --confirm-consent
+```
+
+The project also contains an automated **synthetic black-video**
+integration test; it is not a fall/no-fall benchmark on humans.
+
 ## Member 2 integration contract
 
 Candidate events contain source identifier, timestamp, *heuristic*
