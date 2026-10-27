@@ -1,9 +1,11 @@
 # Team development standards
 
 Three approved hackathon participants. We will work in separate feature branches and use pull requests for review:
-- `feature/edge-vision`
-- `feature/meta-intelligence`
-- `feature/dashboard`
+- `member1/feature/edge-vision` — Member 1 (user): Edge Vision, pose/temporal fall candidates, model evaluation
+- `member2/feature/meta-intelligence` — Member 2: Muse Spark, incident intelligence and backend
+- `member3/feature/dashboard` — Member 3: UI, notification and integration
+
+All members branch from `origin/preprod`. Push validated work to member branches, then integrate into `preprod`. `main` is human-only.
 
 Recommended checks:
 - Backend: `cd services/api && python -m pytest -q && python -m ruff check .`

@@ -30,6 +30,7 @@ models/
 *.pt
 *.pth
 *.onnx
+*.task
 *.safetensors
 *.ckpt
 *.h5

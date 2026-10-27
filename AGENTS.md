@@ -6,7 +6,7 @@ Remote: https://github.com/viillab/META-Viil-Sentinel.git
 ## Git authority: HUMAN-ONLY MAIN
 
 - **NEVER create commits on `main`, merge into `main`, rebase `main`, reset `main`, push to `main`, or change the default branch.** Only a human operator may promote code to `main` manually.
-- AI/development assistants MUST create or switch to a topic branch (`feature/*`, `fix/*`, `chore/*`, `docs/*`, `test/*`) based on the latest `origin/preprod`. Do not start implementation on `main`.
+- AI/development assistants MUST create or switch to a topic branch based on the latest `origin/preprod`. Valid member streams are `member1/feature/*` (Edge Vision), `member2/feature/*` (Meta AI + Backend) and `member3/feature/*` (Dashboard + Notifications); maintenance may use `fix/*`, `chore/*`, `docs/*`, `test/*`. Do not start implementation on `main`.
 - After every completed bounded code change: run appropriate validation, inspect the diff and secrets, commit on the topic branch, and **push that topic branch to origin**.
 - After validation succeeds, **merge the topic branch into `preprod`**, and **push `preprod`**. For conflicts or failed validation, leave `preprod` untouched and report the blocker.
 - Do not force-push, delete shared branches, skip validation, or change remote visibility.
