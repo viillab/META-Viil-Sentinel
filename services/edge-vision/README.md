@@ -8,6 +8,22 @@
 
 **Status:** Actual MediaPipe pose AI inference **works**; fall-candidate heuristics remain **unvalidated for reliable safety alerts**. NOT a clinical or production safety detector.
 
+## Research-driven model preparation (27 Oct 2026)
+
+New [research-to-engineering audit](docs/DEEP_RESEARCH_MOTION_AND_DATASET_PROTOCOL_2026-10-27.md)
+provides an experimental **bounded temporal motion-feature window** and
+`--motion-study` aggregate-only real-video diagnostics, plus a strict
+subject-/recording-/media-disjoint research manifest audit:
+
+```powershell
+python -m sentinel_edge.split_audit --manifest examples/synthetic/subject_disjoint_v2.example.json
+```
+
+These are **research scaffolding, not a trained TCN/GRU model**. Fall
+candidate production thresholds and outputs are unchanged; the original
+8-clip positive-only IKAR evaluation remains 1/8. No additional person
+images, models or subject metadata have been committed.
+
 ## AI model readiness — verified
 
 See the [latest real runtime and model readiness audit](docs/MODEL_READINESS_AUDIT_2026-10-27.md):

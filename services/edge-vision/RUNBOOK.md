@@ -4,6 +4,18 @@ The local detector is a **non-clinical heuristic**, not an independently validat
 safety system. No automatic rescue dispatch or medical conclusions are permitted.
 All model and media handling in this module is local-only.
 
+## Deep-research temporal motion and dataset safeguards
+
+See [Member1 deep research and new motion-feature pipeline](docs/DEEP_RESEARCH_MOTION_AND_DATASET_PROTOCOL_2026-10-27.md).
+Run the `--motion-study` flag only for approved local videos: it reports
+aggregate-only peak movement signals, not predictions from a trained model.
+Before training any fall classifier, `python -m sentinel_edge.split_audit
+--manifest examples/synthetic/subject_disjoint_v2.example.json` verifies
+strict subject, recording and SHA-256 group separation with Fall+ADL in
+every split. The included manifest uses entirely invented participants.
+The current production heuristic remains unchanged and is not authorized
+for unattended fall alarm deployment.
+
 ## Current AI model status
 
 The [model readiness audit](docs/MODEL_READINESS_AUDIT_2026-10-27.md) confirms

@@ -19,6 +19,7 @@ from sentinel_edge.evaluation import (
     summarize_clips, validate_clip,
 )
 from sentinel_edge.model_smoke import _file_sha256
+from sentinel_edge.motion_features import summarize_motion_signals
 from sentinel_edge.readiness import benchmark_readiness
 from sentinel_edge.runner import process_capture
 from sentinel_edge.frame_resize import validate_max_side
@@ -120,6 +121,7 @@ def evaluate_video_manifest(
     max_frames: int = MAX_FRAMES, config: DetectorConfig | None = None,
     collector=collect_video_frames, include_diagnostics: bool = False,
     buffered_eval: bool = False, max_inference_side: int = 0,
+    include_motion_study: bool = False,
 ) -> dict:
     if not 1 <= max_frames <= MAX_FRAMES:
         raise ValueError("max_frames must be 1..6000")
@@ -134,6 +136,7 @@ def evaluate_video_manifest(
     total = 0
     no_pose = 0
     diagnostics = []
+    motion_study = []
     for clip_id, video, label, onset in resolved_clips:
         remaining = MAX_TOTAL_FRAMES - total
         if remaining <= 0:
@@ -145,7 +148,7 @@ def evaluate_video_manifest(
         # once in callbacks. It does not retain an entire clip in memory or
         # run the temporal detector a second time.
         streamed = (collector is collect_video_frames and not include_diagnostics
-                    and not buffered_eval)
+                    and not buffered_eval and not include_motion_study)
         if streamed:
             accumulator = StreamingClipAccumulator(config=config)
             frames, stats = collector(
@@ -189,6 +192,10 @@ def evaluate_video_manifest(
                 diagnostics.append({
                     "clip_id": clip_id, **diagnose_pose_signals(frames, config),
                 })
+            if include_motion_study:
+                motion_study.append({
+                    "clip_id": clip_id, **summarize_motion_signals(frames),
+                })
         total += decoded
         no_pose += invalid
         outcomes.append(outcome)
@@ -220,6 +227,12 @@ def evaluate_video_manifest(
             "Gate counts are descriptive only, not ground-truth onset detection or "
             "proof of the cause of missed events."
         )
+    if include_motion_study:
+        report["experimental_motion_diagnostics"] = motion_study
+        report["motion_study_notice"] = (
+            "Untrained aggregate kinematic features only; NOT a new classifier "
+            "or evidence of improved fall detection."
+        )
     report["readiness_gate"] = benchmark_readiness(report)
     return report
 
@@ -240,6 +253,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="EXPERIMENT ONLY: 0=original input, 256..4096 caps frame side")
     parser.add_argument("--buffered-eval", action="store_true",
                         help="Legacy buffered reference path for performance comparison")
+    parser.add_argument("--motion-study", action="store_true",
+                        help="RESEARCH ONLY: in-memory pose motion aggregate, no event changes")
     parser.add_argument("--signal-diagnostics", action="store_true",
                         help="Include aggregate-only per-clip detector gate counts")
     parser.add_argument("--min-hip-descent", type=float, default=0.13)
@@ -252,6 +267,7 @@ def main(argv: list[str] | None = None) -> int:
         result = evaluate_video_manifest(
             args.manifest, args.model, max_frames=args.max_frames,
             include_diagnostics=args.signal_diagnostics,
+            include_motion_study=args.motion_study,
             buffered_eval=args.buffered_eval,
             max_inference_side=args.max_inference_side,
             config=DetectorConfig(
