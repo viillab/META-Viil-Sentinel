@@ -161,6 +161,26 @@ calibration bounds are established. The model remains in RAM only.
 Human review, held-out uncertainty analysis, more ADL examples and
 repeated cross-subject folds remain essential.
 
+## Reported coverage and tiny-sample uncertainty (research-only)
+
+The publisher-labeled pilot now includes `pose_quality_filter.coverage_by_split_and_label`
+for all three partitions. Every excluded video is reported as an **abstention**,
+not a correct negative or a successful model prediction. The
+`heldout_uncertainty` section records both the **8 originally selected** and
+**6 pose-eligible** held-out videos; it includes Wilson 95% score bounds for
+recall and specificity **conditioned on successful pose tracking**.
+
+For the previously documented test counts, 2/4 fall recall has an approximate
+Wilson interval **0.1500–0.8500**; 2/2 ADL specificity has an approximate
+interval **0.3424–1.0000**. These wide intervals show why observing 0 false
+positives on only two readable ADL clips is not enough. Test ADL coverage is
+**2/4**, and 2 ADL videos remain unscored (not assumed true negatives).
+These descriptive score intervals are *not* valid population-level or clinical
+confidence bounds: the data are small, staged, nonrandom, publisher-annotated,
+and pose-quality filtered. A future deployment must measure all-input
+coverage, independent holdout recall, false alerts per operating hour and
+latency on representative consented material.
+
 ## Quality and privacy
 
 - Only this source code, unit tests and instructions belong in Git.

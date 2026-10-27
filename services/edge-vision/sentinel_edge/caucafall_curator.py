@@ -9,6 +9,7 @@ from argparse import ArgumentParser
 from collections import Counter
 import csv
 from hashlib import sha256
+from math import sqrt
 import json
 from pathlib import Path
 import re
@@ -33,6 +34,27 @@ SUBJECT_SPLITS = {
 ANNOTATION_NAME = "mmaction2_annotations.txt"
 MAX_ROWS = 600
 MAX_SOURCE_BYTES = 512 * 1024 * 1024
+
+
+def _wilson_95(hits: int, n: int) -> dict:
+    """95% Wilson score interval for one binary rate; no normal approximation.
+
+    All values are descriptive sampling uncertainty only and cannot correct
+    for pose-quality selection bias, participant correlation or label error.
+    """
+    if (type(hits) is not int or type(n) is not int or
+            n < 0 or not 0 <= hits <= n):
+        raise ValueError("Wilson numerator/denominator must be valid counts")
+    if n == 0:
+        return {"hits": hits, "n": n, "lower": None, "upper": None}
+    z = 1.96
+    phat = hits / n
+    denom = 1 + z * z / n
+    center = (phat + z * z / (2 * n)) / denom
+    half = (z / denom) * sqrt(phat * (1 - phat) / n + z * z / (4 * n * n))
+    return {"hits": hits, "n": n,
+            "lower": round(max(0.0, center - half), 2),
+            "upper": round(min(1.0, center + half), 2)}
 
 
 def _video_metadata(path: Path) -> tuple[int, float]:
@@ -245,6 +267,22 @@ def curate(root: Path, *, per_class_per_subject: int = 2,
     return groups, proposals, summary
 
 
+def _wilson_95(hits: int, n: int) -> dict:
+    """Descriptive Wilson score bounds for tiny research samples, NOT safety CI."""
+    if type(hits) is not int or type(n) is not int or not 0 <= hits <= n:
+        raise ValueError("Success count must be within 0..n")
+    if n == 0:
+        return {"hits": 0, "n": 0, "lower": None, "upper": None}
+    z = 1.959963984540054
+    rate = hits / n
+    correction = 1 + z * z / n
+    center = (rate + z * z / (2 * n)) / correction
+    half = (z / correction) * sqrt(rate * (1 - rate) / n + z * z / (4 * n * n))
+    return {"hits": hits, "n": n,
+            "lower": round(max(0.0, center - half), 4),
+            "upper": round(min(1.0, center + half), 4)}
+
+
 def publisher_label_pilot(root: Path, model: Path, groups: dict,
                           proposals: dict, *, collector=None) -> dict:
     """Opt-in REAL publisher-labeled, *unreviewed* pilot: no production claims.
@@ -317,7 +355,39 @@ def publisher_label_pilot(root: Path, model: Path, groups: dict,
         "pose-eligible held-out subjects, not all recorded videos. Neither "
         "result establishes real-world fall-alarm reliability."
     )
+    selected = Counter((item["split"], item["expected_fall"])
+                       for item in groups["clips"])
+    accepted_counts = Counter((item["split"], item["expected_fall"])
+                              for item in eligible_groups["clips"])
+    coverage = {}
+    for split in ("train", "val", "test"):
+        coverage[split] = {}
+        for label, name in ((True, "fall"), (False, "adl")):
+            total = selected[(split, label)]
+            count = accepted_counts[(split, label)]
+            coverage[split][name] = {
+                "selected": total, "eligible": count,
+                "abstained": total - count,
+                "coverage": round(count / total, 4) if total else None,
+            }
+    test_metrics = result["heldout_test"]
+    n_fall = test_metrics["true_positive"] + test_metrics["false_negative"]
+    n_adl = test_metrics["true_negative"] + test_metrics["false_positive"]
+    result["heldout_uncertainty"] = {
+        "eligible_only": True,
+        "fall_recall_wilson_95": _wilson_95(test_metrics["true_positive"], n_fall),
+        "adl_specificity_wilson_95": _wilson_95(test_metrics["true_negative"], n_adl),
+        "selected_heldout_clips": sum(selected[("test", v)] for v in (True, False)),
+        "scored_heldout_clips": n_fall + n_adl,
+        "unscored_heldout_clips": sum(excluded[("test", v)] for v in (True, False)),
+        "warning": (
+            "Wilson intervals cover binomial sampling only; subject clustering, "
+            "unreviewed source labels and pose abstentions make real-world "
+            "uncertainty substantially greater. Do not deploy."
+        ),
+    }
     result["pose_quality_filter"] = {
+        "coverage_by_split_and_label": coverage,
         "minimum_observed_of_30": 10,
         "input_clips": len(groups["clips"]),
         "eligible_clips": len(accepted),
@@ -330,6 +400,46 @@ def publisher_label_pilot(root: Path, model: Path, groups: dict,
         "selection_bias_warning": (
             "Metrics are conditional on pose-readable clips and cannot "
             "estimate performance on all original recordings."
+        ),
+    }
+    # Never hide pose-unreadable clips behind an eligible-only confusion matrix.
+    # Aggregate by label/split, without exposing person IDs or motion windows.
+    selected_counts = Counter(
+        (item["split"], item["expected_fall"]) for item in groups["clips"]
+    )
+    coverage = {}
+    for split in ("train", "val", "test"):
+        coverage[split] = {}
+        for label, fall in (("fall", True), ("adl", False)):
+            selected = selected_counts[(split, fall)]
+            abstained = excluded[(split, fall)]
+            coverage[split][label] = {
+                "selected": selected,
+                "eligible": selected - abstained,
+                "abstained": abstained,
+                "coverage": round((selected - abstained) / selected, 5)
+                if selected else None,
+            }
+    result["pose_quality_filter"]["coverage_by_split_and_label"] = coverage
+    heldout_scores = result["heldout_test"]
+    test_fall = coverage["test"]["fall"]
+    test_adl = coverage["test"]["adl"]
+    result["heldout_uncertainty"] = {
+        "eligible_only": True,
+        "selected_heldout_clips": test_fall["selected"] + test_adl["selected"],
+        "scored_heldout_clips": test_fall["eligible"] + test_adl["eligible"],
+        "unscored_heldout_clips": test_fall["abstained"] + test_adl["abstained"],
+        "fall_recall_wilson_95": _wilson_95(
+            heldout_scores["true_positive"], test_fall["eligible"],
+        ),
+        "adl_specificity_wilson_95": _wilson_95(
+            heldout_scores["true_negative"], test_adl["eligible"],
+        ),
+        "interpretation": (
+            "Approximate 95% Wilson intervals describe this fixed, tiny, "
+            "pose-eligible publisher-labeled subset only; not population "
+            "confidence bounds. Unscored videos are abstentions, not "
+            "correct classifications. No clinical/safety reliability claim."
         ),
     }
     result["dataset_origin"] = "CAUCAFall OmniFall publisher action annotations"
