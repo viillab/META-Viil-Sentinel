@@ -1,5 +1,6 @@
 """Local-first configuration. External AI and emergency dispatch are disabled by default."""
 from functools import lru_cache
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
