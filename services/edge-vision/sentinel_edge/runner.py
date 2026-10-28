@@ -7,6 +7,7 @@ from argparse import ArgumentParser
 from contextlib import ExitStack
 from dataclasses import asdict, dataclass
 import json
+from math import isfinite
 from pathlib import Path
 import sys
 from time import monotonic, perf_counter
@@ -51,6 +52,8 @@ def parse_args(argv: list[str] | None = None):
                         help="Explicit opt-in: retry RTSP interruption at most 3 times")
     parser.add_argument("--rtsp-retry-delay-ms", type=int, default=1000,
                         help="Delay between RTSP reconnects, 250..5000 ms")
+    parser.add_argument("--rtsp-session-seconds", type=int, default=0,
+                        help="Optional per-session experiment limit 1..3600s; 0 disables")
     parser.add_argument("--source-id", default="staged-camera-01")
     parser.add_argument("--candidate-format", choices=["legacy", "v1"], default="legacy",
                         help="Use versioned privacy-minimal Member2 handoff envelopes")
@@ -79,6 +82,12 @@ def parse_args(argv: list[str] | None = None):
         parser.error("--rtsp-retries must be 0..3")
     if not 250 <= args.rtsp_retry_delay_ms <= 5000:
         parser.error("--rtsp-retry-delay-ms must be 250..5000")
+    if not 0 <= args.rtsp_session_seconds <= 3600:
+        parser.error("--rtsp-session-seconds must be 0..3600")
+    if args.rtsp_session_seconds and (
+        args.source != "rtsp" or not args.rtsp_retries
+    ):
+        parser.error("--rtsp-session-seconds requires RTSP retry mode")
     if args.profile_rtsp and (args.source != "rtsp" or not args.rtsp_retries):
         parser.error("--profile-rtsp requires RTSP retry mode")
     if args.rtsp_retries and args.source != "rtsp":
@@ -142,6 +151,7 @@ def process_capture(
     detector: TemporalFallDetector | None = None,
     max_inference_side: int = 0,
     fail_on_loss: bool = False,
+    max_duration_seconds: float = 0.0,
 ) -> StreamStats:
     """Read local frames and emit only candidate metadata to an output stream.
 
@@ -151,6 +161,10 @@ def process_capture(
     """
     if max_frames < 0:
         raise ValueError("max_frames must be non-negative")
+    if (type(max_duration_seconds) not in (int, float)
+            or not isfinite(max_duration_seconds)
+            or not 0 <= max_duration_seconds <= 3600):
+        raise ValueError("max_duration_seconds must be finite and in 0..3600")
     validate_max_side(max_inference_side)
     output = output if output is not None else sys.stdout
     detector = detector if detector is not None else TemporalFallDetector()
@@ -166,6 +180,8 @@ def process_capture(
         fps = 30.0
 
     while True:
+        if max_duration_seconds and clock() - started >= max_duration_seconds:
+            break
         cycle_start = perf_counter() if on_frame_cycle is not None else None
         try:
             success, bgr = cap.read()
@@ -176,6 +192,10 @@ def process_capture(
         if not success or bgr is None:
             if fail_on_loss:
                 raise CameraStreamInterrupted("Camera stream interrupted")
+            break
+        # A blocking read may cross the test budget: discard that final frame
+        # before inference so no candidates are emitted after the deadline.
+        if max_duration_seconds and clock() - started >= max_duration_seconds:
             break
         timestamp = (
             max(int((clock() - started) * 1000), last_timestamp + 1)
@@ -286,7 +306,10 @@ def _run_rtsp_retry_mode(args, cv2: Any, mp: Any, source: str) -> int:
                     fail_on_loss=True,
                     on_frame_cycle=profiler.observe if profiler is not None else None,
                     on_frame=observe_pose,
+                    max_duration_seconds=args.rtsp_session_seconds,
                 )
+                if stats.frames_processed == 0:
+                    raise CameraStreamInterrupted("RTSP epoch had no processed frames")
             except CameraStreamInterrupted:
                 if profiler is not None:
                     print("RESEARCH_RTSP_PROFILE " + json.dumps(
@@ -302,7 +325,7 @@ def _run_rtsp_retry_mode(args, cv2: Any, mp: Any, source: str) -> int:
                     profiler.report(interrupted=False), sort_keys=True,
                 ), file=sys.stderr)
             print(
-                f"RTSP session ended at requested frame bound: "
+                f"RTSP session ended at configured frame/time bound: "
                 f"{stats.frames_processed} frames, {stats.candidate_events} "
                 "unconfirmed candidates.",
                 file=sys.stderr,
