@@ -1,11 +1,19 @@
 """RTSP health revocation simulations: no real camera, socket or credentials."""
 import json
+import sys
+from types import ModuleType
 
 import pytest
 
 from privacy_approval_fixture import make_policy
 from sentinel_edge import camera_health
 from sentinel_edge.privacy_gate import PrivacyGateDenied
+
+
+@pytest.fixture(autouse=True)
+def fake_cv2_module(monkeypatch):
+    """CI intentionally has no OpenCV extra: mock the module, never decode."""
+    monkeypatch.setitem(sys.modules, "cv2", ModuleType("cv2"))
 
 
 class FakeCamera:
