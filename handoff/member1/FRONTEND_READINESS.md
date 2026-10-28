@@ -10,6 +10,14 @@ UI it will show **MOCK · DEMONSTRATION**, and none of the future assessment
 states are live or authorized. The Edge 1500ms research Shadow continues
 to emit aggregate research counts only, NOT live fall events.
 
+## Phase 1 Edge AI Test Lab
+
+A new **AI Detect Test Lab** is the default view. It accepts bounded local
+metadata-only Edge candidate JSONL, with a synthetic Fall sample and empty
+Sitting sample, and does not poll the local Backend while that view is active.
+The existing Incident operations tab remains MOCK. See
+[Member 1 Phase plan](../../docs/roadmap/MEMBER1_EDGE_WEB_PHASES.md).
+
 ## Delivered on the frontend (Member 1)
 
 - `apps/dashboard/src/metaReview.ts` is a pure, fail-closed presentation

@@ -60,6 +60,16 @@ The same command with sitting.jsonl should yield no candidate.
 - Meta real provider still needs separate authorization, API keys only on
   backend and output validation. Do not portray MOCK outputs as real.
 
+## Member 1 — AI Detect + Web Test Lab
+
+**Phase 1 implemented:** browser-local Edge v1 metadata replay without Backend,
+Meta, cameras or stored/private data; hardened JSONL import (256 KiB, 100 events),
+synthetic Fall and Sitting examples, source-relative times and uncalibrated
+score visualization. The Web Lab does **not run Pose/AI inference in browser**;
+Python remains the tested Edge producer. Real source output interoperability
+was tested independently of the fixture. Phase roadmap:
+[AI Detect + Web staged evaluation gates](../../docs/roadmap/MEMBER1_EDGE_WEB_PHASES.md).
+
 ## Member 1 — Dashboard / Notifications (formerly Member 3)
 
 **Frontend integration preflight ready:** [Frontend readiness and proposed Meta-first view DTO](FRONTEND_READINESS.md). Member 1 has implemented a read-only, fail-closed Dashboard adapter, 28 Node contract tests and a simulated notification-feed display. **This is presentation readiness, NOT an authenticated live Meta integration, real alert service or approved auto decision.** Member 2 backend is unchanged.

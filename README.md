@@ -24,6 +24,20 @@ and is **not wired to the backend**. Synthetic/demo endpoints remain separate.
 For safe folder structure and phased refactor instructions see
 [Folder architecture](handoff/member1/ARCHITECTURE.md).
 
+## Member 1 AI Detect + Web Test Lab (Phase 1)
+
+New browser-local **AI Detect Test Lab** is the default dashboard screen.
+It replays strictly validated, metadata-only `viil.edge.candidate.v1` JSONL
+from the real Python Edge emitter with **zero backend requests while the
+Lab tab is selected**; no photo, person trace or private model upload.
+It includes synthetic fall and sitting/no-candidate buttons, bounded local
+file import and clear non-calibrated score/relative-time labels. It does
+**not** perform AI inference in the browser, prove accuracy or deliver
+alerts. Existing Incident operations remains a separate mock-only tab.
+
+The full experiment gates and exact Windows commands are in
+[Member 1 Edge + Web Phases](docs/roadmap/MEMBER1_EDGE_WEB_PHASES.md).
+
 ## Status
 
 | Component | Foundation | Real functionality |
