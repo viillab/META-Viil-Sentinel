@@ -51,8 +51,15 @@ export default function IntegrationCenter() {
   const [snapshot, setSnapshot] = useState<IntegrationOverview | null>(null);
   const [feedState, setFeedState] = useState<FeedState>("loading");
   const [preview, setPreview] = useState(false);
-  const [lastPolledAt, setLastPolledAt] = useState<number | null>(null);
+  // Use the actual browser clock, not the timestamp of the last successful poll.
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const [refreshToken, setRefreshToken] = useState(0);
+
+  useEffect(() => {
+    if (preview) return;
+    const clock = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(clock);
+  }, [preview]);
 
   useEffect(() => {
     if (preview) return;
@@ -65,9 +72,11 @@ export default function IntegrationCenter() {
       const deadline = window.setTimeout(() => running.abort(), 7_000);
       try {
         const data = await fetchIntegrationOverview(running.signal);
-        if (!alive) return;
-        setSnapshot(snapshotIsFresh(data) ? data : null);
-        setFeedState(snapshotIsFresh(data) ? "connected" : "invalid");
+        if (!alive || document.visibilityState !== "visible") return;
+        const fresh = snapshotIsFresh(data);
+        setNowMs(Date.now());
+        setSnapshot(fresh ? data : null);
+        setFeedState(fresh ? "connected" : "invalid");
       } catch (err) {
         if (!alive) return;
         setSnapshot(null); // do not show stale "online" devices after an error
@@ -78,12 +87,22 @@ export default function IntegrationCenter() {
       } finally {
         window.clearTimeout(deadline);
         if (controller === running) controller = null;
-        if (alive) setLastPolledAt(Date.now());
+        if (alive) setNowMs(Date.now());
       }
     }
     void poll();
     const timer = window.setInterval(() => void poll(), 10_000);
-    const visible = () => { if (document.visibilityState === "visible") void poll(); };
+    const visible = () => {
+      if (document.visibilityState === "visible") {
+        setNowMs(Date.now());
+        void poll();
+      } else {
+        // An unseen tab must not retain an allegedly online camera snapshot.
+        setSnapshot(null);
+        setFeedState("loading");
+        controller?.abort();
+      }
+    };
     document.addEventListener("visibilitychange", visible);
     return () => {
       alive = false;
@@ -93,9 +112,9 @@ export default function IntegrationCenter() {
     };
   }, [preview, refreshToken]);
 
-  const data = preview ? SAMPLE : snapshot;
-  const isLive = !preview && feedState === "connected" && !!data
-    && snapshotIsFresh(data, lastPolledAt ?? Date.now());
+  const isLive = !preview && feedState === "connected" && !!snapshot
+    && snapshotIsFresh(snapshot, nowMs);
+  const data = preview ? SAMPLE : isLive ? snapshot : null;
   const cameras = data?.cameras ?? [];
   const readyCameras = isLive ? cameras.filter(c => c.health === "online" && c.privacy === "approved").length : 0;
   // A server report is not independently verified by the browser.
