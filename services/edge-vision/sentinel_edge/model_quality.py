@@ -11,7 +11,7 @@ from pathlib import Path
 
 from sentinel_edge.temporal_training import (
     _metrics, _numpy, _read_bounded_json, _validate_bundle,
-    pool_temporal_window,
+    _normalize_for_fit_and_inference, pool_temporal_window,
 )
 
 ARCHITECTURE = "masked_temporal_dynamics_v2_numpy_logistic"
@@ -52,7 +52,7 @@ def _fit_candidate(train_x, train_y, val_x, val_y):
     np = _numpy()
     mean = train_x.mean(axis=0)
     scale = np.where(train_x.std(axis=0) < 1e-6, 1.0, train_x.std(axis=0))
-    x = np.clip((train_x - mean) / scale, -12, 12)
+    x = _normalize_for_fit_and_inference(train_x, mean, scale)
     weights = np.zeros(x.shape[1], dtype=np.float64)
     bias = 0.0
     positives = np.count_nonzero(train_y)
@@ -68,7 +68,8 @@ def _fit_candidate(train_x, train_y, val_x, val_y):
         weights -= .12 * grad
         bias -= .12 * err.sum()
     def predict(matrix):
-        logits = np.clip(((matrix - mean) / scale) @ weights + bias, -45, 45)
+        x = _normalize_for_fit_and_inference(matrix, mean, scale)
+        logits = np.clip(x @ weights + bias, -45, 45)
         return 1 / (1 + np.exp(-logits))
     val_probs = predict(val_x)
     best_score = -1.0
@@ -155,6 +156,7 @@ def compare_models(manifest: dict, bundle: dict, *, dev_crossval=False) -> tuple
                             "approx_model_bytes": model_bytes_v2},
         },
         "model_deployed": False,
+        "inference_preprocessing": "train_only_zscore_clamp_minus12_plus12",
         "automated_fall_alerting_authorized": False,
         "real_world_accuracy_established": False,
         "model_artifact_saved": False,
