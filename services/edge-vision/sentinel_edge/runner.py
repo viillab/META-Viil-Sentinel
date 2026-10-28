@@ -14,6 +14,9 @@ from time import monotonic, perf_counter
 from typing import Any, Callable, TextIO
 
 from sentinel_edge.camera_health import open_rtsp_capture, validate_rtsp_env
+from sentinel_edge.camera_inputs import (
+    load_camera_registry, parse_usb_index, resolve_camera,
+)
 from sentinel_edge.rtsp_reconnect import (
     CameraStreamInterrupted, run_bounded_sessions,
 )
@@ -46,6 +49,11 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--source", required=True, help="Camera integer (e.g. 0) or authorized video")
     parser.add_argument("--model", required=True, type=Path, help="Local MediaPipe pose .task model")
     parser.add_argument("--rtsp-env", metavar="ENV_NAME", help="Read authorized RTSP URL from an environment variable")
+    parser.add_argument("--camera-registry", type=Path,
+                        help="Local vendor-neutral camera registry JSON (no secrets)")
+    parser.add_argument("--camera-id", help="Select camera ID from the registry")
+    parser.add_argument("--rtsp-allow-port", type=int, default=None,
+                        help="Explicitly allow a vendor-specific RTSP port")
     parser.add_argument("--profile-rtsp", action="store_true",
                         help="Opt-in privacy-minimal local RTSP cycle/RSS report")
     parser.add_argument("--rtsp-retries", type=int, default=0,
@@ -76,21 +84,46 @@ def parse_args(argv: list[str] | None = None):
         parser.error("--rtsp-env requires --source rtsp")
     if args.source == "rtsp" and not args.rtsp_env:
         parser.error("RTSP requires --rtsp-env; never pass credentials as --source")
+    if (args.camera_registry is None) != (args.camera_id is None):
+        parser.error("--camera-registry and --camera-id must be provided together")
+    if args.source == "camera":
+        if args.camera_registry is None:
+            parser.error("--source camera requires registry and camera ID")
+        try:
+            args.selected_camera = load_camera_registry(args.camera_registry)[args.camera_id]
+        except (ValueError, KeyError):
+            parser.error("Invalid camera registry or unknown camera ID (redacted)")
+    elif args.camera_registry is not None:
+        parser.error("--camera-registry requires --source camera")
+    else:
+        args.selected_camera = None
+    network_source = args.source == "rtsp" or (
+        args.selected_camera is not None and args.selected_camera.kind == "rtsp"
+    )
     if "://" in args.source or "@" in args.source:
         parser.error("Network URLs and credentials cannot be passed as --source")
+    if args.source.startswith(("\\\\", "//")):
+        parser.error("UNC/network paths cannot be used as local video sources")
+    if args.rtsp_allow_port is not None and (
+        not 1 <= args.rtsp_allow_port <= 65535 or not network_source
+    ):
+        parser.error("--rtsp-allow-port requires an RTSP source and port 1..65535")
+    if args.source not in ("rtsp", "camera"):
+        try:
+            parse_usb_index(args.source)
+        except ValueError:
+            parser.error("Local USB/UVC camera index must be between 0 and 15")
     if not 0 <= args.rtsp_retries <= 3:
         parser.error("--rtsp-retries must be 0..3")
     if not 250 <= args.rtsp_retry_delay_ms <= 5000:
         parser.error("--rtsp-retry-delay-ms must be 250..5000")
     if not 0 <= args.rtsp_session_seconds <= 3600:
         parser.error("--rtsp-session-seconds must be 0..3600")
-    if args.rtsp_session_seconds and (
-        args.source != "rtsp" or not args.rtsp_retries
-    ):
+    if args.rtsp_session_seconds and (not network_source or not args.rtsp_retries):
         parser.error("--rtsp-session-seconds requires RTSP retry mode")
-    if args.profile_rtsp and (args.source != "rtsp" or not args.rtsp_retries):
+    if args.profile_rtsp and (not network_source or not args.rtsp_retries):
         parser.error("--profile-rtsp requires RTSP retry mode")
-    if args.rtsp_retries and args.source != "rtsp":
+    if args.rtsp_retries and not network_source:
         parser.error("--rtsp-retries is only supported for RTSP sources")
     if args.rtsp_retries and (
         args.shadow_model is not None or args.early_motion_probe
@@ -247,7 +280,9 @@ def process_capture(
     return StreamStats(frame_number, invalid_poses, candidate_count)
 
 
-def _run_rtsp_retry_mode(args, cv2: Any, mp: Any, source: str) -> int:
+def _run_rtsp_retry_mode(
+    args, cv2: Any, mp: Any, source: str, *, source_id: str | None = None,
+) -> int:
     """Run isolated RTSP epochs. Never reuse native tracker or temporal state."""
     model_sha = _file_sha256(args.model)
 
@@ -334,7 +369,7 @@ def _run_rtsp_retry_mode(args, cv2: Any, mp: Any, source: str) -> int:
     try:
         outcome = run_bounded_sessions(
             run_one_epoch,
-            source_id=args.source_id,
+            source_id=source_id or args.source_id,
             retries=args.rtsp_retries,
             delay_seconds=args.rtsp_retry_delay_ms / 1000,
             status=lambda message: print(message, file=sys.stderr),
@@ -358,19 +393,34 @@ def main(argv: list[str] | None = None) -> int:
             "Video extras are missing. Run: python -m pip install -e '.[video,dev]'"
         ) from exc
 
-    webcam = args.source.isdigit()
     is_rtsp = args.source == "rtsp"
-    source = int(args.source) if webcam else str(Path(args.source).expanduser())
-    if is_rtsp:
+    webcam = False
+    source_id = args.source_id
+    if args.selected_camera is not None:
         try:
-            source = validate_rtsp_env(args.rtsp_env)
+            selected_kind, source = resolve_camera(
+                args.selected_camera, extra_rtsp_port=args.rtsp_allow_port,
+            )
         except ValueError:
-            raise SystemExit("Invalid or missing RTSP environment setting (URL redacted)") from None
-    elif not webcam and not Path(source).is_file():
-        raise SystemExit(f"Video file not found: {source}")
+            raise SystemExit("Camera registry source unavailable (redacted)") from None
+        is_rtsp = selected_kind == "rtsp"
+        webcam = selected_kind == "usb"
+        if args.source_id == "staged-camera-01":
+            source_id = args.selected_camera.camera_id
+    elif is_rtsp:
+        try:
+            source = validate_rtsp_env(args.rtsp_env, extra_port=args.rtsp_allow_port)
+        except ValueError:
+            raise SystemExit("Invalid or unsafe RTSP environment setting (redacted)") from None
+    else:
+        usb_index = parse_usb_index(args.source)
+        webcam = usb_index is not None
+        source = usb_index if webcam else str(Path(args.source).expanduser())
+        if not webcam and not Path(source).is_file():
+            raise SystemExit(f"Video file not found: {source}")
 
     if is_rtsp and args.rtsp_retries:
-        return _run_rtsp_retry_mode(args, cv2, mp, source)
+        return _run_rtsp_retry_mode(args, cv2, mp, source, source_id=source_id)
 
     if args.shadow_model is not None:
         # Keep training-window imports out of the camera runner module to
@@ -424,7 +474,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             stats = process_capture(
                 cap, cv2=cv2, mp=mp, landmarker=landmarker,
-                webcam=(webcam or is_rtsp), source_id=args.source_id,
+                webcam=(webcam or is_rtsp), source_id=source_id,
                 max_frames=args.max_frames, display=args.display,
                 trace_file=trace_file, event_encoder=encoder,
                 on_frame=consume_research if (shadow is not None or early_probe is not None)

@@ -1,5 +1,11 @@
 # Hikvision Camera Acceptance Preflight — VIIL-Sentinel (Member 1)
 
+**Hikvision is one RTSP-compatible example, not a vendor restriction.** For
+multi-brand IP cameras/NVRs or UVC USB cameras, use the secure Camera Input
+Layer in `CAMERA_INPUTS_AND_SECURITY.md`. RTSP sources must use a literal
+private LAN IP, never a public IP, and custom RTSP ports require
+`--rtsp-allow-port`.
+
 **Prepared without a physical camera.** No stream, person, IP address, camera model, camera credentials, Meta provider or backend has been verified by this document.
 
 ## Purpose

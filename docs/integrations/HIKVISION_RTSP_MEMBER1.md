@@ -1,5 +1,13 @@
 # Hikvision -> VIIL Sentinel: Member 1 local-only integration (28 Oct 2026)
 
+**This is a Hikvision example only.** The supported live-input architecture is
+vendor-neutral (private-LAN RTSP, USB/UVC and a bounded multi-camera demo);
+see `CAMERA_INPUTS_AND_SECURITY.md`. Registry configuration selects each
+camera without putting its password or RTSP URL into command-line arguments.
+Public RTSP destinations and DNS hostnames are deliberately blocked; use
+private literal IPs. Port 8554 is supported alongside 554, and a custom
+vendor port may be explicitly allowed with `--rtsp-allow-port`.
+
 ## Scope and hard limits
 This is an **authorized local research camera input**, not a production safety system.
 No auto upload, Meta calls, image storage, backend POST, medical inference or real alarms.
