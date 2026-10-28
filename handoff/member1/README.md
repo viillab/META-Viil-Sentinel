@@ -97,6 +97,58 @@ file/temporal contract mismatch must fail closed. The private loader
 rejects wrong format, unknown flags, path escape and nonfinite values.
 DO NOT upload a real research weight JSON to a public PR.
 
+## Google Drive team delivery and one-command offline verify
+
+**Member 1 Drive folder (private / research only):**
+https://drive.google.com/drive/folders/1k2SM7CdbJTjWDR5DetrAUuPg2umOG_tK
+
+**Models directory:**
+https://drive.google.com/drive/folders/1C3EkqQ9QYaLASq0y7rek8T-uf8dyPM8h
+
+Download either the exact **3,603-byte ZIP** (contains validated 1500ms
+classifier JSON + handoff + SHA256SUMS) or the separately checked **2,654-byte
+VERIFIED JSON**:
+https://drive.google.com/file/d/1KAYNfXXstgGrzLazwsmGfErIFzR399qx/view
+
+The older 2,657-byte UTF-8 BOM JSON was intentionally moved into
+`99_ARCHIVE_Do_Not_Use`. Do **NOT** use that file. Both the ZIP content
+and new VERIFIED JSON were downloaded from Drive and SHA256 checked
+against actual trained source `2faad54ea929f9f44ed8e1bfb733c59d907cb4516fe3979cc4b5f551697f3abb`.
+
+Get the official MediaPipe Lite task from its source, subject to the
+publisher's licensing terms:
+https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task
+
+Place the downloaded classifier (renamed exactly as below) and pose task
+under the repo's ignored `data/private` and `models` folders.
+From `services/edge-vision`, after installing the project with
+`pip install -e ".[dev,video]"` if needed, run **without network access**:
+
+```powershell
+python -m sentinel_edge.handoff_verify
+# or: viil-edge-verify-handoff
+```
+
+The verifier reads and SHA256-pins **both** model files, enforces 1500ms
+30D research-only schema, checks private path and initializes a *zero-window*
+local Shadow (without inference frames). Its JSON output is limited to
+file sizes, compatibility flags and non-production status. It never sends
+any data or calls Meta, camera, backend or alert. Any missing, wrong-BOM,
+tampered, old-8s or incompatible model **fails closed**. This is an
+**integrity check**, not a fall accuracy or deployment certification.
+
+Default local exact destinations:
+
+```text
+VIIL-Sentinel/
+  models/pose_landmarker_lite.task
+  data/private/caucafall-1500ms-linear-research-model-20261028.json
+```
+
+Google Drive is private until the owner grants team-specific access.
+Member 2/3 must NOT use research shadow positives as real incidents;
+only the original heuristic emits v1 unconfirmed local candidate JSON.
+
 ## Mandatory delivery acceptance
 
 - Synthetic v1 envelope passes the canonical Schema; extra keys,
