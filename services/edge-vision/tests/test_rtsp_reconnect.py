@@ -185,3 +185,13 @@ def test_retry_mode_creates_fresh_native_tasks_releases_capture_and_renames_sour
     assert profiles[1]["frames_processed"] == 3
     assert all("camera-test" not in line and "fake.local" not in line
                for line in profile_lines)
+    health_lines = [line.removeprefix("EDGE_POSE_COVERAGE_SUMMARY ")
+                    for line in stderr.splitlines()
+                    if line.startswith("EDGE_POSE_COVERAGE_SUMMARY ")]
+    summaries = [json.loads(line) for line in health_lines]
+    assert len(summaries) == 2
+    assert [x["frames_observed"] for x in summaries] == [2, 3]
+    assert [x["longest_no_pose_streak_frames"] for x in summaries] == [2, 3]
+    assert all(x["condition"] == "unverified" for x in summaries)
+    assert all("camera-test" not in line and "fake.local" not in line
+               for line in health_lines)
