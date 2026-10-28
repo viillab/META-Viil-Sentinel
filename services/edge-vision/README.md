@@ -116,6 +116,24 @@ predeclared V1 selection remains unchanged.
 .\.venv\Scripts\python.exe -m sentinel_edge.model_quality --synthetic-demo --dev-crossval
 ```
 
+## Human-reviewed event gate for 2-second research motion cues (Member 1)
+
+The [private evidence and two-reviewer protocol](docs/REVIEW_GATED_EARLY_MOTION_EVIDENCE_2026-10-28.md)
+adds `python -m sentinel_edge.reviewed_event_benchmark --mode capture-early`
+to export timestamps of **untrained, unconfirmed** early-motion
+proposals **only under ignored `data/private`**, after checking all
+11 original pinned ASSIST-IoT source videos and complete frame counts.
+The existing `prepare` mode produces two genuinely **blank**
+independent-review entries per source video; `score` remains
+**fail-closed** without both complete, consistent human attestations.
+Event metrics cannot be derived from publisher labels or the cue
+alone. This is a preparatory research workflow: no model training,
+no independent accuracy, no Alert events or API changes.
+
+```powershell
+.\.venv\Scripts\python.exe -m sentinel_edge.reviewed_event_benchmark --help
+```
+
 ## Causal 2-second early-motion research probe (Member 1)
 
 [Source-verified handoff](docs/CAUSAL_TWO_SECOND_MOTION_PROBE_HANDOFF_2026-10-28.md)

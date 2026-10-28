@@ -12,6 +12,7 @@ No final horizontal-posture requirement, so ordinary sitting can trigger.
 This diagnostic must never be promoted to safety alerts or described as AI.
 """
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from sentinel_edge.contracts import PoseFeatures, PoseFrame
@@ -46,7 +47,9 @@ class ProbeSnapshot:
 class CausalMotionProbe:
     """One-source 2s RAM-only *research probe* that returns no event objects."""
 
-    def __init__(self):
+    def __init__(self, *, private_proposal_consumer: Callable[[int], None] | None = None):
+        # Opt-in offline-only review evidence; normal camera summary stays private/minimal.
+        self._private_proposal_consumer = private_proposal_consumer
         self._history = deque(maxlen=MAX_BUFFERED_POSES)
         self._last_timestamp = None
         self._last_valid = None
@@ -144,6 +147,8 @@ class CausalMotionProbe:
             return
         self._proposals += 1
         self._last_proposal = frame.timestamp_ms
+        if self._private_proposal_consumer is not None:
+            self._private_proposal_consumer(frame.timestamp_ms)
         self._cue_since = None
         self._cue_samples = 0
 
