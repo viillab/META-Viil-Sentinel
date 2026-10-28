@@ -59,7 +59,7 @@ def test_time_bound_stops_before_next_capture_read():
     stats = runner.process_capture(
         capture, cv2=FakeCv2, mp=FakeMp, landmarker=detector,
         webcam=True, source_id="test", max_duration_seconds=1,
-        clock=FakeClock([0, .1, .2, .3, 1.1]),
+        clock=FakeClock([0, .1, .2, .3, .4, 1.1]),
     )
     assert stats.frames_processed == 1
     assert capture.reads == 1

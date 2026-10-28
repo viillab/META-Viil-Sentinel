@@ -163,6 +163,78 @@ def test_policy_revoked_before_candidate_emit_drops_event():
     assert len(callbacks) == 3
 
 
+def test_revocation_during_native_inference_discards_pose_and_candidate_data():
+    from io import StringIO
+
+    capture = FrameCapture()
+    output, private_trace = StringIO(), StringIO()
+    received_pose = []
+    received_event = []
+    checks = 0
+
+    class BlockingLandmarker:
+        def detect_for_video(self, *_):
+            return NS(pose_landmarks=[])
+
+    class MustNotRunDetector:
+        def process(self, _):
+            raise AssertionError("Detector may not observe revoked pose data")
+
+    def check():
+        nonlocal checks
+        checks += 1
+        # Pre-read and post-read checks passed; approval changed during inference.
+        if checks == 3:
+            raise PrivacyGateDenied("Approval revoked during inference")
+
+    with pytest.raises(PrivacyGateDenied):
+        process_capture(
+            capture, cv2=FakeCv2, mp=FakeMp,
+            landmarker=BlockingLandmarker(), webcam=True,
+            source_id="zone-a", privacy_check=check,
+            detector=MustNotRunDetector(), output=output,
+            trace_file=private_trace,
+            on_frame=received_pose.append,
+            on_event=received_event.append,
+        )
+    assert capture.reads == 1
+    assert checks == 3
+    assert received_pose == []
+    assert received_event == []
+    assert output.getvalue() == ""
+    assert private_trace.getvalue() == ""
+
+
+def test_native_inference_over_session_deadline_discards_candidate():
+    from io import StringIO
+
+    capture = FrameCapture()
+    output = StringIO()
+    counter = [0.0]
+    pose_received = []
+
+    class SlowLandmarker:
+        def detect_for_video(self, *_):
+            counter[0] = 2.0
+            return NS(pose_landmarks=[])
+
+    class MustNotRunDetector:
+        def process(self, _):
+            raise AssertionError("Past-deadline pose must never enter detector")
+
+    stats = process_capture(
+        capture, cv2=FakeCv2, mp=FakeMp,
+        landmarker=SlowLandmarker(), webcam=True,
+        source_id="zone-a", max_duration_seconds=1.0,
+        clock=lambda: counter[0],
+        detector=MustNotRunDetector(), output=output,
+        on_frame=pose_received.append,
+    )
+    assert stats.frames_processed == 0
+    assert pose_received == []
+    assert output.getvalue() == ""
+
+
 @pytest.mark.parametrize("source", ["0", "usb:2", "rtsp", "camera"])
 def test_live_sources_refuse_legacy_and_tracking_extensions(tmp_path, source):
     model = tmp_path / "pose.task"

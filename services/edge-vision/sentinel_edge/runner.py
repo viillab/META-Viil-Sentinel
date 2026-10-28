@@ -256,6 +256,13 @@ def process_capture(
         rgb = cv2.cvtColor(inference_bgr, cv2.COLOR_BGR2RGB)
         image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
         result = landmarker.detect_for_video(image, timestamp)
+        # Native inference can block beyond the authorization check interval
+        # or session deadline. Discard its result BEFORE any pose callback,
+        # research trace, detector state or candidate serialization.
+        if privacy_check is not None:
+            privacy_check()
+        if max_duration_seconds and clock() - started >= max_duration_seconds:
+            break
         landmarks = extract_torso_landmarks(result)
         if pose_reason_consumer is not None:
             pose_reason_consumer(pose_adapter_reason(result))
