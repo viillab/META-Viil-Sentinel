@@ -74,12 +74,26 @@ was tested independently of the fixture. Phase roadmap:
 
 **Frontend integration preflight ready:** [Frontend readiness and proposed Meta-first view DTO](FRONTEND_READINESS.md). Member 1 has implemented a read-only, fail-closed Dashboard adapter, 28 Node contract tests and a simulated notification-feed display. **This is presentation readiness, NOT an authenticated live Meta integration, real alert service or approved auto decision.** Member 2 backend is unchanged.
 
-React demo consumes the backend's simulated incident feed. It does NOT
-currently consume the Edge v1 local stdout stream. Add a human-facing
+React Incident Operations consumes simulated backend incidents only after an
+explicit developer opt-in on localhost; its default is no API access. The
+new read-only accessible Caregiver Inbox is separate and awaits Member 2's
+authenticated /api/v1/caregiver/inbox contract. It does NOT currently
+consume the Edge v1 local stdout stream. Add a human-facing
 state/UI and Meta-first advisory presentation (with fallback/manual override) only after Member 2 validates incidents, implements secure durable
 storage and authenticated review. The 0..1 Edge detector_score is
 UNCALIBRATED HEURISTIC, not a probability of true fall. Clearly mark DEMO
 data; do not offer emergency actions or use shadow counters as events.
+
+## Member 1 — accessible caregiver UI (latest)
+
+The new **Caregiver inbox** tab renders only metadata from an authenticated
+Member 2 service when available. It offers larger text, high contrast,
+keyboard navigation and Screen Reader status announcements, plus an
+explicitly fictional offline sample preview. It does not deliver any alert
+or permit real emergency actions. See
+[Caregiver Inbox / Member 2 handoff](../../docs/integrations/MEMBER1_ACCESSIBLE_CAREGIVER_INBOX.md).
+Shared backend schema: `handoff/team/caregiver_inbox.v1.schema.json`.
+Accessibility has not been independently audited or certified.
 
 ## Member 1 — private trained weights (new)
 

@@ -1,0 +1,69 @@
+/* Member 1 accessible, read-only caregiver notification UI. */
+.caregiver-page{padding:29px 0 12px;--cv-bg:#fff;--cv-ink:#203b59;--cv-muted:#526782;--cv-border:#d7e0ea;--cv-highlight:#eaf2ff;--cv-focus:#205aba;color:var(--cv-ink)}
+.caregiver-heading{display:flex;justify-content:space-between;gap:20px;align-items:flex-end;margin:5px 0 22px}
+.caregiver-heading h1{font:800 33px Manrope,system-ui,sans-serif;margin:8px 0 6px;letter-spacing:-.04em}
+.caregiver-heading p{font-size:13px;line-height:1.65;color:var(--cv-muted);margin:0}
+.caregiver-toolbar{display:flex;gap:8px;flex-wrap:wrap}
+.caregiver-toolbar button{min-height:46px}
+.caregiver-preferences{display:flex;align-items:center;flex-wrap:wrap;gap:10px 22px;padding:16px 18px;border:1px solid var(--cv-border);background:var(--cv-bg);border-radius:12px;margin-bottom:16px}
+.caregiver-preferences>strong{font-size:12px;margin-right:6px}
+.caregiver-preferences label{display:flex;align-items:center;gap:9px;cursor:pointer;font-size:12px;font-weight:600}
+.caregiver-preferences input{accent-color:#265fbe;width:20px;height:20px;min-height:20px;margin:0}
+.caregiver-preferences small{flex-basis:100%;font-size:11px;color:var(--cv-muted)}
+.caregiver-banner{display:flex;flex-direction:column;gap:5px;background:#f0f5fc;border:1px solid #becde3;border-radius:12px;padding:15px 18px;margin-bottom:18px}
+.caregiver-banner strong{font-size:12px;color:#214a80}
+.caregiver-banner span{font-size:12px;color:#465e7e;line-height:1.6}
+.caregiver-banner.sample{background:#fff6e4;border-color:#d6ac69}
+.caregiver-banner.sample strong{color:#775018}
+.caregiver-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.caregiver-summary>div{padding:19px;background:var(--cv-bg);border:1px solid var(--cv-border);border-radius:12px;display:flex;flex-direction:column;gap:6px}
+.caregiver-summary small{font-size:10px;color:var(--cv-muted);font-weight:800;letter-spacing:.06em}
+.caregiver-summary strong{font:800 30px Manrope,system-ui,sans-serif}
+.caregiver-summary strong.caregiver-summary-text{font-size:15px;min-height:35px;display:flex;align-items:center}
+.caregiver-summary span{font-size:11px;color:var(--cv-muted)}
+.caregiver-layout{display:grid;grid-template-columns:minmax(285px,.9fr) minmax(330px,1.1fr);align-items:start;gap:16px;margin-top:20px}
+.caregiver-panel{background:var(--cv-bg);border:1px solid var(--cv-border);border-radius:13px;overflow:hidden;min-height:310px}
+.caregiver-panel-header{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:18px;border-bottom:1px solid var(--cv-border)}
+.caregiver-panel-header h2{font:800 14px Manrope,system-ui,sans-serif;margin:0}
+.caregiver-panel-header span{font-size:10px;font-weight:800;color:var(--cv-muted)}
+.caregiver-queue{max-height:490px;overflow-y:auto}
+.caregiver-item{width:100%;display:flex;flex-direction:column;align-items:stretch;text-align:left;gap:8px;background:var(--cv-bg);border:0;border-bottom:1px solid var(--cv-border);color:var(--cv-ink);padding:19px;min-height:108px}
+.caregiver-item:hover,.caregiver-item.selected{background:var(--cv-highlight)}
+.caregiver-item.selected{border-left:4px solid #286be7;padding-left:15px}
+.caregiver-item-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.caregiver-source{font-size:12px;font-weight:800;overflow-wrap:anywhere}
+.caregiver-stage{border:1px solid #cfb780;border-radius:20px;font-size:9px;font-weight:800;padding:5px 8px;background:#fff5dd;color:#725015;white-space:nowrap}
+.caregiver-stage.edge_candidate{background:#eaf2ff;border-color:#b8cde5;color:#22538d}
+.caregiver-stage.informational_advisory{background:#f8eddf;border-color:#dbc29e;color:#804c12}
+.caregiver-item>strong{font-size:12px;line-height:1.6}
+.caregiver-item-meta{font-size:10px;color:var(--cv-muted)}
+.caregiver-empty{padding:44px 26px;text-align:center}
+.caregiver-empty strong{font-size:14px}
+.caregiver-empty p{font-size:12px;color:var(--cv-muted);line-height:1.65}
+.caregiver-detail{padding:22px}
+.caregiver-detail-label,.caregiver-context small{display:block;color:var(--cv-muted);font-size:10px;letter-spacing:.08em;font-weight:800}
+.caregiver-detail-source{display:block;font-size:17px;margin:6px 0 15px;overflow-wrap:anywhere}
+.caregiver-context{padding:15px 0;border-top:1px solid var(--cv-border)}
+.caregiver-context p{margin:8px 0 0;line-height:1.6;font-size:13px}
+.caregiver-context .caregiver-secondary{font-size:11px;color:var(--cv-muted)}
+.caregiver-safety{border:1px solid #ddbf88;background:#fff5e5;border-radius:9px;padding:16px;margin-top:7px;color:#513912}
+.caregiver-safety strong{font-size:13px}
+.caregiver-safety p{font-size:12px;line-height:1.7;margin:9px 0 0}
+.caregiver-endnote{display:block;margin-top:15px;font-size:11px;line-height:1.6;color:var(--cv-muted)}
+.caregiver-next{border-left:4px solid #89aed8;background:#ebf2fb;margin-top:20px;padding:16px 18px;border-radius:5px;font-size:12px;line-height:1.8;color:#34577e}
+.caregiver-next code{overflow-wrap:anywhere}
+.caregiver-page button:focus-visible,.caregiver-page input:focus-visible{outline:3px solid var(--cv-focus);outline-offset:3px}
+.caregiver-contrast{--cv-bg:#fff;--cv-ink:#000;--cv-muted:#242424;--cv-border:#222;--cv-highlight:#e1eaff;--cv-focus:#111}
+.caregiver-contrast .caregiver-banner{background:#fff;color:#000;border:2px solid #111}
+.caregiver-contrast .caregiver-banner strong,.caregiver-contrast .caregiver-banner span{color:#000}
+.caregiver-contrast .caregiver-item.selected{border-left-color:#111}
+.caregiver-contrast .caregiver-safety{color:#000;border:2px solid #111;background:#fff}
+.caregiver-large{font-size:115%}
+.caregiver-large .caregiver-item{min-height:134px}
+.caregiver-large .caregiver-heading p,.caregiver-large .caregiver-context p,.caregiver-large .caregiver-item>strong,.caregiver-large .caregiver-preferences label,.caregiver-large .caregiver-banner span{font-size:16px}
+.caregiver-large .caregiver-source,.caregiver-large .caregiver-context small,.caregiver-large .caregiver-panel-header h2{font-size:15px}
+.caregiver-large .caregiver-item-meta,.caregiver-large .caregiver-summary span,.caregiver-large .caregiver-preferences small,.caregiver-large .caregiver-safety p,.caregiver-large .caregiver-endnote{font-size:14px}
+.caregiver-large .caregiver-toolbar button{min-height:54px;font-size:14px}
+@media(max-width:1050px){.caregiver-layout{grid-template-columns:1fr}.caregiver-heading{align-items:flex-start;flex-direction:column}}
+@media(max-width:700px){.caregiver-summary{grid-template-columns:1fr 1fr}.caregiver-summary>div:last-child{grid-column:1/-1}.caregiver-heading h1{font-size:28px}.caregiver-toolbar{width:100%}.caregiver-toolbar button{flex:1}.caregiver-detail{padding:17px}.caregiver-preferences{align-items:flex-start;flex-direction:column}.caregiver-preferences small{flex-basis:auto}.sidebar button.nav-active,.sidebar button.nav-muted{width:calc(25% - 5px);font-size:10px;padding:9px 3px}}
+@media(max-width:420px){.caregiver-toolbar{flex-direction:column}.caregiver-summary{grid-template-columns:1fr}.caregiver-summary>div:last-child{grid-column:auto}}
