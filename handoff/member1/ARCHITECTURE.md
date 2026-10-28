@@ -7,57 +7,68 @@ Do not rename dozens of active module files during handoff.
 
 ## Authoritative current repository map
 
-    VIIL-Sentinel/
-    |-- AGENTS.md                       # Human-only main; team branch rules
-    |-- README.md                       # App purpose, demo status
-    |-- handoff/
-    |   +-- member1/                    # ENTRYPOINT for Member 2/3
-    |       |-- README.md               # Integration sequence / commands
-    |       |-- ARCHITECTURE.md         # THIS document / ownership
-    |       |-- PERFORMANCE.md          # Verified budgets + remaining work
-    |       +-- delivery_manifest.v1.json
-    |-- services/
-    |   |-- edge-vision/                # Member 1, Python 3.11
-    |   |   |-- pyproject.toml
-    |   |   |-- README.md                # Detailed research / historical work
-    |   |   |-- docs/
-    |   |   |   |-- CANDIDATE_HANDOFF_V1.md
-    |   |   |   |-- edge_candidate_v1.schema.json  # SINGLE source of truth
-    |   |   |   +-- ... historical validated experiment reports
-    |   |   |-- examples/
-    |   |   |   +-- synthetic/           # NO real person/video/weights
-    |   |   |-- sentinel_edge/
-    |   |   |   |-- runner.py             # Camera -> MediaPipe -> heuristic
-    |   |   |   |-- detector.py           # Original unvalidated candidate path
-    |   |   |   |-- pose_adapter.py       # Fail-closed, 2-person ambiguity
-    |   |   |   |-- contracts.py          # Local typed frame/event contracts
-    |   |   |   |-- handoff.py            # Member 1 -> 2 canonical v1 emitter
-    |   |   |   |-- handoff_cli.py        # Synthetic/local stdout ONLY
-    |   |   |   |-- causal_1500ms_research.py
-    |   |   |   |                        # Original video -> 1500ms train
-    |   |   |   |-- causal_1500ms_artifact.py
-    |   |   |   |                        # Separate PRIVATE 1500ms weights
-    |   |   |   |-- causal_1500ms_shadow.py
-    |   |   |   |                        # Rolling past-only research counts
-    |   |   |   |-- private_model_training.py
-    |   |   |   |                        # INCOMPATIBLE legacy 8s V1/V2
-    |   |   |   |-- temporal_training.py # Shared NumPy numeric baseline
-    |   |   |   |-- window_export.py     # 30-slot time sampler
-    |   |   |   +-- edge_resource_profile.py
-    |   |   +-- tests/                   # Synthetic + bounded actual smoke
-    |   |-- api/                         # Member 2, FastAPI, DEMO ONLY
-    |   |   |-- app/main.py
-    |   |   |-- app/models.py
-    |   |   +-- tests/
-    |   +-- orchestrator/               # Planned controlled workflow docs
-    |-- apps/
-    |   +-- dashboard/                  # Member 1, React/TypeScript
-    |       +-- src/
-    |-- docs/                            # Cross-team architecture/roadmap
-    |-- models/                          # ignored LOCAL MediaPipe .task
-    |-- data/
-    |   +-- private/                    # ignored: videos, traces, model JSON
-    +-- .github/workflows/             # CI; no force push/protected main
+```text
+VIIL-Sentinel/
+├── AGENTS.md                                # Protected branch/agent rules
+├── README.md                                # Product and mock-only demo
+├── handoff/
+│   ├── member1/                             # Member 1: Edge + Frontend
+│   │   ├── README.md                        # Canonical handoff entry
+│   │   ├── ARCHITECTURE.md                  # This nonbreaking folder map
+│   │   ├── FRONTEND_READINESS.md            # Future read-only Meta DTO
+│   │   ├── PERFORMANCE.md                   # Measured local performance
+│   │   └── delivery_manifest.v1.json       # Machine-readable readiness
+│   ├── member2/
+│   │   └── START_HERE.md                   # Member 2 first-run checklist
+│   └── team/
+│       ├── team_roster.v1.json             # Only Members 1 and 2
+│       └── TEAM_ROLES_AND_META_FIRST.md
+├── services/
+│   ├── edge-vision/                         # Member 1 Python package
+│   │   ├── pyproject.toml                   # Install and CLI entry points
+│   │   ├── sentinel_edge/
+│   │   │   ├── runner.py                    # Local consented camera/video
+│   │   │   ├── detector.py                  # Uncalibrated heuristic
+│   │   │   ├── handoff.py                   # Strict candidate v1 envelope
+│   │   │   ├── handoff_cli.py               # Local stdout only
+│   │   │   ├── handoff_preflight.py         # Offline cross-team checker
+│   │   │   ├── handoff_verify.py            # Pinned private SHA verification
+│   │   │   ├── causal_1500ms_artifact.py    # Private model loader
+│   │   │   └── causal_1500ms_shadow.py      # Research-only, no events
+│   │   ├── docs/
+│   │   │   ├── edge_candidate_v1.schema.json
+│   │   │   └── CANDIDATE_HANDOFF_V1.md
+│   │   ├── examples/synthetic/              # No real person/weights
+│   │   └── tests/                           # Includes preflight tests
+│   ├── api/                                 # Member 2 owner; mock today
+│   │   └── app/
+│   └── meta-intelligence/                   # Member 2 planned adapter
+├── apps/
+│   └── dashboard/                           # Member 1 React/TypeScript
+│       ├── src/App.tsx
+│       ├── src/metaReview.ts               # Pure passive display adapter
+│       └── tests/metaReview.test.mjs       # 28 contract tests
+├── models/                                  # Local ignored MediaPipe .task
+├── data/private/                            # Local ignored data and JSON
+└── .github/workflows/ci.yml                # Hosted regression checks
+```
+
+This is a curated map of existing stable entry points rather than an
+instruction to move packages. The repo also contains historical research
+and evaluation modules under `sentinel_edge/` and `docs/`. Paths under
+`models/` and `data/private/` are local and **not committed**.
+
+**Run the complete Member 1/2 offline handoff check:**
+
+    cd services/edge-vision
+    python -m sentinel_edge.handoff_preflight
+    # optional with actual ignored private artifacts:
+    python -m sentinel_edge.handoff_preflight --verify-local-models
+
+**This is developer contract readiness only.** The CLI runs one synthetic
+Fall and no-fall fixture with no camera, uploads, API, alerts or database,
+and verifies strict manifest, schema and frontend handoff consistency.
+See [Member 2 START_HERE](../member2/START_HERE.md).
 
 This is a **logical separation through a stable public entrypoint**,
 not a claim that every planned folder already has production code.

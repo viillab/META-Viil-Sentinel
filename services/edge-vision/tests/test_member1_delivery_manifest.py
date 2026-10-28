@@ -1,4 +1,4 @@
-"""Member 2/3 handoff manifest remains pinned to the tested Edge source."""
+"""Two-member handoff manifest remains pinned to the tested Edge source."""
 import json
 from pathlib import Path
 

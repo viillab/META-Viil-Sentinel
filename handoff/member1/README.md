@@ -5,6 +5,12 @@
 **2 active members only:** Member 1 owns Edge+Frontend; Member 2 owns Meta+Backend. Read [current role assignments](../team/TEAM_ROLES_AND_META_FIRST.md).
 **Status: READY FOR DEVELOPER HANDOFF, NOT A PRODUCTION FALL DETECTOR**
 
+**Member 2 quick start:** [START HERE (one-command offline preflight)](../member2/START_HERE.md).
+The preflight is `python -m sentinel_edge.handoff_preflight` from `services/edge-vision`.
+It validates the versioned metadata producer with synthetic Fall and Sitting traces,
+checks the team roster and future frontend interface, and has an optional
+`--verify-local-models` argument for private SHA-256 checks. It never posts data.
+
 Start here. The adjacent delivery_manifest.v1.json is the machine-readable
 contract inventory, ARCHITECTURE.md is the folder map and PERFORMANCE.md
 records actual machine measurements. All old package imports and CI
@@ -150,7 +156,7 @@ VIIL-Sentinel/
 ```
 
 Google Drive is private until the owner grants team-specific access.
-Member 2/3 must NOT use research shadow positives as real incidents;
+Members 1 and 2 must NOT use research shadow positives as real incidents;
 only the original heuristic emits v1 unconfirmed local candidate JSON.
 
 ## Mandatory delivery acceptance
