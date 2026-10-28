@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "npm run test:contract && tsc -b && vite build",
-    "test:contract": "node --experimental-strip-types --test tests/metaReview.test.mjs tests/edgeLab.test.mjs",
+    "test:contract": "node --experimental-strip-types --test tests/*.test.mjs",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {

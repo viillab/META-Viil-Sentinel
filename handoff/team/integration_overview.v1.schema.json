@@ -1,0 +1,194 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://viillab.example/schemas/integration_overview.v1.json",
+  "title": "VIIL Sentinel Member1/Member2 metadata-only integration overview v1",
+  "description": "Proposed authenticated backend projection; not a data collection approval and not a camera/provider health certification.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "generated_at",
+    "access_scope",
+    "edge",
+    "cameras",
+    "meta",
+    "notification"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "viil.backend.integration_overview.v1"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "access_scope": {
+      "const": "authenticated_operator"
+    },
+    "edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "last_heartbeat_at"
+      ],
+      "properties": {
+        "state": {
+          "$ref": "#/$defs/state"
+        },
+        "last_heartbeat_at": {
+          "$ref": "#/$defs/nullableTimestamp"
+        }
+      }
+    },
+    "cameras": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "camera_id",
+          "transport",
+          "health",
+          "privacy",
+          "last_heartbeat_at",
+          "observed_fps"
+        ],
+        "properties": {
+          "camera_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$"
+          },
+          "transport": {
+            "enum": [
+              "rtsp",
+              "usb"
+            ]
+          },
+          "health": {
+            "enum": [
+              "online",
+              "degraded",
+              "offline",
+              "unknown"
+            ]
+          },
+          "privacy": {
+            "enum": [
+              "approved",
+              "expired",
+              "revoked",
+              "unverified"
+            ]
+          },
+          "last_heartbeat_at": {
+            "$ref": "#/$defs/nullableTimestamp"
+          },
+          "observed_fps": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 240
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "health": {
+                  "const": "online"
+                }
+              },
+              "required": [
+                "health"
+              ]
+            },
+            "then": {
+              "properties": {
+                "privacy": {
+                  "const": "approved"
+                },
+                "last_heartbeat_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "state",
+        "evidence_pipeline",
+        "last_verified_call_at"
+      ],
+      "properties": {
+        "provider": {
+          "enum": [
+            "meta_model_api",
+            "mock",
+            "unavailable"
+          ]
+        },
+        "state": {
+          "$ref": "#/$defs/state"
+        },
+        "evidence_pipeline": {
+          "enum": [
+            "ready",
+            "blocked",
+            "not_configured"
+          ]
+        },
+        "last_verified_call_at": {
+          "$ref": "#/$defs/nullableTimestamp"
+        }
+      }
+    },
+    "notification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state"
+      ],
+      "properties": {
+        "state": {
+          "$ref": "#/$defs/state"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "state": {
+      "enum": [
+        "ready",
+        "degraded",
+        "offline",
+        "not_configured"
+      ]
+    },
+    "nullableTimestamp": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  }
+}
