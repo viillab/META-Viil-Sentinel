@@ -13,6 +13,16 @@
     "member3_active": false,
     "team_roster_path": "handoff/team/team_roster.v1.json"
   },
+  "offline_preflight": {
+    "command": "python -m sentinel_edge.handoff_preflight",
+    "optional_private_models_flag": "--verify-local-models",
+    "expected_synthetic_fall_events": 1,
+    "expected_synthetic_non_fall_events": 0,
+    "expected_network_requests": false,
+    "is_real_world_accuracy_test": false,
+    "readiness": "developer_contract_only",
+    "member2_start_guide": "handoff/member2/START_HERE.md"
+  },
   "edge_candidate_contract": {
     "version": "viil.edge.candidate.v1",
     "schema_path": "services/edge-vision/docs/edge_candidate_v1.schema.json",

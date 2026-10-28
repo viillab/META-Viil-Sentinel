@@ -9,6 +9,12 @@ Video → Edge fall candidate → consented keyframes → Meta-first evidence as
 ## Two-person team: Member 1 (Edge + Dashboard) and Member 2 (Backend + Meta)
 
 See [current two-member assignments and Meta-first design](handoff/team/TEAM_ROLES_AND_META_FIRST.md).
+**Member 2's first stop:** [START HERE — verified offline handoff](handoff/member2/START_HERE.md).
+From `services/edge-vision`, run `python -m sentinel_edge.handoff_preflight` to check the
+Edge candidate contract, synthetic fall/non-fall, roster and frontend readiness
+without credentials, network or private data. Optional
+`--verify-local-models` adds SHA-256 checks when private model files are present.
+This is developer readiness, **not** a real-world detection benchmark.
 Start at [Member 1 delivery package](handoff/member1/README.md) for the
 live code/API ownership, canonical candidate JSON contract, new strictly
 versioned private 1500ms research-model loader and source-verified model

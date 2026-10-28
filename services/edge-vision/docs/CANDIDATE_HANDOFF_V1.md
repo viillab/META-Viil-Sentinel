@@ -75,8 +75,14 @@ any backend. Only use it with the owner's explicit permission.
    protection; no durable transport/outbox exists in Member 1.
 5. Convert timestamp to wall-clock time only when a trusted, synchronized
    source start timestamp is available; never misinterpret as Unix epoch.
-6. Keep `confirmed_fall=false` until a human verifies evidence through
-   the explicit incident review flow. Handle false positives and uncertainty.
+6. Keep `confirmed_fall=false` from the uncalibrated Edge producer. A future
+   Meta-first authorized evidence assessment may propose an **informational
+   caregiver advisory** without a person screening every candidate, but
+   must never relabel the original Edge candidate as a verified fall.
+   Invalid/uncertain/negative/missing visual evidence remains unconfirmed
+   for follow-up; never silently discard on generative-model output alone.
+   Any consequential response remains human-controlled. Document the
+   false-positive and missed-fall evaluation before enabling automation.
 7. Store only necessary metadata with retention/access controls; obtain
    separate authorization before selecting or sending keyframes.
 8. Keep the existing `/api/v1/incidents/demo` **strictly simulated**.
