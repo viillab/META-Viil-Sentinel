@@ -37,8 +37,13 @@ display and experimental shadow model from crossing stream sessions.
   (on successful frame-bound completion or capture interruption).
 - stderr: an `EDGE_POSE_COVERAGE_SUMMARY` per processed retry-mode session,
   whether profiling was enabled or not. A transition line
-  `EDGE_POSE_COVERAGE` is emitted once when **45 consecutive processed
-  frames have no usable torso landmarks**, and again when pose is observed.
+  `EDGE_POSE_COVERAGE` is emitted when **both 45 consecutive processed
+  frames AND 3,000 ms** have passed without usable torso landmarks (based on
+  the stream-session relative timestamps), and again when pose is observed.
+  Frame-only offline callers retain the legacy 45-frame diagnostic threshold.
+  The combined threshold avoids prematurely flagging 45 frames at 30 FPS
+  (roughly 1.5 seconds); at 5 FPS, 45 frames still take roughly 9 seconds.
+  It is an observation gate, not a calibrated camera quality or safety threshold.
   Transition counts reset with each new camera/model session. These are
   **operator diagnostics**, not camera failure diagnoses or alarms.
   An empty room, darkness, occlusion, long distance, other people or model

@@ -193,5 +193,7 @@ def test_retry_mode_creates_fresh_native_tasks_releases_capture_and_renames_sour
     assert [x["frames_observed"] for x in summaries] == [2, 3]
     assert [x["longest_no_pose_streak_frames"] for x in summaries] == [2, 3]
     assert all(x["condition"] == "unverified" for x in summaries)
+    assert all(x["duration_gate_applied"] is True for x in summaries)
+    assert all(x["gap_threshold_ms"] == 3000 for x in summaries)
     assert all("camera-test" not in line and "fake.local" not in line
                for line in health_lines)

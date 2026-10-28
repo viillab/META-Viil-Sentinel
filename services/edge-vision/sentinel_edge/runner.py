@@ -236,7 +236,9 @@ def _run_rtsp_retry_mode(args, cv2: Any, mp: Any, source: str) -> int:
         coverage = PoseCoverageMonitor()
 
         def observe_pose(frame: PoseFrame) -> None:
-            transition = coverage.observe(bool(frame.landmarks))
+            transition = coverage.observe(
+                bool(frame.landmarks), timestamp_ms=frame.timestamp_ms,
+            )
             if transition is not None:
                 print("EDGE_POSE_COVERAGE " + json.dumps(
                     transition, sort_keys=True,
