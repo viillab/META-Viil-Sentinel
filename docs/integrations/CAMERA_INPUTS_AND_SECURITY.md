@@ -32,6 +32,18 @@ cloud camera APIs, browser WebRTC, HTTP MJPEG and phone camera apps are NOT
 implemented or claimed supported. Those need separate approved adapters and
 testing; they must not bypass input validation.
 
+## Hikvision at a remote site via Tailscale Subnet Router
+
+For the supplied Hikvision / Tailscale situation, see
+[Hikvision Tailscale operator handoff](HIKVISION_TAILSCALE_OPERATOR_HANDOFF.md)
+and the secret-free example
+`services/edge-vision/examples/camera_registry.tailscale.example.json`.
+A remote **private site LAN camera address** reached over an approved
+Tailscale subnet route uses the EXISTING RTSP adapter; it does not require
+a public camera IP, Tailscale account credentials inside the app, or a
+new camera transport. This document and example perform NO real capture.
+Any previously shared camera password must be rotated before field testing.
+
 ## Multi-camera registry (NO secrets or RTSP URLs in the file)
 
 Create an access-controlled LOCAL file outside Git, for example
