@@ -8,6 +8,7 @@ from contextlib import ExitStack
 from dataclasses import asdict, dataclass
 import json
 from pathlib import Path
+import os
 import sys
 from time import monotonic
 from typing import Any, Callable, TextIO
@@ -38,6 +39,7 @@ def parse_args(argv: list[str] | None = None):
     )
     parser.add_argument("--source", required=True, help="Camera integer (e.g. 0) or authorized video")
     parser.add_argument("--model", required=True, type=Path, help="Local MediaPipe pose .task model")
+    parser.add_argument("--rtsp-env", metavar="ENV_NAME", help="Read authorized RTSP URL from an environment variable")
     parser.add_argument("--source-id", default="staged-camera-01")
     parser.add_argument("--candidate-format", choices=["legacy", "v1"], default="legacy",
                         help="Use versioned privacy-minimal Member2 handoff envelopes")
@@ -54,6 +56,14 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--acknowledge-pose-privacy", action="store_true",
                         help="Confirm authorization to export derived pose landmarks")
     args = parser.parse_args(argv)
+    if args.rtsp_env and (not args.rtsp_env.isidentifier() or not args.rtsp_env.startswith("VIIL_")):
+        parser.error("--rtsp-env must name a VIIL_ prefixed environment variable")
+    if args.rtsp_env and args.source != "rtsp":
+        parser.error("--rtsp-env requires --source rtsp")
+    if args.source == "rtsp" and not args.rtsp_env:
+        parser.error("RTSP requires --rtsp-env; never pass credentials as --source")
+    if "://" in args.source or "@" in args.source:
+        parser.error("Network URLs and credentials cannot be passed as --source")
     if args.max_frames < 0:
         parser.error("--max-frames must be >= 0")
     if not args.model.is_file():
@@ -190,8 +200,20 @@ def main(argv: list[str] | None = None) -> int:
         ) from exc
 
     webcam = args.source.isdigit()
+    is_rtsp = args.source == "rtsp"
     source = int(args.source) if webcam else str(Path(args.source).expanduser())
-    if not webcam and not Path(source).is_file():
+    if is_rtsp:
+        source = os.environ.get(args.rtsp_env, "")
+        from urllib.parse import urlsplit
+        try:
+            parsed = urlsplit(source)
+            valid = (parsed.scheme.lower() == "rtsp" and parsed.hostname is not None
+                     and not parsed.fragment and not any(c in source for c in "\r\n\x00"))
+        except ValueError:
+            valid = False
+        if not valid:
+            raise SystemExit("Invalid or missing RTSP environment setting (URL redacted)")
+    elif not webcam and not Path(source).is_file():
         raise SystemExit(f"Video file not found: {source}")
 
     if args.shadow_model is not None:
@@ -206,7 +228,7 @@ def main(argv: list[str] | None = None) -> int:
         cap = cv2.VideoCapture(source)
         if not cap.isOpened():
             cap.release()
-            raise SystemExit(f"Cannot open source: {args.source}")
+            raise SystemExit("Cannot open authorized capture source (credentials redacted)")
         stack.callback(cap.release)
         if args.display:
             stack.callback(cv2.destroyAllWindows)
@@ -233,7 +255,7 @@ def main(argv: list[str] | None = None) -> int:
                 early_probe.observe(frame)
         encoder = None
         if args.candidate_format == "v1":
-            provenance = "authorized_local_camera" if webcam else "consented_staged_video"
+            provenance = "authorized_local_camera" if (webcam or is_rtsp) else "consented_staged_video"
             asset_hash = _file_sha256(args.model)
             def encode_candidate(candidate: FallCandidateEvent) -> dict:
                 return to_envelope(
@@ -243,7 +265,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             stats = process_capture(
                 cap, cv2=cv2, mp=mp, landmarker=landmarker,
-                webcam=webcam, source_id=args.source_id,
+                webcam=(webcam or is_rtsp), source_id=args.source_id,
                 max_frames=args.max_frames, display=args.display,
                 trace_file=trace_file, event_encoder=encoder,
                 on_frame=consume_research if (shadow is not None or early_probe is not None)
