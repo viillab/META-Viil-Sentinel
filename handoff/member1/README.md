@@ -56,6 +56,8 @@ The same command with sitting.jsonl should yield no candidate.
 
 ## Member 1 — Dashboard / Notifications (formerly Member 3)
 
+**Frontend integration preflight ready:** [Frontend readiness and proposed Meta-first view DTO](FRONTEND_READINESS.md). Member 1 has implemented a read-only, fail-closed Dashboard adapter, 28 Node contract tests and a simulated notification-feed display. **This is presentation readiness, NOT an authenticated live Meta integration, real alert service or approved auto decision.** Member 2 backend is unchanged.
+
 React demo consumes the backend's simulated incident feed. It does NOT
 currently consume the Edge v1 local stdout stream. Add a human-facing
 state/UI and Meta-first advisory presentation (with fallback/manual override) only after Member 2 validates incidents, implements secure durable
