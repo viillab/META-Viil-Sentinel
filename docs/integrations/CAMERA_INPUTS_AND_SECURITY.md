@@ -9,6 +9,13 @@ and stop on expiry/revocation or invalid signature. All live sources
 require `--candidate-format v1 --confirm-consent` and disallow trace,
 shadow research, early motion probes and local display in this approved
 prototype. This check is not instantaneous if a native read blocks.
+The bounded RTSP `camera_health` probe additionally re-verifies the
+signed policy before opening capture, after native open, before and after
+every frame read, and after native close before publishing a health result.
+If permission is revoked at any of those checks, it releases the capture,
+returns an error and emits no partial frame-count report. Native open/read
+calls may still block until the codec returns; this is not instantaneous
+revocation or a production privacy certification.
 See `docs/security/GLOBAL_PRIVACY_SECURITY_BASELINE.md` before running any
 camera. Consent CLI acknowledgement alone is not sufficient. This does not authorize real
 patient monitoring, medical advice or emergency dispatch. Hardware

@@ -8,6 +8,7 @@ from ipaddress import ip_address, ip_network
 import json
 from pathlib import Path
 import os
+from typing import Callable
 from urllib.parse import unquote, urlsplit
 
 
@@ -79,15 +80,30 @@ def validate_rtsp_env(
     return value
 
 
-def probe_capture(capture, *, sample_frames: int = 12) -> dict:
-    """Measure a bounded decode smoke test, not real camera uptime or safety."""
+def probe_capture(
+    capture, *, sample_frames: int = 12,
+    privacy_check: Callable[[], None] | None = None,
+) -> dict:
+    """Bounded decode probe; revoke permission before/after each native read.
+
+    This is a diagnostic, not a life-safety monitor. Each check may reread
+    the small signed approval: deliberately favor revocation over probe FPS.
+    No decoded frame leaves this function, and no partial counts are emitted
+    after a privacy denial.
+    """
     if not 1 <= sample_frames <= 120:
         raise ValueError("sample_frames must be 1..120")
+    if privacy_check is not None:
+        privacy_check()
     if not capture.isOpened():
         return {"status": "offline", "frames_read": 0, "frames_requested": sample_frames}
     frames_read = 0
     for _ in range(sample_frames):
+        if privacy_check is not None:
+            privacy_check()
         ok, frame = capture.read()
+        if privacy_check is not None:
+            privacy_check()
         if not ok or frame is None:
             break
         frames_read += 1
@@ -135,10 +151,13 @@ def main(argv: list[str] | None = None) -> int:
     except (ValueError, KeyError, TypeError):
         parser.error("Invalid camera selection or frame count (redacted)")
     from sentinel_edge.privacy_gate import verify_privacy_approval, PrivacyGateDenied
-    try:
+    def privacy_recheck() -> None:
         verify_privacy_approval(
             args.privacy_approval, camera_id=args.camera_id or args.source_id,
         )
+
+    try:
+        privacy_recheck()
     except PrivacyGateDenied:
         parser.error("Camera privacy approval denied (redacted)")
     try:
@@ -148,13 +167,30 @@ def main(argv: list[str] | None = None) -> int:
     cap = None
     try:
         cap = open_rtsp_capture(cv2, url)
-        report = probe_capture(cap, sample_frames=args.frames)
+        # Native open can block; revalidate before inspecting/reading frames.
+        privacy_recheck()
+        report = probe_capture(
+            cap, sample_frames=args.frames, privacy_check=privacy_recheck,
+        )
+    except PrivacyGateDenied:
+        # Do not emit any count from frames read under revoked authorization.
+        parser.error("Camera privacy approval revoked during probe (redacted)")
     except Exception:
         # Never stringify native library exceptions that could contain credentials.
         report = {"status": "error", "frames_read": 0, "frames_requested": args.frames}
     finally:
         if cap is not None:
-            cap.release()
+            try:
+                cap.release()
+            except Exception:
+                # Do not expose native codec exceptions containing RTSP secrets.
+                pass
+    # Native close can block after the final frame. Fail closed once more
+    # before declaring the health probe successful or publishing counts.
+    try:
+        privacy_recheck()
+    except PrivacyGateDenied:
+        parser.error("Camera privacy approval revoked during probe (redacted)")
     # Print only bounded, non-identifying output. No URL/frame/model output.
     print(json.dumps({"type": "viil.camera.health.v1", **report}, sort_keys=True))
     return 0 if report["status"] == "readable" else 2
