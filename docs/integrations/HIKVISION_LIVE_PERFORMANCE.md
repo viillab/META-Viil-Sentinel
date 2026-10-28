@@ -24,7 +24,7 @@ time.**
 - Only then from `services/edge-vision` with the correct private model path:
 
 ```powershell
-.\.venv\Scripts\python.exe -m sentinel_edge.runner --source rtsp --rtsp-env VIIL_CAMERA_RTSP --model ..\..\models\pose_landmarker_lite.task --source-id stage-cam-01 --candidate-format v1 --confirm-consent --rtsp-retries 1 --max-frames 300 --profile-rtsp
+.\.venv\Scripts\python.exe -m sentinel_edge.runner --source rtsp --rtsp-env VIIL_CAMERA_RTSP --model ..\..\models\pose_landmarker_lite.task --source-id stage-cam-01 --candidate-format v1 --confirm-consent --privacy-approval C:\PrivateConfig\approved-privacy.json --rtsp-retries 1 --max-frames 300 --profile-rtsp
 ```
 
 The opt-in `--profile-rtsp` is available only with
@@ -34,7 +34,7 @@ display and experimental shadow model from crossing stream sessions.
 **Bounded 30-minute endurance trial (authorized staged scene only):**
 
 ```powershell
-.\.venv\Scripts\python.exe -m sentinel_edge.runner --source rtsp --rtsp-env VIIL_CAMERA_RTSP --model ..\..\models\pose_landmarker_lite.task --source-id stage-cam-01 --candidate-format v1 --confirm-consent --rtsp-retries 1 --rtsp-session-seconds 1800 --max-frames 0 --profile-rtsp
+.\.venv\Scripts\python.exe -m sentinel_edge.runner --source rtsp --rtsp-env VIIL_CAMERA_RTSP --model ..\..\models\pose_landmarker_lite.task --source-id stage-cam-01 --candidate-format v1 --confirm-consent --privacy-approval C:\PrivateConfig\approved-privacy.json --rtsp-retries 1 --rtsp-session-seconds 1800 --max-frames 0 --profile-rtsp
 ```
 
 `--rtsp-session-seconds` allows 0 (disabled) or 1..3600 seconds and is

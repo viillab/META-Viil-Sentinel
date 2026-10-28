@@ -17,6 +17,7 @@ from sentinel_edge.camera_health import open_rtsp_capture, validate_rtsp_env
 from sentinel_edge.camera_inputs import (
     load_camera_registry, parse_usb_index, resolve_camera,
 )
+from sentinel_edge.privacy_gate import verify_privacy_approval, PrivacyGateDenied
 from sentinel_edge.rtsp_reconnect import (
     CameraStreamInterrupted, run_bounded_sessions,
 )
@@ -52,6 +53,8 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--camera-registry", type=Path,
                         help="Local vendor-neutral camera registry JSON (no secrets)")
     parser.add_argument("--camera-id", help="Select camera ID from the registry")
+    parser.add_argument("--privacy-approval", type=Path,
+                        help="Signed privacy authorization for any live camera input")
     parser.add_argument("--rtsp-allow-port", type=int, default=None,
                         help="Explicitly allow a vendor-specific RTSP port")
     parser.add_argument("--profile-rtsp", action="store_true",
@@ -385,6 +388,22 @@ def _run_rtsp_retry_mode(
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    # Enforce operator authorization before native codec/model imports or any
+    # live capture opening. This is not a legal compliance certification.
+    live_device = args.source in ("rtsp", "camera")
+    if not live_device:
+        live_device = parse_usb_index(args.source) is not None
+    if live_device:
+        if args.privacy_approval is None:
+            raise SystemExit("Live camera requires signed privacy approval (redacted)")
+        camera_scope = (
+            args.selected_camera.camera_id if args.selected_camera is not None
+            else args.source_id
+        )
+        try:
+            verify_privacy_approval(args.privacy_approval, camera_id=camera_scope)
+        except PrivacyGateDenied:
+            raise SystemExit("Live camera privacy approval denied (redacted)") from None
     try:
         import cv2
         import mediapipe as mp

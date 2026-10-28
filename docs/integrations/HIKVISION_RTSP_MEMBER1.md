@@ -32,7 +32,7 @@ This illustrative example is deliberately credential-free.
 # Locally assign VIIL_CAMERA_RTSP from a secure secret source.
 # Example URL shape only: rtsp://camera-lan-ip:554/Streaming/Channels/102
 cd D:\VIIL-Sentinel\services\edge-vision
-.\.venv\Scripts\python.exe -m sentinel_edge.runner --source rtsp --rtsp-env VIIL_CAMERA_RTSP --model ..\..\models\pose_landmarker_lite.task --source-id hikvision-test-01 --candidate-format v1 --confirm-consent --max-frames 300
+.\.venv\Scripts\python.exe -m sentinel_edge.runner --source rtsp --rtsp-env VIIL_CAMERA_RTSP --model ..\..\models\pose_landmarker_lite.task --source-id hikvision-test-01 --candidate-format v1 --confirm-consent --privacy-approval C:\PrivateConfig\approved-privacy.json --max-frames 300
 ```
 
 Do not enable `--display` in a public or screen-shared session.
@@ -59,7 +59,7 @@ unreviewed state and private traces from spanning sessions.
 
 **Optional authorized, staged test (not a production safety deployment):**
 ```powershell
-.\.venv\Scripts\python.exe -m sentinel_edge.runner --source rtsp --rtsp-env VIIL_CAMERA_RTSP --model ..\..\models\pose_landmarker_lite.task --source-id hikvision-test-01 --candidate-format v1 --confirm-consent --rtsp-retries 2 --rtsp-retry-delay-ms 1000 --max-frames 300
+.\.venv\Scripts\python.exe -m sentinel_edge.runner --source rtsp --rtsp-env VIIL_CAMERA_RTSP --model ..\..\models\pose_landmarker_lite.task --source-id hikvision-test-01 --candidate-format v1 --confirm-consent --privacy-approval C:\PrivateConfig\approved-privacy.json --rtsp-retries 2 --rtsp-retry-delay-ms 1000 --max-frames 300
 ```
 Only use a private console; native FFmpeg/OpenCV error logs are not
 guaranteed to redact hostnames or camera credentials. Never paste them

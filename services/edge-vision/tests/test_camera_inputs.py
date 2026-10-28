@@ -10,6 +10,7 @@ from sentinel_edge.camera_inputs import (
     load_camera_registry, open_camera_capture, parse_usb_index, resolve_camera,
 )
 from sentinel_edge import runner
+from privacy_approval_fixture import make_policy
 
 
 def save_registry(path, cameras):
@@ -152,7 +153,9 @@ def test_generic_camera_cli_preserves_source_isolation(tmp_path, monkeypatch):
     monkeypatch.setattr(runner, "_run_rtsp_retry_mode", fake_rtsp)
     monkeypatch.setitem(sys.modules, "cv2", NS())
     monkeypatch.setitem(sys.modules, "mediapipe", NS())
-    assert runner.main(common + ["--camera-id", "lab-rtsp", "--rtsp-retries", "1"]) == 0
+    approval = make_policy(tmp_path, monkeypatch, camera_ids=("lab-rtsp",))
+    assert runner.main(common + ["--camera-id", "lab-rtsp", "--rtsp-retries", "1",
+                                 "--privacy-approval", str(approval)]) == 0
     assert captured == {"url": "rtsp://10.3.2.1:8554/live", "id": "lab-rtsp"}
 
 
@@ -170,8 +173,9 @@ def test_health_probe_accepts_registry_and_rejects_usb(monkeypatch, tmp_path, ca
         def release(self): pass
     monkeypatch.setattr(camera_health, "open_rtsp_capture", lambda cv2, url: Capture())
     monkeypatch.setitem(sys.modules, "cv2", NS())
+    approval = make_policy(tmp_path, monkeypatch, camera_ids=("cam1",))
     base = ["--camera-registry", str(catalog), "--confirm-authorized-camera",
-            "--frames", "2"]
+            "--privacy-approval", str(approval), "--frames", "2"]
     assert health_main(base + ["--camera-id", "cam1"]) == 0
     assert json.loads(capsys.readouterr().out)["frames_read"] == 2
     with pytest.raises(SystemExit):
