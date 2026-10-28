@@ -60,6 +60,16 @@ The same command with sitting.jsonl should yield no candidate.
 - Meta real provider still needs separate authorization, API keys only on
   backend and output validation. Do not portray MOCK outputs as real.
 
+## Member 1 — Competition field acceptance (new)
+
+Run `python -m sentinel_edge.field_acceptance` from `services/edge-vision`
+for an offline, no-upload assessment of the actual synthetic Edge producer,
+both UI handoff contracts, and the remaining field blockers. Optionally add
+`--verify-local-models` for private SHA checks, or a signed camera registry
+and selected pseudonymous camera IDs for config-only authorization checks.
+**This command does not open any camera or prove live fall accuracy.**
+See [Member 1 Field Acceptance & Hackathon Proof](../../docs/roadmap/MEMBER1_FIELD_ACCEPTANCE_AND_HACKATHON_PROOF.md).
+
 ## Member 1 — AI Detect + Web Test Lab
 
 **Phase 1 implemented:** browser-local Edge v1 metadata replay without Backend,
