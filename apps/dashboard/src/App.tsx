@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { deriveReviewPresentation } from "./metaReview";
+import EdgeTestLab from "./EdgeTestLab";
 
 const API = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
@@ -52,6 +53,7 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
 }
 
 export default function App() {
+  const [view, setView] = useState<"lab" | "operations">("lab");
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [reviewer, setReviewer] = useState("Demo Caregiver");
@@ -74,10 +76,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    // The offline lab never contacts or polls Member 2 backend.
+    if (view !== "operations") return;
     void refresh();
     const timer = window.setInterval(() => void refresh(), 5000);
     return () => window.clearInterval(timer);
-  }, [refresh]);
+  }, [refresh, view]);
 
   async function run<T>(task: () => Promise<T>) {
     setBusy(true);
@@ -122,13 +126,14 @@ export default function App() {
       <aside className="sidebar">
         <div className="brand"><span className="brand-mark">V</span><div><strong>VIIL SENTINEL</strong><small>INCIDENT INTELLIGENCE</small></div></div>
         <div className="nav-label">WORKSPACE</div>
-        <div className="nav-active">◈ <span>Incident operations</span></div>
-        <div className="nav-muted">◎ <span>Evidence review</span></div>
-        <div className="nav-muted">▦ <span>Evaluation (planned)</span></div>
+        <button type="button" className={view === "lab" ? "nav-active" : "nav-muted"} onClick={() => setView("lab")} aria-current={view === "lab" ? "page" : undefined}>◎ <span>AI Detect Test Lab</span></button>
+        <button type="button" className={view === "operations" ? "nav-active" : "nav-muted"} onClick={() => setView("operations")} aria-current={view === "operations" ? "page" : undefined}>◈ <span>Incident operations (demo)</span></button>
+        <div className="nav-muted">▦ <span>Benchmarking · next phase</span></div>
         <div className="side-bottom"><strong>HACKATHON FOUNDATION</strong><p>Local development environment — not connected to live cameras or rescue services.</p></div>
       </aside>
       <main className="main">
-        <header className="topbar"><div className="eyebrow">WORKSPACE / OVERVIEW</div><span className={online ? "connection ok" : "connection"}>● {online ? "Local API connected" : "API offline"}</span></header>
+        <header className="topbar"><div className="eyebrow">MEMBER 1 / {view === "lab" ? "AI DETECT TEST LAB" : "INCIDENT OPERATIONS"}</div>{view === "lab" ? <span className="connection ok">● Browser-local · no API</span> : <span className={online ? "connection ok" : "connection"}>● {online ? "Local API connected" : "API offline"}</span>}</header>
+        {view === "lab" ? <EdgeTestLab /> : <>
         <div className="hero"><div><div className="eyebrow blue">OPERATIONAL OVERVIEW</div><h1>Incident intelligence</h1><p>Meta-first visual verification is planned. Current events are MOCK; caregiver review and response tracking remain manual in this demo.</p></div><button className="primary" onClick={createDemo} disabled={busy || !online}>+ Generate staged incident</button></div>
         <div className="warning"><span>SIMULATION ONLY</span> This foundation uses mock incident interpretation. It does not detect a real fall, query Meta Muse Spark, provide medical advice, or contact emergency services.</div>
         {error && <div className="error" role="alert">Connection / action error: {error}</div>}
@@ -177,6 +182,7 @@ export default function App() {
               </div>}
           </section>
         </div>
+        </>}
         <footer>VIIL Sentinel · Meta Global AI Developer Hackathon 2026 · Non-clinical research demonstration</footer>
       </main>
     </div>
