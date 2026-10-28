@@ -2,36 +2,17 @@ import { useCallback, useEffect, useState } from "react";
 import { deriveReviewPresentation } from "./metaReview";
 import EdgeTestLab from "./EdgeTestLab";
 import IntegrationCenter from "./IntegrationCenter";
+import {
+  allowLocalDemo, listLocalDemoIncidents, createLocalDemoIncident,
+  reviewLocalDemoIncident,
+} from "./incidentDemo";
+import type { DemoAction, DemoIncident } from "./incidentDemo";
 
-const API = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
-// Demo API writes are unauthenticated in Member 2's current local foundation.
-// They must never be enabled by default or on non-loopback browser origins.
-const LOCAL_DEMO_WRITES = import.meta.env.VITE_ENABLE_LOCAL_DEMO_MUTATIONS === "true"
-  && ["localhost", "127.0.0.1"].includes(window.location.hostname);
-
-type Status =
-  | "DETECTED" | "ANALYZING" | "REVIEW_REQUIRED" | "NOTIFIED"
-  | "ACKNOWLEDGED" | "VERIFIED" | "FALSE_ALERT" | "RESOLVED";
-
-type Incident = {
-  id: string;
-  source_id: string;
-  status: Status;
-  confidence: number;
-  simulated: boolean;
-  notification_sent: boolean;
-  /** Future optional DTO: only Member 2 authorized backend may populate. */
-  meta_review_v1?: unknown;
-  created_at: string;
-  observation: {
-    posture: string;
-    surroundings: string;
-    uncertainty: string[];
-    evidence_refs: string[];
-    generated_by: string;
-  } | null;
-  history: { time: string; actor: string; from_status: string | null; to_status: string }[];
-};
+// Demo incident endpoints have NO authentication in Member 2's foundation.
+// Never contact them unless explicitly opted in on loopback.
+const LOCAL_DEMO_WRITES = allowLocalDemo(
+  window.location.hostname, import.meta.env.VITE_ENABLE_LOCAL_DEMO_MUTATIONS === "true",
+);
 
 const actionOptions: Record<string, Array<[string, string]>> = {
   NOTIFIED: [["Acknowledge", "ACKNOWLEDGE"]],
@@ -44,22 +25,9 @@ function displayTime(s: string) {
   return new Date(s).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
 }
 
-async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(url, options);
-  if (!response.ok) {
-    let message = `HTTP ${response.status}`;
-    try {
-      const parsed = await response.json();
-      if (typeof parsed.detail === "string") message = parsed.detail;
-    } catch { /* Keep status message for non-JSON errors */ }
-    throw new Error(message);
-  }
-  return response.json() as Promise<T>;
-}
-
 export default function App() {
   const [view, setView] = useState<"lab" | "integrations" | "operations">("integrations");
-  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [incidents, setIncidents] = useState<DemoIncident[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [reviewer, setReviewer] = useState("Demo Caregiver");
   const [busy, setBusy] = useState(false);
@@ -68,24 +36,51 @@ export default function App() {
   const selectedIncident = incidents.find((incident) => incident.id === selected) ?? incidents[0];
   const metaReview = selectedIncident ? deriveReviewPresentation(selectedIncident) : null;
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (signal?: AbortSignal) => {
+    if (!LOCAL_DEMO_WRITES) return;
     try {
-      const data = await fetchJson<Incident[]>(`${API}/api/v1/incidents`);
+      const data = await listLocalDemoIncidents(signal);
+      if (signal?.aborted) return;
       setIncidents(data);
-      setOnline(true);
+      setOnline(true); // local demo endpoint reachable, NOT verified authentication
       setError(null);
     } catch (e) {
+      if (signal?.aborted) return;
+      // Never keep old "online" demo incidents after an API/auth/validation failure.
+      setIncidents([]);
+      setSelected(null);
       setOnline(false);
-      setError(e instanceof Error ? e.message : "Unable to connect to API");
+      setError(e instanceof Error ? e.message : "Local demo API unavailable");
     }
   }, []);
 
   useEffect(() => {
-    // The offline lab never contacts or polls Member 2 backend.
-    if (view !== "operations") return;
-    void refresh();
-    const timer = window.setInterval(() => void refresh(), 5000);
-    return () => window.clearInterval(timer);
+    // Offline lab and Integration Center must not fetch demo incident records.
+    if (view !== "operations" || !LOCAL_DEMO_WRITES) return;
+    const controller = new AbortController();
+    let pending = false;
+    const poll = () => {
+      if (document.visibilityState !== "visible") {
+        setIncidents([]);
+        setSelected(null);
+        setOnline(false);
+        return;
+      }
+      if (pending) return;
+      pending = true;
+      void refresh(controller.signal).finally(() => { pending = false; });
+    };
+    poll();
+    const timer = window.setInterval(poll, 5000);
+    document.addEventListener("visibilitychange", poll);
+    return () => {
+      controller.abort();
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", poll);
+      setIncidents([]);
+      setSelected(null);
+      setOnline(false);
+    };
   }, [refresh, view]);
 
   async function run<T>(task: () => Promise<T>) {
@@ -95,6 +90,10 @@ export default function App() {
       await task();
       await refresh();
     } catch (e) {
+      // Do not retain a seemingly actionable incident after a failed write.
+      setIncidents([]);
+      setSelected(null);
+      setOnline(false);
       setError(e instanceof Error ? e.message : "Request failed");
     } finally {
       setBusy(false);
@@ -102,26 +101,16 @@ export default function App() {
   }
 
   function createDemo() {
-    if (!LOCAL_DEMO_WRITES) return;
+    if (!LOCAL_DEMO_WRITES || !online) return;
     void run(async () => {
-      const incident = await fetchJson<Incident>(`${API}/api/v1/incidents/demo`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ source_id: "STAGED-CAMERA-01", confidence: 0.82 }),
-      });
+      const incident = await createLocalDemoIncident();
       setSelected(incident.id);
     });
   }
 
-  function update(action: string, id: string) {
-    if (!LOCAL_DEMO_WRITES) return;
-    void run(() =>
-      fetchJson(`${API}/api/v1/incidents/${id}/review`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, actor: reviewer }),
-      }),
-    );
+  function update(action: DemoAction, id: string) {
+    if (!LOCAL_DEMO_WRITES || !online) return;
+    void run(() => reviewLocalDemoIncident(id, action, reviewer));
   }
 
   const active = incidents.filter((i) => !["RESOLVED", "FALSE_ALERT"].includes(i.status)).length;
@@ -140,10 +129,10 @@ export default function App() {
         <div className="side-bottom"><strong>HACKATHON FOUNDATION</strong><p>Local development environment — not connected to live cameras or rescue services.</p></div>
       </aside>
       <main className="main">
-        <header className="topbar"><div className="eyebrow">MEMBER 1 / {view === "lab" ? "AI DETECT TEST LAB" : view === "integrations" ? "INTEGRATION CENTER" : "INCIDENT OPERATIONS"}</div>{view === "lab" ? <span className="connection ok">● Browser-local · no API</span> : view === "integrations" ? <span className="connection">● Read-only connection status</span> : <span className={online ? "connection ok" : "connection"}>● {online ? "Local API reachable · demo only" : "API offline"}</span>}</header>
+        <header className="topbar"><div className="eyebrow">MEMBER 1 / {view === "lab" ? "AI DETECT TEST LAB" : view === "integrations" ? "INTEGRATION CENTER" : "INCIDENT OPERATIONS"}</div>{view === "lab" ? <span className="connection ok">● Browser-local · no API</span> : view === "integrations" ? <span className="connection">● Read-only connection status</span> : <span className={online ? "connection ok" : "connection"}>● {!LOCAL_DEMO_WRITES ? "Local demo API disabled" : online ? "Local demo API reachable · no auth" : "Local demo API offline"}</span>}</header>
         {view === "lab" ? <EdgeTestLab /> : view === "integrations" ? <IntegrationCenter /> : <>
         <div className="hero"><div><div className="eyebrow blue">OPERATIONAL OVERVIEW</div><h1>Incident intelligence</h1><p>Meta-first visual verification is planned. Current events are MOCK; caregiver review and response tracking remain manual in this demo.</p></div><button className="primary" onClick={createDemo} disabled={!LOCAL_DEMO_WRITES || busy || !online}>+ Generate staged incident</button></div>
-        <div className="warning"><span>SIMULATION ONLY</span> This foundation uses mock incident interpretation. It does not detect a real fall, query Meta Muse Spark, provide medical advice, or contact emergency services. {LOCAL_DEMO_WRITES ? "Local-only demo write actions explicitly enabled (NOT authenticated)." : "Unauthenticated demo write actions disabled by default; local opt-in required."}</div>
+        <div className="warning"><span>SIMULATION ONLY</span> This foundation uses mock incident interpretation. It does not detect a real fall, query Meta AI, provide medical advice, or contact emergency services. {LOCAL_DEMO_WRITES ? "Local-only demo read/write actions explicitly enabled (NOT authenticated)." : "Unauthenticated demo API reads and writes are disabled by default. Developers can opt in only on localhost with VITE_ENABLE_LOCAL_DEMO_MUTATIONS=true. This is not backend authorization."}</div>
         {error && <div className="error" role="alert">Connection / action error: {error}</div>}
         <section className="stats">
           <div className="stat"><small>INCIDENTS LOGGED</small><strong>{incidents.length}</strong><span>Staged development events</span></div>
@@ -159,7 +148,7 @@ export default function App() {
         <div className="content">
           <section className="panel incident-list">
             <div className="panel-head"><h2>Incident feed</h2><span>{incidents.length} events</span></div>
-            {incidents.length === 0 ? <div className="empty"><div className="empty-icon">◉</div><strong>No staged incidents yet</strong><p>Generate a simulated incident to test the notification and review state machine.</p></div> :
+            {incidents.length === 0 ? <div className="empty"><div className="empty-icon">◉</div><strong>{LOCAL_DEMO_WRITES ? "No staged incidents yet" : "Local demo access disabled"}</strong><p>{LOCAL_DEMO_WRITES ? "Generate a simulated incident to test the notification and review state machine." : "Incident data is deliberately not fetched until the local-only developer opt-in is enabled. The authenticated Member 2 incident API is not yet integrated."}</p></div> :
               incidents.map((item) => <button key={item.id} className={"incident-item " + (selectedIncident?.id === item.id ? "is-selected" : "")} onClick={() => setSelected(item.id)}>
                 <div><strong>{item.source_id}</strong><small>{displayTime(item.created_at)}</small></div>
                 <span className={"status " + item.status.toLowerCase()}>{item.status.replaceAll("_", " ")}</span>
@@ -184,7 +173,7 @@ export default function App() {
                 <div className="section-label">CAREGIVER REVIEW / ACKNOWLEDGEMENT (DEMO)</div>
                 <label htmlFor="reviewer" className="reviewer-label">Reviewer name</label>
                 <input id="reviewer" value={reviewer} maxLength={80} onChange={(event) => setReviewer(event.target.value)} />
-                <div className="actions">{(actionOptions[selectedIncident.status] ?? []).map(([label, action]) => <button key={action} disabled={!LOCAL_DEMO_WRITES || busy || !reviewer.trim()} onClick={() => update(action, selectedIncident.id)}>{label}</button>)}</div>
+                <div className="actions">{(actionOptions[selectedIncident.status] ?? []).map(([label, action]) => <button key={action} disabled={!LOCAL_DEMO_WRITES || !online || busy || !reviewer.trim()} onClick={() => update(action as DemoAction, selectedIncident.id)}>{label}</button>)}</div>
                 <div className="section-label">LOCAL DEMO AUDIT TRAIL</div>
                 <div className="audit">{selectedIncident.history.slice().reverse().map((entry, index) => <div className="audit-item" key={index}><span className="audit-dot" /><div><strong>{entry.to_status.replaceAll("_", " ")}</strong><small>{entry.actor} · {displayTime(entry.time)}</small></div></div>)}</div>
               </div>}

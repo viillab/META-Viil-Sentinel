@@ -154,11 +154,19 @@ telemetry, scope every query and avoid trust in client-supplied status.
 The current backend `services/api/app/main.py` still exposes **local demo**
 incident routes with no authentication, and the current mock provider. This
 integration UI does **not** reconfigure those endpoints or enable them for
-public use. Incident creation and review buttons are now **disabled
-by default**, unless the developer explicitly sets
-`VITE_ENABLE_LOCAL_DEMO_MUTATIONS=true` at build time AND opens the UI
-on localhost/127.0.0.1. That opt-in is NOT authentication and must never
-be deployed publicly. Keep the backend loopback-bound regardless of UI
+public use. **Both incident GET reads and POST writes** are disabled
+by default. The developer must explicitly set
+`VITE_ENABLE_LOCAL_DEMO_MUTATIONS=true` at build/dev-server start AND
+open the UI on localhost/127.0.0.1 to opt in. This is strictly a
+developer convenience, NOT authentication and must never be publicly
+deployed. The frontend strictly checks that every incident is a
+small **simulated-only** mock with no embedded evidence, media URLs,
+foreign fields or media fields. Free-text observations and the demo
+reviewer name are still potentially personal data; keep this local and
+never use real patient records. Absent credentials, backend 401/403,
+invalid/oversized responses and hidden tabs fail closed and clear stale
+records. The UI uses only same-origin relative API paths and refuses
+redirects. Keep the backend loopback-bound regardless of UI
 button availability. Before deployment Member 2 must own secure auth, RBAC, session
 handling, CSRF appropriate to its auth scheme, private-network bindings,
 audit/retention and incident source ownership. Refer to
