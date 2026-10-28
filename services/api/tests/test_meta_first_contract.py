@@ -12,25 +12,25 @@ from app.meta_first_contract import (
 
 
 def context(**kwargs):
-    data = dict(
-        provider="meta_model_api",
-        actual_provider_request_succeeded=True,
-        source_authenticated=True,
-        media_licensed_and_consented=True,
-        evidence_frame_count=3,
-        validated_evidence=True,
-    )
+    data = {
+        "provider": "meta_model_api",
+        "actual_provider_request_succeeded": True,
+        "source_authenticated": True,
+        "media_licensed_and_consented": True,
+        "evidence_frame_count": 3,
+        "validated_evidence": True,
+    }
     data.update(kwargs)
     return TrustedMetaCallContext(**data)
 
 
 def assessment(**kwargs):
-    data = dict(
-        verdict=MetaVerdict.FALL_LIKELY,
-        visible_observations=["Person appears to be lying on floor"],
-        uncertainties=["Cannot infer motion from one image"],
-        supporting_frame_indices=[0, 1],
-    )
+    data = {
+        "verdict": MetaVerdict.FALL_LIKELY,
+        "visible_observations": ["Person appears to be lying on floor"],
+        "uncertainties": ["Cannot infer motion from one image"],
+        "supporting_frame_indices": [0, 1],
+    }
     data.update(kwargs)
     return MetaVisibleAssessment(**data)
 
