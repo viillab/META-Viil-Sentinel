@@ -43,6 +43,8 @@ def parse_args(argv: list[str] | None = None):
                         help="Use versioned privacy-minimal Member2 handoff envelopes")
     parser.add_argument("--confirm-consent", action="store_true",
                         help="Explicitly authorize local v1 event export from camera/video")
+    parser.add_argument("--early-motion-probe", action="store_true",
+                        help="Opt-in 2s heuristic research counts ONLY, never alerts")
     parser.add_argument("--shadow-model", type=Path,
                         help="Optional pinned V1 research prediction counts ONLY (no events)")
     parser.add_argument("--max-frames", type=int, default=0, help="0: process until EOF/interrupt")
@@ -77,6 +79,8 @@ def parse_args(argv: list[str] | None = None):
             parser.error("Shadow research mode requires consent and privacy acknowledgement")
         if not args.shadow_model.is_file():
             parser.error("Shadow research artifact not found")
+    if args.early_motion_probe and not (args.confirm_consent and args.acknowledge_pose_privacy):
+        parser.error("--early-motion-probe requires consent and pose privacy acknowledgement")
     return args
 
 
@@ -196,6 +200,8 @@ def main(argv: list[str] | None = None) -> int:
         from sentinel_edge.shadow_inference import (
             RollingModelShadow, load_verified_linear_shadow,
         )
+    if args.early_motion_probe:
+        from sentinel_edge.early_motion_probe import CausalMotionProbe
     with ExitStack() as stack:
         cap = cv2.VideoCapture(source)
         if not cap.isOpened():
@@ -219,6 +225,12 @@ def main(argv: list[str] | None = None) -> int:
         )
         shadow = (RollingModelShadow(load_verified_linear_shadow(args.shadow_model))
                   if args.shadow_model is not None else None)
+        early_probe = CausalMotionProbe() if args.early_motion_probe else None
+        def consume_research(frame: PoseFrame) -> None:
+            if shadow is not None:
+                shadow.observe(frame)
+            if early_probe is not None:
+                early_probe.observe(frame)
         encoder = None
         if args.candidate_format == "v1":
             provenance = "authorized_local_camera" if webcam else "consented_staged_video"
@@ -234,7 +246,8 @@ def main(argv: list[str] | None = None) -> int:
                 webcam=webcam, source_id=args.source_id,
                 max_frames=args.max_frames, display=args.display,
                 trace_file=trace_file, event_encoder=encoder,
-                on_frame=shadow.observe if shadow is not None else None,
+                on_frame=consume_research if (shadow is not None or early_probe is not None)
+                else None,
             )
         except KeyboardInterrupt:
             print("Interrupted by operator; local capture closed.", file=sys.stderr)
@@ -243,6 +256,9 @@ def main(argv: list[str] | None = None) -> int:
         if shadow is not None:
             print("RESEARCH_MODEL_SHADOW " + json.dumps(shadow.summary(), sort_keys=True),
                   file=sys.stderr)
+        if early_probe is not None:
+            print("RESEARCH_EARLY_MOTION_PROBE "
+                  + json.dumps(early_probe.summary(), sort_keys=True), file=sys.stderr)
         # Status goes to stderr; stdout contains only machine-readable event JSONL.
         print(
             f"Processed {stats.frames_processed} frames; "

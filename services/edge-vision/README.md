@@ -116,6 +116,38 @@ predeclared V1 selection remains unchanged.
 .\.venv\Scripts\python.exe -m sentinel_edge.model_quality --synthetic-demo --dev-crossval
 ```
 
+## Causal 2-second early-motion research probe (Member 1)
+
+[Source-verified handoff](docs/CAUSAL_TWO_SECOND_MOTION_PROBE_HANDOFF_2026-10-28.md)
+adds independent, opt-in `--early-motion-probe` to the existing
+camera/video Runner and `python -m sentinel_edge.early_motion_external`
+for originally pinned ASSIST-IoT public videos. The **hand-designed
+kinematic** probe uses at most 2s of strict fail-closed torso pose
+context; requires recent upright posture, downward hip movement
+and consecutive movement evidence, with source/gap/missing-pose resets.
+It is **not a trained AI model** and does NOT produce additional
+real fall incidents, medical confidence, event JSONL or API calls.
+The original temporal heuristic and frozen Linear V1 remain unchanged.
+
+Real predeclared-source research replay of all 11 original ASSIST-IoT videos
+(3,396 frames) found untrained kinematic proposals in **3/3 publisher
+staged Fall** videos and **0/8 short ADL** videos, while the unchanged
+heuristic emitted zero events on both groups. These source videos were
+previously exposed, have no independently reviewed event onset times,
+and cannot establish actual Fall Recall or false alarms per hour.
+The research probe never sends an alert or event to the backend.
+
+The diagnostic reports aggregate category counts only: pose adapter
+rejections, additional geometric motion-coverage abstentions and
+unconfirmed motion cues, never video frames, landmarks, person identity,
+individual timestamps or paths. Publisher clip names are not independent
+event-onset labels; source data are already exposed. Do NOT interpret
+motion-cue counts as accuracy, sensitivity, or false alarm/hour.
+
+```powershell
+.\.venv\Scripts\python.exe -m sentinel_edge.early_motion_external --help
+```
+
 ## AFDCare-inspired Linear V1 camera Shadow research (Member 1)
 
 The [model-shadow handoff](docs/AFDCARE_INSPIRED_SHADOW_INFERENCE_HANDOFF_2026-10-28.md)
