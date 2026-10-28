@@ -103,6 +103,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--rtsp-env", help="VIIL_ variable containing RTSP URL")
     parser.add_argument("--camera-registry", help="Local vendor-neutral camera JSON registry")
     parser.add_argument("--camera-id", help="RTSP camera ID in the registry")
+    parser.add_argument("--source-id", default="staged-camera-01",
+                        help="Pseudonymous camera scope for legacy --rtsp-env")
+    parser.add_argument("--privacy-approval", type=Path, required=True,
+                        help="Signed privacy authorization required for camera probe")
     parser.add_argument("--confirm-authorized-camera", action="store_true")
     parser.add_argument("--frames", type=int, default=12)
     parser.add_argument("--rtsp-allow-port", type=int, default=None,
@@ -130,6 +134,13 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError
     except (ValueError, KeyError, TypeError):
         parser.error("Invalid camera selection or frame count (redacted)")
+    from sentinel_edge.privacy_gate import verify_privacy_approval, PrivacyGateDenied
+    try:
+        verify_privacy_approval(
+            args.privacy_approval, camera_id=args.camera_id or args.source_id,
+        )
+    except PrivacyGateDenied:
+        parser.error("Camera privacy approval denied (redacted)")
     try:
         import cv2
     except ImportError:

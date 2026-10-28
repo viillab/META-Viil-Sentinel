@@ -19,7 +19,7 @@ One successful short read **is not** proof of continuous connectivity, accuracy,
 4. Run from `D:\VIIL-Sentinel\services\edge-vision`:
 
 ```powershell
-.\.venv\Scripts\python.exe -m sentinel_edge.camera_health --rtsp-env VIIL_CAMERA_RTSP --confirm-authorized-camera --frames 30
+.\.venv\Scripts\python.exe -m sentinel_edge.camera_health --rtsp-env VIIL_CAMERA_RTSP --confirm-authorized-camera --privacy-approval C:\PrivateConfig\approved-privacy.json --frames 30
 ```
 
 The only application-level printed fields are `type`, `status`, `frames_read` and `frames_requested`.

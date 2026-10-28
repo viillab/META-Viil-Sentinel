@@ -12,6 +12,9 @@ import subprocess
 import sys
 
 from sentinel_edge.camera_inputs import load_camera_registry, resolve_camera
+from sentinel_edge.privacy_gate import (
+    KEY_ENV, PrivacyGateDenied, verify_privacy_approval,
+)
 
 
 MAX_CONCURRENT_CAMERAS = 4
@@ -21,7 +24,7 @@ MAX_FLEET_FRAMES = 3600
 def run_fleet(
     *, registry_path: Path, camera_ids: list[str], model: Path,
     max_frames: int, rtsp_retries: int = 1, rtsp_allow_port: int | None = None,
-    launcher=None,
+    privacy_approval: Path | None = None, launcher=None,
 ) -> int:
     """Run up to four consented camera sources, independent session state.
 
@@ -39,13 +42,17 @@ def run_fleet(
         raise ValueError("Duplicate camera IDs are not allowed")
     if not model.is_file() or model.suffix != ".task":
         raise ValueError("Valid local MediaPipe model required")
+    if privacy_approval is None:
+        raise ValueError("Signed privacy approval is required")
     cameras = load_camera_registry(registry_path)
     selected = []
     for camera_id in camera_ids:
         if camera_id not in cameras:
             raise ValueError("Unknown camera selected (redacted)")
         camera = cameras[camera_id]
-        # Validate every RTSP endpoint BEFORE starting any children.
+        # Validate every camera authorization and RTSP endpoint before
+        # starting ANY worker, avoiding partially authorized fleet launches.
+        verify_privacy_approval(privacy_approval, camera_id=camera_id)
         resolve_camera(camera, extra_rtsp_port=rtsp_allow_port)
         selected.append(camera)
 
@@ -59,6 +66,7 @@ def run_fleet(
                 "--camera-id", camera.camera_id,
                 "--model", str(model), "--max-frames", str(max_frames),
                 "--candidate-format", "v1", "--confirm-consent",
+                "--privacy-approval", str(privacy_approval),
             ]
             if camera.kind == "rtsp":
                 args += ["--rtsp-retries", str(rtsp_retries)]
@@ -67,7 +75,8 @@ def run_fleet(
             # Restrict which camera secret each process can see.
             env = os.environ.copy()
             for key in tuple(env):
-                if key.startswith("VIIL_") and key != camera.rtsp_env:
+                if (key.startswith("VIIL_")
+                        and key not in (camera.rtsp_env, KEY_ENV)):
                     env.pop(key, None)
             child = launch(
                 args, env=env, stdin=subprocess.DEVNULL,
@@ -98,6 +107,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--model", type=Path, required=True)
     parser.add_argument("--max-frames", type=int, default=300)
     parser.add_argument("--rtsp-retries", type=int, default=1)
+    parser.add_argument("--privacy-approval", type=Path, required=True)
     parser.add_argument("--rtsp-allow-port", type=int)
     parser.add_argument("--confirm-authorized-cameras", action="store_true")
     parser.add_argument("--confirm-consent", action="store_true")
@@ -109,9 +119,10 @@ def main(argv: list[str] | None = None) -> int:
             registry_path=args.camera_registry, camera_ids=args.camera_ids,
             model=args.model, max_frames=args.max_frames,
             rtsp_retries=args.rtsp_retries, rtsp_allow_port=args.rtsp_allow_port,
+            privacy_approval=args.privacy_approval,
         )
-    except ValueError:
-        parser.error("Invalid or unsafe camera registry/fleet configuration (redacted)")
+    except (ValueError, PrivacyGateDenied):
+        parser.error("Invalid or unsafe camera/privacy configuration (redacted)")
 
 
 if __name__ == "__main__":

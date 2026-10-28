@@ -1,6 +1,11 @@
 # VIIL-Sentinel — Camera Input Layer & Security Review (Member 1)
 
-**28 October 2026 — DEMO/RESEARCH ONLY.** This does not authorize real
+**28 October 2026 — DEMO/RESEARCH ONLY.**
+
+**Legal/privacy startup gate:** All live camera entrypoints now require a
+signed `--privacy-approval` file and protected `VIIL_PRIVACY_APPROVAL_KEY`.
+See `docs/security/GLOBAL_PRIVACY_SECURITY_BASELINE.md` before running any
+camera. Consent CLI acknowledgement alone is not sufficient. This does not authorize real
 patient monitoring, medical advice or emergency dispatch. Hardware
 compatibility, field reliability and fall-detection accuracy are not yet
 proven. Hikvision is ONE example, not the transport architecture.
@@ -49,7 +54,7 @@ Choose one camera with the existing runner:
 
 ```powershell
 cd D:\VIIL-Sentinel\services\edge-vision
-.\.venv\Scripts\python.exe -m sentinel_edge.runner --source camera --camera-registry C:\PrivateConfig\cameras.json --camera-id zone-a --model ..\..\models\pose_landmarker_lite.task --candidate-format v1 --confirm-consent --rtsp-retries 1 --rtsp-session-seconds 300 --max-frames 300
+.\.venv\Scripts\python.exe -m sentinel_edge.runner --source camera --camera-registry C:\PrivateConfig\cameras.json --camera-id zone-a --privacy-approval C:\PrivateConfig\approved-privacy.json --model ..\..\models\pose_landmarker_lite.task --candidate-format v1 --confirm-consent --rtsp-retries 1 --rtsp-session-seconds 300 --max-frames 300
 ```
 
 Select a USB camera by using `--camera-id operator-usb` and omitting RTSP
@@ -61,7 +66,7 @@ Run up to FOUR selected cameras as independent processes, only for short,
 supervised tests:
 
 ```powershell
-.\.venv\Scripts\python.exe -m sentinel_edge.camera_fleet --camera-registry C:\PrivateConfig\cameras.json --camera-ids zone-a zone-b operator-usb --model ..\..\models\pose_landmarker_lite.task --max-frames 300 --rtsp-retries 1 --confirm-authorized-cameras --confirm-consent
+.\.venv\Scripts\python.exe -m sentinel_edge.camera_fleet --camera-registry C:\PrivateConfig\cameras.json --camera-ids zone-a zone-b operator-usb --privacy-approval C:\PrivateConfig\approved-privacy.json --model ..\..\models\pose_landmarker_lite.task --max-frames 300 --rtsp-retries 1 --confirm-authorized-cameras --confirm-consent
 ```
 
 Each worker uses separate capture/pose/temporal state. Fleet requires

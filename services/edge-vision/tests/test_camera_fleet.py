@@ -4,6 +4,7 @@ import json
 import pytest
 
 from sentinel_edge.camera_fleet import run_fleet
+from privacy_approval_fixture import make_policy
 
 
 def test_multiple_camera_workers_use_distinct_env_secret_scopes(tmp_path, monkeypatch):
@@ -18,6 +19,8 @@ def test_multiple_camera_workers_use_distinct_env_secret_scopes(tmp_path, monkey
     }), encoding="utf-8")
     task = tmp_path / "test.task"
     task.write_bytes(b"synthetic")
+    approval = make_policy(tmp_path, monkeypatch,
+                           camera_ids=("cam-rtsp-a", "cam-rtsp-b", "cam-usb"))
     monkeypatch.setenv("VIIL_CAM_A", "rtsp://192.168.1.11/live")
     monkeypatch.setenv("VIIL_CAM_B", "rtsp://10.2.3.4:8554/stream")
     captured = []
@@ -34,6 +37,7 @@ def test_multiple_camera_workers_use_distinct_env_secret_scopes(tmp_path, monkey
         registry_path=registry,
         camera_ids=["cam-rtsp-a", "cam-rtsp-b", "cam-usb"],
         model=task, max_frames=300, launcher=spawn,
+        privacy_approval=approval,
     ) == 0
     assert len(captured) == 3
     for args, options in captured:
@@ -61,6 +65,7 @@ def test_invalid_fleet_fails_before_starting_any_process(tmp_path, monkeypatch):
     }), encoding="utf-8")
     task = tmp_path / "test.task"
     task.write_bytes(b"synthetic")
+    approval = make_policy(tmp_path, monkeypatch, camera_ids=("safe", "remote"))
     monkeypatch.setenv("VIIL_REMOTE_CAM", "rtsp://8.8.8.8/live")
     spawned = []
     def spawn(*_a, **_kw):
@@ -68,17 +73,19 @@ def test_invalid_fleet_fails_before_starting_any_process(tmp_path, monkeypatch):
         raise AssertionError("MUST NOT spawn")
     with pytest.raises(ValueError):
         run_fleet(registry_path=registry, camera_ids=["safe", "remote"],
-                  model=task, max_frames=300, launcher=spawn)
+                  model=task, max_frames=300, launcher=spawn,
+                  privacy_approval=approval)
     with pytest.raises(ValueError):
         run_fleet(registry_path=registry, camera_ids=["safe", "safe"],
-                  model=task, max_frames=300, launcher=spawn)
+                  model=task, max_frames=300, launcher=spawn,
+                  privacy_approval=approval)
     with pytest.raises(ValueError):
         run_fleet(registry_path=registry, camera_ids=["safe"], model=task,
-                  max_frames=0, launcher=spawn)
+                  max_frames=0, launcher=spawn, privacy_approval=approval)
     assert spawned == []
 
 
-def test_fleet_returns_error_on_one_failed_worker(tmp_path):
+def test_fleet_returns_error_on_one_failed_worker(tmp_path, monkeypatch):
     registry = tmp_path / "fleet.json"
     registry.write_text(json.dumps({
         "schema_version": "viil.edge.camera_registry.v1",
@@ -89,6 +96,7 @@ def test_fleet_returns_error_on_one_failed_worker(tmp_path):
     }), encoding="utf-8")
     task = tmp_path / "test.task"
     task.write_bytes(b"synthetic")
+    approval = make_policy(tmp_path, monkeypatch, camera_ids=("a", "b"))
     results = iter([0, 2])
 
     class Child:
@@ -100,5 +108,5 @@ def test_fleet_returns_error_on_one_failed_worker(tmp_path):
         return Child(next(results))
     assert run_fleet(
         registry_path=registry, camera_ids=["a", "b"], model=task,
-        max_frames=12, launcher=spawn,
+        max_frames=12, launcher=spawn, privacy_approval=approval,
     ) == 2
