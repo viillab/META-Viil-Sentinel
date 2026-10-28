@@ -83,6 +83,20 @@ reviewed labels: the freeze path must correctly reject them until legitimate
 human review is completed. Previously reported prototype scores are *not*
 evidence that this approval step has been passed.
 
+## Independently trained causal 1.5-second research baseline (Member 1)
+
+The [1.5s real-video training and abstention handoff](docs/CAUSAL_1500MS_TRAINED_RESEARCH_HANDOFF_2026-10-28.md)
+adds a **separate, genuinely trained but research-only** 30D NumPy Linear
+classifier using 30 uniform torso samples from the last 1,500ms of a
+source-hash-verified original clip. All training is in-memory; the 8s V1
+shadow weights and original production heuristic are NOT reused or changed.
+The source-pinned CAUCAFall run trained from 31 pose/context-readable
+clips among 40 staged publisher-labeled videos. The repeatedly exposed
+TEST subset correctly labeled just **1 of 3 readable staged-Fall clips**
+(2 of 4 ADLs readable and negative); this is NOT independent real-world
+accuracy or an event-onset latency result. No trained short-window model
+artifact, camera alert, medical output or emergency notification is enabled.
+
 ## Versioned private research model weights (Member 1)
 
 The [version-2 linear research artifact contract](docs/VERSIONED_LINEAR_RESEARCH_ARTIFACT_2026-10-28.md)
