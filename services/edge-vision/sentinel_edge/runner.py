@@ -9,7 +9,7 @@ from dataclasses import asdict, dataclass
 import json
 from pathlib import Path
 import sys
-from time import monotonic
+from time import monotonic, perf_counter
 from typing import Any, Callable, TextIO
 
 from sentinel_edge.camera_health import open_rtsp_capture, validate_rtsp_env
@@ -25,6 +25,7 @@ from sentinel_edge.pose_rejection_diagnostics import pose_adapter_reason
 from sentinel_edge.multipose_spatial_diagnostics import multipose_spatial_category
 from sentinel_edge.temporal_pose_association import OfflineAssociationObserver
 from sentinel_edge.frame_resize import resize_for_inference, validate_max_side
+from sentinel_edge.live_profile import LiveCycleProfiler
 from sentinel_edge.pose_traces import frame_to_trace_record
 
 
@@ -43,6 +44,8 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--source", required=True, help="Camera integer (e.g. 0) or authorized video")
     parser.add_argument("--model", required=True, type=Path, help="Local MediaPipe pose .task model")
     parser.add_argument("--rtsp-env", metavar="ENV_NAME", help="Read authorized RTSP URL from an environment variable")
+    parser.add_argument("--profile-rtsp", action="store_true",
+                        help="Opt-in privacy-minimal local RTSP cycle/RSS report")
     parser.add_argument("--rtsp-retries", type=int, default=0,
                         help="Explicit opt-in: retry RTSP interruption at most 3 times")
     parser.add_argument("--rtsp-retry-delay-ms", type=int, default=1000,
@@ -75,6 +78,8 @@ def parse_args(argv: list[str] | None = None):
         parser.error("--rtsp-retries must be 0..3")
     if not 250 <= args.rtsp_retry_delay_ms <= 5000:
         parser.error("--rtsp-retry-delay-ms must be 250..5000")
+    if args.profile_rtsp and (args.source != "rtsp" or not args.rtsp_retries):
+        parser.error("--profile-rtsp requires RTSP retry mode")
     if args.rtsp_retries and args.source != "rtsp":
         parser.error("--rtsp-retries is only supported for RTSP sources")
     if args.rtsp_retries and (
@@ -127,6 +132,7 @@ def process_capture(
     display: bool = False, trace_file: TextIO | None = None,
     output: TextIO | None = None, clock: Callable[[], float] = monotonic,
     on_frame: Callable[[PoseFrame], None] | None = None,
+    on_frame_cycle: Callable[[float, bool, bool], None] | None = None,
     pose_reason_consumer: Callable[[str], None] | None = None,
     multipose_category_consumer: Callable[[str], None] | None = None,
     association_category_consumer: Callable[[str], None] | None = None,
@@ -159,6 +165,7 @@ def process_capture(
         fps = 30.0
 
     while True:
+        cycle_start = perf_counter() if on_frame_cycle is not None else None
         try:
             success, bgr = cap.read()
         except Exception:
@@ -206,6 +213,8 @@ def process_capture(
             output.flush()
             candidate_count += 1
 
+        if on_frame_cycle is not None and cycle_start is not None:
+            on_frame_cycle(perf_counter() - cycle_start, bool(landmarks), event is not None)
         frame_number += 1
         if display:
             cv2.imshow("VIIL Sentinel — local pose video (no recording)", bgr)
@@ -222,6 +231,7 @@ def _run_rtsp_retry_mode(args, cv2: Any, mp: Any, source: str) -> int:
     model_sha = _file_sha256(args.model)
 
     def run_one_epoch(epoch_source_id: str) -> None:
+        profiler = LiveCycleProfiler() if args.profile_rtsp else None
         with ExitStack() as stack:
             try:
                 cap = open_rtsp_capture(cv2, source)
@@ -257,12 +267,24 @@ def _run_rtsp_retry_mode(args, cv2: Any, mp: Any, source: str) -> int:
                 ).to_dict()
 
             # process_capture creates a new TemporalFallDetector each invocation.
-            stats = process_capture(
-                cap, cv2=cv2, mp=mp, landmarker=landmarker,
-                webcam=True, source_id=epoch_source_id,
-                max_frames=args.max_frames, event_encoder=encode,
-                fail_on_loss=True,
-            )
+            try:
+                stats = process_capture(
+                    cap, cv2=cv2, mp=mp, landmarker=landmarker,
+                    webcam=True, source_id=epoch_source_id,
+                    max_frames=args.max_frames, event_encoder=encode,
+                    fail_on_loss=True,
+                    on_frame_cycle=profiler.observe if profiler is not None else None,
+                )
+            except CameraStreamInterrupted:
+                if profiler is not None:
+                    print("RESEARCH_RTSP_PROFILE " + json.dumps(
+                        profiler.report(interrupted=True), sort_keys=True,
+                    ), file=sys.stderr)
+                raise
+            if profiler is not None:
+                print("RESEARCH_RTSP_PROFILE " + json.dumps(
+                    profiler.report(interrupted=False), sort_keys=True,
+                ), file=sys.stderr)
             print(
                 f"RTSP session ended at requested frame bound: "
                 f"{stats.frames_processed} frames, {stats.candidate_events} "

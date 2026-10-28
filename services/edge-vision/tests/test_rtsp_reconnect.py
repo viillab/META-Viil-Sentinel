@@ -1,4 +1,5 @@
 """Offline reconnect tests — no RTSP connections, cameras, images or secrets."""
+import json
 from pathlib import Path
 from types import SimpleNamespace as NS
 
@@ -71,6 +72,7 @@ def test_non_capture_failure_is_never_retried():
     ["--rtsp-retries", "1", "--candidate-format", "legacy"],
     ["--rtsp-retries", "1", "--display"],
     ["--rtsp-retries", "1", "--early-motion-probe"],
+    ["--profile-rtsp"],
 ])
 def test_retry_flags_fail_closed(tmp_path: Path, extra):
     model = tmp_path / "pose.task"
@@ -92,7 +94,7 @@ def test_retry_flags_rejected_for_local_webcam(tmp_path: Path):
 
 
 def test_retry_mode_creates_fresh_native_tasks_releases_capture_and_renames_source(
-    tmp_path: Path, monkeypatch,
+    tmp_path: Path, monkeypatch, capsys,
 ):
     class FakeCap:
         def __init__(self, frames):
@@ -152,7 +154,7 @@ def test_retry_mode_creates_fresh_native_tasks_releases_capture_and_renames_sour
         "--model", str(model), "--source-id", "camera-test",
         "--candidate-format", "v1", "--confirm-consent",
         "--rtsp-retries", "1", "--rtsp-retry-delay-ms", "250",
-        "--max-frames", "3",
+        "--max-frames", "3", "--profile-rtsp",
     ])
     caps = [FakeCap(2), FakeCap(3)]
     monkeypatch.setattr(runner, "open_rtsp_capture", lambda *_: caps.pop(0))
@@ -171,3 +173,15 @@ def test_retry_mode_creates_fresh_native_tasks_releases_capture_and_renames_sour
     assert all(s.startswith("camera-test-s") for s in source_names)
     assert tasks_created[0].timestamps[0] == 0
     assert tasks_created[1].timestamps[0] == 0
+    stderr = capsys.readouterr().err
+    profile_lines = [line.removeprefix("RESEARCH_RTSP_PROFILE ")
+                     for line in stderr.splitlines()
+                     if line.startswith("RESEARCH_RTSP_PROFILE ")]
+    profiles = [json.loads(line) for line in profile_lines]
+    assert len(profiles) == 2
+    assert profiles[0]["stream_interrupted"] is True
+    assert profiles[0]["frames_processed"] == 2
+    assert profiles[1]["stream_interrupted"] is False
+    assert profiles[1]["frames_processed"] == 3
+    assert all("camera-test" not in line and "fake.local" not in line
+               for line in profile_lines)
