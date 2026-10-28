@@ -84,6 +84,20 @@ storage and authenticated review. The 0..1 Edge detector_score is
 UNCALIBRATED HEURISTIC, not a probability of true fall. Clearly mark DEMO
 data; do not offer emergency actions or use shadow counters as events.
 
+## Member 1 — competition judge walkthrough and submission gate
+
+The default Dashboard view is now **Judge walkthrough**: five synthetic
+scenarios, six explicit Edge→privacy→Meta→policy→caregiver stages, no network
+and no fabricated Meta provider response. The actual Edge candidate shown
+comes from the canonical synthetic fixture; downstream orchestration is a
+clearly marked future contract.
+
+Run `python -m sentinel_edge.submission_readiness` inside
+`services/edge-vision` for a read-only Member 1 artifact acceptance
+report. The report lists all non-demonstrated deployment blockers and
+makes **no** real-world accuracy/Meta/caregiver readiness claims.
+Detailed runbook: [Member 1 judge demo](../../docs/submission/MEMBER1_JUDGE_DEMO_RUNBOOK.md).
+
 ## Member 1 — accessible caregiver UI (latest)
 
 The new **Caregiver inbox** tab renders only metadata from an authenticated

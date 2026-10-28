@@ -12,7 +12,7 @@ to emit aggregate research counts only, NOT live fall events.
 
 ## Phase 1 Edge AI Test Lab
 
-**Integration Center** is the current default view. **AI Detect Test Lab**
+**Judge walkthrough** is the current default view (offline synthetic story). **Integration Center** remains available for optional authenticated backend metadata. **AI Detect Test Lab**
 remains available as a separate offline test tab. It accepts bounded local
 metadata-only Edge candidate JSONL, with a synthetic Fall sample and empty
 Sitting sample, and does not poll the local Backend while that view is active.
