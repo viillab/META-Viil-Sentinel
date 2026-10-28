@@ -17,7 +17,13 @@ and privacy team BEFORE real collection.** If in doubt, block deployment.
   face recognition, model-training reuse, cloud sending or dispatch.
 - ALL `sentinel_edge.runner` LIVE camera paths (`--source rtsp`,
   `--source usb:0`, numerical webcam and `--source camera`) now require
-  `--privacy-approval` with a verifiable signed authorization. Local
+  `--privacy-approval` with a verifiable signed authorization. A live
+  session re-verifies the approval on a short **1-second nominal interval**
+  before/after capture reads and before emitting candidate events; removing
+  or changing the file, rotating the verification key or reaching expiry
+  stops subsequent processing (nonzero exit), without retrying as a camera
+  outage. This is bounded polling, NOT immediate distributed revocation;
+  a blocked native decoder or model call may delay the check. Local
   prerecorded file replays keep their existing research/privacy rules.
 - RTSP camera preflight (`sentinel_edge.camera_health`) and the
   `sentinel_edge.camera_fleet` launcher also require a signed approval.
@@ -30,6 +36,14 @@ and privacy team BEFORE real collection.** If in doubt, block deployment.
 - The policy requires local-only processing, zero raw-frame retention,
   no cross-border/cloud export, no face identification, no reuse for
   training, no automatic emergency dispatch, and human review.
+  All live cameras **must emit only versioned privacy-minimal v1 candidate
+  metadata with explicit consent acknowledgement**, and may not enable
+  `--trace-output`, `--shadow-model`, `--early-motion-probe` or
+  `--display` in this approved mode. Sensitive derived-pose traces and
+  model research remain available solely for separately approved offline
+  video workflows; even there, these data can be personal information.
+  The v1 envelope still contains source IDs/time/metadata; these are
+  not guaranteed anonymous and require privacy controls downstream.
 - HMAC-SHA256 protects the approval against undetected edits, provided
   the `VIIL_PRIVACY_APPROVAL_KEY` stays secret. **It does NOT authenticate
   the legal competence/identity of the reviewer or prove the stated

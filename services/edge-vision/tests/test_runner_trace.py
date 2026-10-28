@@ -7,7 +7,7 @@ def test_opt_in_pose_trace_export_required(tmp_path):
     model = tmp_path / "pose.task"
     model.write_bytes(b"not an actual model")
     trace = tmp_path / "local.pose.jsonl"
-    base = ["--source", "0", "--model", str(model)]
+    base = ["--source", "consented-offline.mp4", "--model", str(model)]
     with pytest.raises(SystemExit):
         parse_args(base + ["--trace-output", str(trace)])
     with pytest.raises(SystemExit):

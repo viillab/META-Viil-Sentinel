@@ -2,8 +2,13 @@
 
 **28 October 2026 — DEMO/RESEARCH ONLY.**
 
-**Legal/privacy startup gate:** All live camera entrypoints now require a
+**Legal/privacy startup and runtime gate:** All live camera entrypoints require a
 signed `--privacy-approval` file and protected `VIIL_PRIVACY_APPROVAL_KEY`.
+Live workers recheck policy state periodically (nominally every second)
+and stop on expiry/revocation or invalid signature. All live sources
+require `--candidate-format v1 --confirm-consent` and disallow trace,
+shadow research, early motion probes and local display in this approved
+prototype. This check is not instantaneous if a native read blocks.
 See `docs/security/GLOBAL_PRIVACY_SECURITY_BASELINE.md` before running any
 camera. Consent CLI acknowledgement alone is not sufficient. This does not authorize real
 patient monitoring, medical advice or emergency dispatch. Hardware
@@ -66,12 +71,16 @@ Run up to FOUR selected cameras as independent processes, only for short,
 supervised tests:
 
 ```powershell
-.\.venv\Scripts\python.exe -m sentinel_edge.camera_fleet --camera-registry C:\PrivateConfig\cameras.json --camera-ids zone-a zone-b operator-usb --privacy-approval C:\PrivateConfig\approved-privacy.json --model ..\..\models\pose_landmarker_lite.task --max-frames 300 --rtsp-retries 1 --confirm-authorized-cameras --confirm-consent
+.\.venv\Scripts\python.exe -m sentinel_edge.camera_fleet --camera-registry C:\PrivateConfig\cameras.json --camera-ids zone-a zone-b operator-usb --privacy-approval C:\PrivateConfig\approved-privacy.json --model ..\..\models\pose_landmarker_lite.task --max-frames 300 --timeout-seconds 900 --rtsp-retries 1 --confirm-authorized-cameras --confirm-consent
 ```
 
 Each worker uses separate capture/pose/temporal state. Fleet requires
-finite 1..3600 frames per worker, fails overall if ANY worker exits nonzero,
-and does not send the RTSP URL in command-line arguments. Worker
+finite 1..3600 frames per worker and a hard fleet wall-clock limit of
+1..3600 seconds (default 900 seconds). If ANY worker exits nonzero or
+the fleet time budget expires, the supervisor stops outstanding workers and
+returns a failure. This is bounded local supervision, not a high-availability
+or per-camera service-level guarantee. It does not send RTSP URLs in
+command-line arguments. Worker
 environments omit other `VIIL_*` settings to reduce cross-camera secret
 exposure. Native decoder stderr is suppressed for fleet workers; per-camera
 logging is not yet a secure audit-log service. Child stdout is written to

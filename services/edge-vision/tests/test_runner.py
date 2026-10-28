@@ -17,6 +17,7 @@ def test_requires_model_asset(tmp_path: Path):
 def test_parser_accepts_existing_model_without_loading_it(tmp_path: Path):
     model = tmp_path / "model.task"
     model.write_bytes(b"placeholder for parser test only")
-    args = parse_args(["--source", "0", "--model", str(model), "--max-frames", "12"])
+    args = parse_args(["--source", "0", "--model", str(model), "--max-frames", "12",
+                       "--candidate-format", "v1", "--confirm-consent"])
     assert args.max_frames == 12
     assert args.source == "0"

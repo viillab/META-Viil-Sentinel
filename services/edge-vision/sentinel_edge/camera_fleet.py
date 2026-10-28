@@ -12,6 +12,7 @@ import subprocess
 import sys
 
 from sentinel_edge.camera_inputs import load_camera_registry, resolve_camera
+from sentinel_edge.fleet_supervisor import stop_workers, supervise_camera_workers
 from sentinel_edge.privacy_gate import (
     KEY_ENV, PrivacyGateDenied, verify_privacy_approval,
 )
@@ -25,6 +26,7 @@ def run_fleet(
     *, registry_path: Path, camera_ids: list[str], model: Path,
     max_frames: int, rtsp_retries: int = 1, rtsp_allow_port: int | None = None,
     privacy_approval: Path | None = None, launcher=None,
+    timeout_seconds: int = 900,
 ) -> int:
     """Run up to four consented camera sources, independent session state.
 
@@ -32,6 +34,8 @@ def run_fleet(
     process console output is for local demo only; it is NOT a reliable
     transactional ingestion channel. Child stderr (native libs) is suppressed.
     """
+    if type(timeout_seconds) is not int or not 1 <= timeout_seconds <= 3600:
+        raise ValueError("Fleet timeout must be 1..3600s")
     if not 1 <= max_frames <= MAX_FLEET_FRAMES:
         raise ValueError("Fleet demo requires a bounded 1..3600 frame budget")
     if not 0 <= rtsp_retries <= 3:
@@ -83,20 +87,9 @@ def run_fleet(
                 stdout=None, stderr=subprocess.DEVNULL, shell=False,
             )
             children.append(child)
-        failures = 0
-        for child in children:
-            if child.wait() != 0:
-                failures += 1
-        return 2 if failures else 0
+        return supervise_camera_workers(children, timeout_seconds=timeout_seconds)
     except (OSError, KeyboardInterrupt):
-        for child in children:
-            if child.poll() is None:
-                child.terminate()
-        for child in children:
-            try:
-                child.wait(timeout=5)
-            except (OSError, subprocess.TimeoutExpired):
-                child.kill()
+        stop_workers(children)
         return 2
 
 
@@ -106,6 +99,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--camera-ids", nargs="+", required=True)
     parser.add_argument("--model", type=Path, required=True)
     parser.add_argument("--max-frames", type=int, default=300)
+    parser.add_argument("--timeout-seconds", type=int, default=900,
+                        help="Hard wall-clock deadline for the full camera fleet, 1..3600s")
     parser.add_argument("--rtsp-retries", type=int, default=1)
     parser.add_argument("--privacy-approval", type=Path, required=True)
     parser.add_argument("--rtsp-allow-port", type=int)
@@ -120,6 +115,7 @@ def main(argv: list[str] | None = None) -> int:
             model=args.model, max_frames=args.max_frames,
             rtsp_retries=args.rtsp_retries, rtsp_allow_port=args.rtsp_allow_port,
             privacy_approval=args.privacy_approval,
+            timeout_seconds=args.timeout_seconds,
         )
     except (ValueError, PrivacyGateDenied):
         parser.error("Invalid or unsafe camera/privacy configuration (redacted)")

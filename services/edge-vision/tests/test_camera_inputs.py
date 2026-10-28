@@ -147,7 +147,8 @@ def test_generic_camera_cli_preserves_source_isolation(tmp_path, monkeypatch):
     # Patch runtime imports so the test never activates an actual camera.
     monkeypatch.setenv("VIIL_LAB_RTSP", "rtsp://10.3.2.1:8554/live")
     captured = {}
-    def fake_rtsp(args, cv2, mp, source, *, source_id=None):
+    def fake_rtsp(args, cv2, mp, source, *, source_id=None, privacy_check=None):
+        assert callable(privacy_check)
         captured.update(url=source, id=source_id)
         return 0
     monkeypatch.setattr(runner, "_run_rtsp_retry_mode", fake_rtsp)
