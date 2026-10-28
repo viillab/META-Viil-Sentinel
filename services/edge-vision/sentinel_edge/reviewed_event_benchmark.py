@@ -285,7 +285,7 @@ def evaluate_reviewed_events(inventory: dict, reviews: dict,
 
 
 def collect_original_heuristic_events(
-    inventory: dict, pose_task: Path, *, collector=None,
+    inventory: dict, pose_task: Path, *, collector=None, metadata_reader=None,
 ) -> dict:
     """Actually decode all source clips using unchanged production heuristic.
 
@@ -293,15 +293,20 @@ def collect_original_heuristic_events(
     """
     from sentinel_edge.contracts import PoseFeatures
     from sentinel_edge.video_benchmark import collect_video_frames
-    from sentinel_edge.caucafall_curator import _sha256_file
+    from sentinel_edge.caucafall_curator import _sha256_file, _video_metadata
     if (pose_task.suffix.lower() != ".task" or not pose_task.is_file()
-            or pose_task.stat().st_size < 1):
+            or not 0 < pose_task.stat().st_size <= 60 * 1024 * 1024):
         raise ValueError("Official local nonempty pose task required")
     extractor = collector or collect_video_frames
+    reader = metadata_reader or _video_metadata
     results = []
     for cid, item in inventory.items():
         if _sha256_file(item["path"]) != item["media_sha256"]:
             raise ValueError("Media mutated since preflight")
+        expected, fps = reader(item["path"])
+        if (type(expected) is not int or not 1 <= expected <= 6000
+                or type(fps) not in (int, float) or not 1 <= fps <= 120):
+            raise ValueError("Invalid original video frame count or FPS")
         event_times = []
         counts = {"frames": 0, "poses": 0}
         def on_frame(frame):
@@ -312,12 +317,15 @@ def collect_original_heuristic_events(
                 raise ValueError("Invalid candidate timestamp")
             event_times.append(event.timestamp_ms)
         frames, stats = extractor(
-            item["path"], clip_id=cid, model=pose_task, max_frames=6000,
+            item["path"], clip_id=cid, model=pose_task, max_frames=expected,
             frame_consumer=on_frame, event_consumer=on_event,
         )
-        if (frames or counts["frames"] != stats["frames_processed"]
-                or len(event_times) != stats["candidate_events"]):
-            raise ValueError("Streaming original heuristic counts diverged")
+        if (frames or type(stats.get("frames_processed")) is not int
+                or type(stats.get("candidate_events")) is not int
+                or counts["frames"] != expected
+                or stats["frames_processed"] != expected
+                or stats["candidate_events"] != len(event_times)):
+            raise ValueError("Incomplete video decode or original heuristic counts diverged")
         _timestamps(event_times, item["duration_ms"], name="original candidate",
                     max_count=MAX_CANDIDATES)
         results.append({
@@ -357,7 +365,7 @@ def collect_early_motion_candidate_events(
             raise ValueError("Media mutated since source preflight")
         expected, fps = reader(item["path"])
         if (type(expected) is not int or not 1 <= expected <= 6000
-                or not 1 <= fps <= 120):
+                or type(fps) not in (int, float) or not 1 <= fps <= 120):
             raise ValueError("Invalid original video frame count or FPS")
         private_times: list[int] = []
         cue = CausalMotionProbe(private_proposal_consumer=private_times.append)
