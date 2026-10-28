@@ -83,6 +83,16 @@ reviewed labels: the freeze path must correctly reject them until legitimate
 human review is completed. Previously reported prototype scores are *not*
 evidence that this approval step has been passed.
 
+## V1/V2 train-to-inference normalization parity (Member 1)
+
+The [scaler/inference consistency handoff](docs/TEMPORAL_V1_V2_INFERENCE_SCALER_PARITY_2026-10-28.md)
+repairs the research NumPy Linear V1/V2 scoring path so both fitting and
+prediction use **train-only Z-score normalization clamped to [-12,+12]**.
+Malformed/nonfinite descriptors now fail closed rather than producing
+unbounded or NaN research probabilities. Existing weights and the
+production heuristic/alert path are unchanged; this is a numerical
+correctness repair, **not evidence of higher real-world Fall accuracy**.
+
 ## Lightweight V1/V2 model-quality comparison (Member 1 handoff)
 
 The [V2 implementation and next-developer handoff](docs/MEMBER1_MODEL_QUALITY_V2_HANDOFF_2026-10-27.md)

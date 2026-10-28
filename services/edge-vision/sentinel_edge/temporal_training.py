@@ -90,6 +90,33 @@ def pool_temporal_window(features: list[list[float]]):
     return np.asarray(rows, dtype=np.float64)
 
 
+def _normalize_for_fit_and_inference(matrix, mean, scale):
+    """Train-only z-score with identical bounded inference for V1/V2.
+
+    Accept one descriptor or a nonempty batch. Fail closed on nonfinite
+    features/parameters so they never become a model score.
+    """
+    np = _numpy()
+    x = np.asarray(matrix, dtype=np.float64)
+    center = np.asarray(mean, dtype=np.float64)
+    spread = np.asarray(scale, dtype=np.float64)
+    if (center.ndim != 1 or center.size == 0
+            or spread.shape != center.shape
+            or not np.isfinite(center).all()
+            or not np.isfinite(spread).all() or np.any(spread <= 0)):
+        raise ValueError("Invalid model normalization parameters")
+    if (x.ndim not in (1, 2) or x.size == 0
+            or x.shape[-1] != center.size):
+        raise ValueError("Invalid temporal feature shape")
+    if not np.isfinite(x).all():
+        raise ValueError("Temporal features must be finite")
+    with np.errstate(over="ignore", invalid="ignore"):
+        z = (x - center) / spread
+    if not np.isfinite(z).all():
+        raise ValueError("Normalized temporal features must be finite")
+    return np.clip(z, -12, 12)
+
+
 @dataclass
 class TemporalLinearModel:
     """Small trained model only in memory; no automatic persistence."""
@@ -101,8 +128,8 @@ class TemporalLinearModel:
 
     def predict_probability(self, matrix):
         np = _numpy()
-        x = np.asarray(matrix, dtype=np.float64)
-        z = ((x - self.mean) / self.scale) @ self.weights + self.bias
+        x = _normalize_for_fit_and_inference(matrix, self.mean, self.scale)
+        z = x @ self.weights + self.bias
         return 1 / (1 + np.exp(-np.clip(z, -45, 45)))
 
     @property
@@ -150,7 +177,7 @@ def train_and_evaluate(manifest: dict, bundle: dict) -> tuple[TemporalLinearMode
     mean = train_x.mean(axis=0)
     scale = train_x.std(axis=0)
     scale = np.where(scale < 1e-6, 1.0, scale)
-    x = np.clip((train_x - mean) / scale, -12, 12)
+    x = _normalize_for_fit_and_inference(train_x, mean, scale)
     w = np.zeros(x.shape[1], dtype=np.float64)
     bias = 0.0
     # Equal total class contribution; no test/val statistics involved.
@@ -183,6 +210,7 @@ def train_and_evaluate(manifest: dict, bundle: dict) -> tuple[TemporalLinearMode
         "stage": "research_supervised_baseline",
         "architecture": "pooled_temporal_logistic_v1_NOT_TCN_OR_GRU",
         "real_world_accuracy_established": False,
+        "inference_preprocessing": "train_only_zscore_clamp_minus12_plus12",
         "trained_on": "declared train subjects only",
         "threshold_selected_on": "declared validation subjects only",
         "test_subjects_excluded_from_fitting": True,
