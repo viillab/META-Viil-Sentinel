@@ -13,6 +13,9 @@ from time import monotonic
 from typing import Any, Callable, TextIO
 
 from sentinel_edge.camera_health import open_rtsp_capture, validate_rtsp_env
+from sentinel_edge.rtsp_reconnect import (
+    CameraStreamInterrupted, run_bounded_sessions,
+)
 from sentinel_edge.contracts import FallCandidateEvent, PoseFrame
 from sentinel_edge.handoff import SOURCE_ID_PATTERN, to_envelope
 from sentinel_edge.model_smoke import _file_sha256
@@ -24,10 +27,6 @@ from sentinel_edge.temporal_pose_association import OfflineAssociationObserver
 from sentinel_edge.frame_resize import resize_for_inference, validate_max_side
 from sentinel_edge.pose_traces import frame_to_trace_record
 
-
-
-class CameraStreamInterrupted(RuntimeError):
-    """RTSP read failed; neither the absence of events nor a clean EOF."""
 
 
 @dataclass(frozen=True)
@@ -44,6 +43,10 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--source", required=True, help="Camera integer (e.g. 0) or authorized video")
     parser.add_argument("--model", required=True, type=Path, help="Local MediaPipe pose .task model")
     parser.add_argument("--rtsp-env", metavar="ENV_NAME", help="Read authorized RTSP URL from an environment variable")
+    parser.add_argument("--rtsp-retries", type=int, default=0,
+                        help="Explicit opt-in: retry RTSP interruption at most 3 times")
+    parser.add_argument("--rtsp-retry-delay-ms", type=int, default=1000,
+                        help="Delay between RTSP reconnects, 250..5000 ms")
     parser.add_argument("--source-id", default="staged-camera-01")
     parser.add_argument("--candidate-format", choices=["legacy", "v1"], default="legacy",
                         help="Use versioned privacy-minimal Member2 handoff envelopes")
@@ -68,6 +71,19 @@ def parse_args(argv: list[str] | None = None):
         parser.error("RTSP requires --rtsp-env; never pass credentials as --source")
     if "://" in args.source or "@" in args.source:
         parser.error("Network URLs and credentials cannot be passed as --source")
+    if not 0 <= args.rtsp_retries <= 3:
+        parser.error("--rtsp-retries must be 0..3")
+    if not 250 <= args.rtsp_retry_delay_ms <= 5000:
+        parser.error("--rtsp-retry-delay-ms must be 250..5000")
+    if args.rtsp_retries and args.source != "rtsp":
+        parser.error("--rtsp-retries is only supported for RTSP sources")
+    if args.rtsp_retries and (
+        args.shadow_model is not None or args.early_motion_probe
+        or args.trace_output is not None or args.display
+    ):
+        parser.error("RTSP retry mode disallows research shadow, trace and display")
+    if args.rtsp_retries and args.candidate_format != "v1":
+        parser.error("RTSP retry mode requires --candidate-format v1")
     if args.max_frames < 0:
         parser.error("--max-frames must be >= 0")
     if not args.model.is_file():
@@ -201,6 +217,76 @@ def process_capture(
     return StreamStats(frame_number, invalid_poses, candidate_count)
 
 
+def _run_rtsp_retry_mode(args, cv2: Any, mp: Any, source: str) -> int:
+    """Run isolated RTSP epochs. Never reuse native tracker or temporal state."""
+    model_sha = _file_sha256(args.model)
+
+    def run_one_epoch(epoch_source_id: str) -> None:
+        with ExitStack() as stack:
+            try:
+                cap = open_rtsp_capture(cv2, source)
+            except Exception:
+                raise CameraStreamInterrupted("Camera open failed") from None
+            if cap is None:
+                raise CameraStreamInterrupted("Camera unavailable")
+            stack.callback(cap.release)
+            try:
+                opened = cap.isOpened()
+            except Exception:
+                raise CameraStreamInterrupted("Camera open check failed") from None
+            if not opened:
+                raise CameraStreamInterrupted("Camera unavailable")
+
+            # A fresh MediaPipe task is mandatory: native tracking state can survive
+            # source changes even when our Python detector has been reset.
+            options = mp.tasks.vision.PoseLandmarkerOptions(
+                base_options=mp.tasks.BaseOptions(
+                    model_asset_path=str(args.model.resolve())
+                ),
+                running_mode=mp.tasks.vision.RunningMode.VIDEO,
+                num_poses=2,
+            )
+            landmarker = stack.enter_context(
+                mp.tasks.vision.PoseLandmarker.create_from_options(options)
+            )
+
+            def encode(event: FallCandidateEvent) -> dict:
+                return to_envelope(
+                    event, input_provenance="authorized_local_camera",
+                    model_sha256=model_sha,
+                ).to_dict()
+
+            # process_capture creates a new TemporalFallDetector each invocation.
+            stats = process_capture(
+                cap, cv2=cv2, mp=mp, landmarker=landmarker,
+                webcam=True, source_id=epoch_source_id,
+                max_frames=args.max_frames, event_encoder=encode,
+                fail_on_loss=True,
+            )
+            print(
+                f"RTSP session ended at requested frame bound: "
+                f"{stats.frames_processed} frames, {stats.candidate_events} "
+                "unconfirmed candidates.",
+                file=sys.stderr,
+            )
+
+    try:
+        outcome = run_bounded_sessions(
+            run_one_epoch,
+            source_id=args.source_id,
+            retries=args.rtsp_retries,
+            delay_seconds=args.rtsp_retry_delay_ms / 1000,
+            status=lambda message: print(message, file=sys.stderr),
+        )
+    except KeyboardInterrupt:
+        print("RTSP stopped by operator; no monitoring.", file=sys.stderr)
+        return 130
+    if not outcome.completed:
+        print("RTSP retries exhausted; camera unavailable, no monitoring.", file=sys.stderr)
+        return 2
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
@@ -221,6 +307,9 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit("Invalid or missing RTSP environment setting (URL redacted)") from None
     elif not webcam and not Path(source).is_file():
         raise SystemExit(f"Video file not found: {source}")
+
+    if is_rtsp and args.rtsp_retries:
+        return _run_rtsp_retry_mode(args, cv2, mp, source)
 
     if args.shadow_model is not None:
         # Keep training-window imports out of the camera runner module to

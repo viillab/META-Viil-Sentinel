@@ -29,8 +29,33 @@ cd D:\VIIL-Sentinel\services\edge-vision
 
 Do not enable `--display` in a public or screen-shared session.
 stdout contains versioned **unconfirmed candidate metadata** only.
-Normal offline lab import remains manual. RTSP network/device failures end the
-local run with a nonzero status on interruption; there is **no automatic reconnection or continuous camera health monitor** yet. RTSP uses FFmpeg with 8s open and 4s per-read timeouts where supported. A manual restart creates a new detector/model session. Never use stream silence as evidence that nobody fell.
+Normal offline lab import remains manual. Without opt-in retries, RTSP
+failure ends with nonzero status. With `--rtsp-retries 2` the program can make
+**at most 3 attempts total** (initial + 2 retries) with 1000 ms delays, and
+returns exit code 2 after exhaustion. The hard limit is 3 retries, or 4 attempts.
+`--rtsp-retry-delay-ms` must be 250..5000. This does NOT provide a
+continuously monitored service, camera-health notifications or guaranteed
+availability. RTSP uses FFmpeg with an 8s open and 4s read timeout (support
+must be verified with the target OpenCV build).
+
+Each attempted reconnection tears down the old camera and native MediaPipe
+PoseLandmarker; Python temporal history is never reused. The v1 `source_id`
+gains a unique session suffix (e.g. `hikvision-test-01-s2-1234abcd`) so
+source-relative timestamps do not go backwards within one source. The
+`--max-frames` limit is **per successful session attempt**, not a global
+limit across multiple attempts. No video/pose is uploaded. An interrupted
+session may have emitted **unconfirmed** candidates before failure, which
+does not mean live monitoring is healthy. Retry mode disallows local
+display, pose trace export and experimental shadow model to prevent
+unreviewed state and private traces from spanning sessions.
+
+**Optional authorized, staged test (not a production safety deployment):**
+```powershell
+.\.venv\Scripts\python.exe -m sentinel_edge.runner --source rtsp --rtsp-env VIIL_CAMERA_RTSP --model ..\..\models\pose_landmarker_lite.task --source-id hikvision-test-01 --candidate-format v1 --confirm-consent --rtsp-retries 2 --rtsp-retry-delay-ms 1000 --max-frames 300
+```
+Only use a private console; native FFmpeg/OpenCV error logs are not
+guaranteed to redact hostnames or camera credentials. Never paste them
+into public bug reports. Never interpret stream silence as proof of safety.
 Even with `--confirm-consent`, this flag is an operator attestation, **not
 independent verification of people's consent**. Camera access and site permission
 must be checked before operation.
