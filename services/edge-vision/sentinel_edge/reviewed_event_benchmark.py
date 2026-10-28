@@ -22,6 +22,10 @@ EARLY_TOLERANCE_MS = 250
 MATCH_AFTER_MS = 2_000
 MAX_CANDIDATES = 1000
 MAX_VIDEO_MS = 90_000
+EARLY_MOTION_RESEARCH_TAG = "causal_early_motion_probe_v1_untrained"
+REVIEWABLE_DETECTORS = frozenset({
+    "original_temporal_heuristic_v1", EARLY_MOTION_RESEARCH_TAG,
+})
 
 
 def source_inventory(root: Path) -> dict:
@@ -204,7 +208,7 @@ def evaluate_reviewed_events(inventory: dict, reviews: dict,
             or candidate_manifest["version"] != 1
             or candidate_manifest["dataset"] != DATASET
             or candidate_manifest["source_commit"] != PINNED_COMMIT
-            or candidate_manifest["detector"] != "original_temporal_heuristic_v1"
+            or candidate_manifest["detector"] not in REVIEWABLE_DETECTORS
             or not isinstance(candidate_manifest["clips"], list)
             or len(candidate_manifest["clips"]) != len(inventory)):
         raise ValueError("Expected original detector candidate evidence for every clip")
@@ -273,6 +277,9 @@ def evaluate_reviewed_events(inventory: dict, reviews: dict,
         "not_an_independent_unseen_subject_test": True,
         "not_clinically_validated": True,
         "model_wiring_changed": False,
+        "candidate_detector": candidate_manifest["detector"],
+        "candidate_is_trained_ai": False,
+        "automatic_alert_authorized": False,
     }
     return totals
 
@@ -325,9 +332,72 @@ def collect_original_heuristic_events(
     }
 
 
+def collect_early_motion_candidate_events(
+    inventory: dict, pose_task: Path, *, collector=None, metadata_reader=None,
+) -> dict:
+    """Capture untrained 2s cues in PRIVATE event-time evidence, NOT alerts.
+
+    Uses exact original video decoding/pose adapter/heuristic. Never invent
+    labels. Caller writes only into Git-ignored data/private by exclusive create.
+    Source-hash checks are repeated for each video; missing frames abort.
+    """
+    from sentinel_edge.caucafall_curator import _sha256_file, _video_metadata
+    from sentinel_edge.contracts import PoseFeatures
+    from sentinel_edge.early_motion_probe import CausalMotionProbe
+    from sentinel_edge.video_benchmark import collect_video_frames
+
+    if (pose_task.suffix.lower() != ".task" or not pose_task.is_file()
+            or not 0 < pose_task.stat().st_size <= 60 * 1024 * 1024):
+        raise ValueError("Official nonempty private local PoseLandmarker task required")
+    extractor = collector or collect_video_frames
+    reader = metadata_reader or _video_metadata
+    results = []
+    for cid, item in inventory.items():
+        if _sha256_file(item["path"]) != item["media_sha256"]:
+            raise ValueError("Media mutated since source preflight")
+        expected, fps = reader(item["path"])
+        if (type(expected) is not int or not 1 <= expected <= 6000
+                or not 1 <= fps <= 120):
+            raise ValueError("Invalid original video frame count or FPS")
+        private_times: list[int] = []
+        cue = CausalMotionProbe(private_proposal_consumer=private_times.append)
+        observed = 0
+        pose_eligible = 0
+
+        def on_frame(frame):
+            nonlocal observed, pose_eligible
+            observed += 1
+            pose_eligible += PoseFeatures.from_frame(frame, .55) is not None
+            cue.observe(frame)
+
+        frames, stats = extractor(
+            item["path"], clip_id=cid, model=pose_task, max_frames=expected,
+            frame_consumer=on_frame, event_consumer=lambda _: None,
+        )
+        if (frames or type(stats.get("frames_processed")) is not int
+                or stats["frames_processed"] != expected or observed != expected
+                or cue.summary()["frames"] != expected
+                or cue.summary()["pose_accepted_frames"] != pose_eligible
+                or len(private_times) != cue.summary()["provisional_motion_proposals"]):
+            raise ValueError("Incomplete video decode or research cue count mismatch")
+        _timestamps(private_times, item["duration_ms"],
+                    name="private research motion candidate",
+                    max_count=MAX_CANDIDATES)
+        results.append({
+            "clip_id": cid, "media_sha256": item["media_sha256"],
+            "candidate_ms": private_times,
+            "analyzed_frames": observed, "valid_pose_frames": pose_eligible,
+        })
+    return {
+        "version": 1, "dataset": DATASET, "source_commit": PINNED_COMMIT,
+        "detector": EARLY_MOTION_RESEARCH_TAG, "clips": results,
+    }
+
+
 def main(argv=None) -> int:
     parser = ArgumentParser(description="Private, two-reviewer fall-onset event protocol")
-    parser.add_argument("--mode", choices=("prepare", "capture", "score"), required=True)
+    parser.add_argument("--mode", choices=("prepare", "capture", "capture-early", "score"),
+                        required=True)
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--pose-task", type=Path)
@@ -342,8 +412,8 @@ def main(argv=None) -> int:
         parser.error("score requires both --reviews and --candidates")
     if args.mode != "score" and (args.reviews or args.candidates):
         parser.error("only score accepts --reviews and --candidates")
-    if (args.mode == "capture") != (args.pose_task is not None):
-        parser.error("capture requires --pose-task; prepare/score forbid it")
+    if (args.mode in ("capture", "capture-early")) != (args.pose_task is not None):
+        parser.error("capture and capture-early require --pose-task; prepare/score forbid it")
     try:
         destination = _private_output_path(args.output)
         root = private_root(args.root).resolve(strict=True)
@@ -352,6 +422,8 @@ def main(argv=None) -> int:
             payload = blank_review_template(inventory)
         elif args.mode == "capture":
             payload = collect_original_heuristic_events(inventory, args.pose_task)
+        elif args.mode == "capture-early":
+            payload = collect_early_motion_candidate_events(inventory, args.pose_task)
         else:
             def bounded(path):
                 target = private_root(path).resolve(strict=True)
@@ -372,7 +444,7 @@ def main(argv=None) -> int:
         "mode": args.mode, "videos": len(inventory),
         "reviewed_ground_truth_automatically_generated": False,
         "score_available": args.mode == "score",
-        "candidate_evidence_without_ground_truth": args.mode == "capture",
+        "candidate_evidence_without_ground_truth": args.mode in ("capture", "capture-early"),
         "production_alarm_authorized": False,
         "private_output": True,
     }, sort_keys=True))
