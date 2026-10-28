@@ -1,20 +1,31 @@
-"""Offline-testable bounded RTSP camera health probe (no AI, no frames persisted).
+"""Vendor-neutral bounded RTSP camera health probe (no AI or frame storage).
 
-This module never logs URLs, credentials, network addresses or frame content.
-Real device probing is explicitly opt-in and restricted to an authorized LAN.
+Application messages never intentionally include URLs or credential values.
+Native FFmpeg/OpenCV logs can still contain sensitive connection details.
 """
 from argparse import ArgumentParser
+from ipaddress import ip_address, ip_network
 import json
+from pathlib import Path
 import os
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 
 RTSP_OPEN_TIMEOUT_MS = 8000
 RTSP_READ_TIMEOUT_MS = 4000
 
+# Literal private-address sources only by default: no public RTSP, localhost,
+# link-local metadata-service ranges, multicast, DNS lookups or DNS rebinding.
+PRIVATE_CAMERA_NETWORKS = (
+    ip_network("10.0.0.0/8"), ip_network("172.16.0.0/12"),
+    ip_network("192.168.0.0/16"), ip_network("fc00::/7"),
+)
+DEFAULT_RTSP_PORTS = frozenset({554, 8554})
+MAX_RTSP_URL_LENGTH = 2048
+
 
 def open_rtsp_capture(cv2, url: str):
-    """Open via FFmpeg with bounded blocking; fail closed if backend lacks timeout support.
+    """Request FFmpeg RTSP open/read timeouts; backend support must be verified.
 
     OpenCV timeout properties are open-only and cannot be applied after opening.
     The caller must validate the URL and owns release of the returned capture.
@@ -28,24 +39,43 @@ def open_rtsp_capture(cv2, url: str):
     )
 
 
-def validate_rtsp_env(name: str, environment: dict[str, str] | None = None) -> str:
-    """Return an RTSP URL only to the local capture backend; never print it."""
+def validate_rtsp_env(
+    name: str, environment: dict[str, str] | None = None, *,
+    extra_port: int | None = None,
+) -> str:
+    """Return only a private-IP RTSP stream. Never print the source or exceptions.
+
+    Supports any RTSP-compatible brand, standard 554/8554 and explicitly
+    allowed custom ports. Literal private IPs deliberately avoid DNS rebinding.
+    This is only a preflight filter; an egress firewall is still required.
+    """
     if not name.isidentifier() or not name.startswith("VIIL_"):
         raise ValueError("Camera environment variable must be a VIIL_ identifier")
+    if extra_port is not None and (type(extra_port) is not int or
+                                   not 1 <= extra_port <= 65535):
+        raise ValueError("Custom camera port must be in 1..65535")
     value = (os.environ if environment is None else environment).get(name, "")
     try:
+        if not isinstance(value, str) or not 1 <= len(value) <= MAX_RTSP_URL_LENGTH:
+            raise ValueError
         parts = urlsplit(value)
+        host = ip_address(parts.hostname or "")
+        port = parts.port if parts.port is not None else 554
+        decoded = unquote(value)
         valid = (
-            parts.scheme.lower() == "rtsp"
-            and parts.hostname is not None
-            and parts.port in (None, 554)
+            parts.scheme == "rtsp"
+            and any(host in network for network in PRIVATE_CAMERA_NETWORKS)
+            and port in (DEFAULT_RTSP_PORTS | ({extra_port} if extra_port else set()))
             and not parts.fragment
-            and not any(char in value for char in ("\r", "\n", "\x00"))
+            and not parts.netloc.count("@") > 1
+            and not any(ord(char) < 32 or ord(char) == 127 for char in decoded)
+            and not any(char in decoded for char in ("\\",))
+            and "%" not in (parts.hostname or "")
         )
-    except ValueError:
+    except (ValueError, TypeError):
         valid = False
     if not valid:
-        raise ValueError("Missing or invalid camera configuration (details redacted)")
+        raise ValueError("Missing or unsafe camera configuration (details redacted)")
     return value
 
 
@@ -70,18 +100,36 @@ def probe_capture(capture, *, sample_frames: int = 12) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     parser = ArgumentParser(description="Local-only authorized RTSP decode health check")
-    parser.add_argument("--rtsp-env", required=True, help="VIIL_ variable containing RTSP URL")
+    parser.add_argument("--rtsp-env", help="VIIL_ variable containing RTSP URL")
+    parser.add_argument("--camera-registry", help="Local vendor-neutral camera JSON registry")
+    parser.add_argument("--camera-id", help="RTSP camera ID in the registry")
     parser.add_argument("--confirm-authorized-camera", action="store_true")
     parser.add_argument("--frames", type=int, default=12)
+    parser.add_argument("--rtsp-allow-port", type=int, default=None,
+                        help="Explicitly permit one vendor-specific RTSP port")
     args = parser.parse_args(argv)
     if not args.confirm_authorized_camera:
         parser.error("Real network capture needs --confirm-authorized-camera")
     try:
-        url = validate_rtsp_env(args.rtsp_env)
+        if args.rtsp_env and (args.camera_registry or args.camera_id):
+            raise ValueError
+        if args.camera_registry:
+            if not args.camera_id:
+                raise ValueError
+            from sentinel_edge.camera_inputs import load_camera_registry, resolve_camera
+            registry = load_camera_registry(Path(args.camera_registry))
+            camera = registry[args.camera_id]
+            kind, url = resolve_camera(camera, extra_rtsp_port=args.rtsp_allow_port)
+            if kind != "rtsp":
+                raise ValueError
+        elif args.rtsp_env and not args.camera_id:
+            url = validate_rtsp_env(args.rtsp_env, extra_port=args.rtsp_allow_port)
+        else:
+            raise ValueError
         if not 1 <= args.frames <= 120:
-            raise ValueError("frames must be between 1 and 120")
-    except ValueError as exc:
-        parser.error(str(exc))
+            raise ValueError
+    except (ValueError, KeyError, TypeError):
+        parser.error("Invalid camera selection or frame count (redacted)")
     try:
         import cv2
     except ImportError:

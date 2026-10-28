@@ -24,13 +24,13 @@ class FakeCapture:
 
 def test_rtsp_configuration_is_private_and_checked():
     secret = "private_test_password"
-    url = f"rtsp://demo:{secret}@camera.local:554/Streaming/Channels/102"
+    url = f"rtsp://demo:{secret}@192.168.10.25:554/Streaming/Channels/102"
     assert validate_rtsp_env("VIIL_CAMERA_RTSP", {"VIIL_CAMERA_RTSP": url}) == url
     for name, value in [
         ("CAMERA_RTSP", url),
-        ("VIIL_CAMERA_RTSP", "https://camera.local"),
-        ("VIIL_CAMERA_RTSP", "rtsp://camera.local:9554/live"),
-        ("VIIL_CAMERA_RTSP", f"rtsp://demo:{secret}@camera.local/stream\nabc"),
+        ("VIIL_CAMERA_RTSP", "https://192.168.10.25"),
+        ("VIIL_CAMERA_RTSP", "rtsp://192.168.10.25:9554/live"),
+        ("VIIL_CAMERA_RTSP", f"rtsp://demo:{secret}@192.168.10.25/stream\nabc"),
     ]:
         with pytest.raises(ValueError) as caught:
             validate_rtsp_env(name, {name: value})
