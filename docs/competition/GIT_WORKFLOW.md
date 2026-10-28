@@ -1,6 +1,6 @@
 # Git strategy — Feature Branches → preprod → Human-only main
 
-**Effective immediately for VIIL Sentinel.** Based on the team's explicit development instructions.
+**Updated 28 Oct 2026 — exactly two active members.** Member 1 owns Edge Vision, AI model, Dashboard and Notifications; Member 2 owns Meta Model API, Backend, Database and Orchestration. Historical references to three parallel development streams are superseded. **Important precedence:** `AGENTS.md` has the current Git authority. Validated Member 1 changes integrate only into `member/feature/preprod`, not into the protected shared `preprod`, and only a human may promote to `preprod`/`main`. The legacy branch diagram below is historical, not authority to push protected branches.
 
 ```text
 origin/main                  HUMAN-ONLY release/promotion

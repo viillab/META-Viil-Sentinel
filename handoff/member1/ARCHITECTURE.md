@@ -51,7 +51,7 @@ Do not rename dozens of active module files during handoff.
     |   |   +-- tests/
     |   +-- orchestrator/               # Planned controlled workflow docs
     |-- apps/
-    |   +-- dashboard/                  # Member 3, React/TypeScript
+    |   +-- dashboard/                  # Member 1, React/TypeScript
     |       +-- src/
     |-- docs/                            # Cross-team architecture/roadmap
     |-- models/                          # ignored LOCAL MediaPipe .task
@@ -86,8 +86,8 @@ Python modules and npm scripts already tested in CI.
     Member 2: authenticated ingestion from authorized approved sources
               -> durable idempotent record -> optional reviewed Meta
               evidence -> human review state
-    Member 3: read ONLY trusted backend incident/review states
-              -> caregiver UX + explicit demo labels
+    Member 1: dashboard reads ONLY trusted backend incident/review
+              states -> caregiver UX + in-app notifications + demo labels
 
 **Do not let the research branch bypass the human gate.** Neither a
 private model score nor the uncalibrated heuristic score means a
@@ -129,5 +129,6 @@ two copies of the same contract or silently changing public imports.
 
 Member 1 works in member1/feature/* and integrates validated changes
 into member/feature/preprod only after tests and SHA-pinned CI. Member 2
-owns backend/meta changes, Member 3 owns dashboard. Human exclusively
+owns backend/meta changes; Member 1 also owns Dashboard/Notifications.
+There is NO active Member 3. Human maintainer exclusively
 promotes actual preprod and main; do not push to those branches.

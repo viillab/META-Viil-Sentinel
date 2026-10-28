@@ -2,11 +2,17 @@
   "schema_version": "viil.member1.handoff.v1",
   "status": "development_handoff_ready_research_only",
   "as_of": "2026-10-28",
-  "owner": "member1_edge_vision",
+  "owner": "member1_edge_vision_dashboard_notifications",
   "consumers": [
-    "member2_backend_meta",
-    "member3_caregiver_dashboard"
+    "member2_backend_meta"
   ],
+  "team_ownership": {
+    "active_member_count": 2,
+    "member1": ["edge_vision", "model_training", "dashboard", "notifications"],
+    "member2": ["backend", "meta_model_api", "meta_first_evidence_review"],
+    "member3_active": false,
+    "team_roster_path": "handoff/team/team_roster.v1.json"
+  },
   "edge_candidate_contract": {
     "version": "viil.edge.candidate.v1",
     "schema_path": "services/edge-vision/docs/edge_candidate_v1.schema.json",
@@ -42,6 +48,7 @@
     "authenticated_backend_ingestion": false,
     "durable_idempotent_event_store": false,
     "real_meta_provider_connected": false,
+    "meta_first_advisory_production_ready": false,
     "persistent_caregiver_notifications": false,
     "independent_event_level_validation": false
   },

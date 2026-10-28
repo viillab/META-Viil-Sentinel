@@ -2,7 +2,7 @@
 
 **Published user-provided slide summary, 26 October 2026**
 - Build new work between **Oct 26 and Nov 4**; judges only score event-period work.
-- Teams: maximum four people; VIIL Sentinel has three approved participants.
+- Teams: maximum four people; latest user-confirmed VIIL Sentinel roster has **two active participants** (Member 1 and Member 2). Reconcile the official registered roster before submitting.
 - GitHub repository **must be Public at submission**; Private during development explicitly allowed by organizer according to team report.
 - Demo only what was built during the hackathon.
 - Code, data and assets must be legally usable and appropriately licensed.
@@ -20,7 +20,7 @@
 - Exact available Meta model name, endpoint and event-specific usage restrictions.
 
 **Eligibility and anti-project safeguards**
-- This new implementation must deliver a real agent-orchestrated, human-in-the-loop workflow; dashboard alone is not the entry.
+- This new implementation must deliver a real Meta-powered, evidence-grounded agent workflow; dashboard alone is not the entry. **Meta-first** may automate first-pass informational advisory assessment, with human fallback for ambiguity/feedback and no autonomous emergency dispatch.
 - Vision detector must NOT be described as capable before it is implemented and evaluated.
 - Never put real patients' data, unauthorized CCTV, API keys or real emergency dispatch in the repo.
 - Preserve development history; no copying old repositories to manufacture a new event-created appearance.

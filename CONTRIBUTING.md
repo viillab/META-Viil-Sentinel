@@ -1,11 +1,11 @@
 # Team development standards
 
-Three approved hackathon participants. We will work in separate feature branches and use pull requests for review:
-- `member1/feature/edge-vision` — Member 1 (user): Edge Vision, pose/temporal fall candidates, model evaluation
-- `member2/feature/meta-intelligence` — Member 2: Muse Spark, incident intelligence and backend
-- `member3/feature/dashboard` — Member 3: UI, notification and integration
+Exactly **two active members** as of 28 Oct 2026. We work in separate feature branches and review changes:
+- `member1/feature/*` — Member 1: Edge Vision, pose/model training and evaluation, React Dashboard, UX/UI, in-app notifications and integration
+- `member2/feature/*` — Member 2: Backend, Meta Model API, Meta-first evidence verification, database, security, orchestration
+- **No active Member 3**. Prior `member3/feature/*` references are historical only.
 
-All members branch from `origin/preprod`. Push validated work to member branches, then integrate into `preprod`. `main` is human-only.
+Do isolated development on the member feature branch. After tests and exact-SHA CI, validated Member 1 work may be integrated into the separate `member/feature/preprod`; the shared `preprod` and `main` are human-promoted only. No force pushes. Team ownership: `handoff/team/team_roster.v1.json`.
 
 Recommended checks:
 - Backend: `cd services/api && python -m pytest -q && python -m ruff check .`

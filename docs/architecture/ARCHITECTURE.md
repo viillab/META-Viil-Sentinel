@@ -9,13 +9,15 @@
                         |
         [Meta Model API: scene observations]
                         |
+      [Meta-first verified evidence (TARGET)]
       [Report validation + uncertainty + evidence]
                         |
     [Agent orchestration / notification state machine]
                         |
         [Caregiver review and verification UI]
                         |
-           [Human decides next steps]
+          [Caregiver aware / override]
+          [No emergency dispatch]
 ```
 
 ## Current Member 1 handoff and safe trust boundary (28 Oct 2026)
@@ -26,7 +28,7 @@ heuristic emits only strict `viil.edge.candidate.v1` **LOCAL stdout**
 metadata for a FUTURE authenticated Member 2 ingest. The separate
 1500ms research classifier, its private 30D weight JSON and the
 1500ms streaming Shadow are NOT routed to FastAPI or caregiver alerts.
-Member 3 consumes only backend-reviewed incident state, not raw model
+Member 1 owns the caregiver Dashboard and Notifications (there is **no Member 3**). The Dashboard consumes only backend-reviewed incident state, not raw model
 scores, source video or PoseFrames. Full production ingestion/auth/Meta
 provider and real notifications remain incomplete, and no one may
 reinterpret unreviewed publisher clip labels as real fall event accuracy.
@@ -49,6 +51,6 @@ reinterpret unreviewed publisher clip labels as real fall event accuracy.
 ## Privacy / reliability constraints
 - PII-minimized keyframes only; never send raw continuous footage without consent/authorization.
 - Meta free-credit terms may permit product improvement using submitted content. Staged footage recommended.
-- Require signed-off human review before consequential response; never infer medical severity.
+- **Target:** Meta may replace manual screening for an informational in-app caregiver advisory only after real authorized vision evidence, strict JSON/evidence validation and independent evaluation; ambiguous cases need follow-up. Consequential actions always require human control. Never infer medical severity.
 - Confidence values in demo are **synthetic**, not measured model calibration.
 - Fail closed on invalid model output; display source/provider and uncertainty to users.

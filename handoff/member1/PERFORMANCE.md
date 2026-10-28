@@ -131,5 +131,5 @@ the shadow output contract, not the model's false-positive rate.
   Report event recall, false alarms per verified no-fall hour,
   abstention rates, event-onset delay p50/p95, and uncertainty.
 - Demonstrate Member 2 authenticated ingestion + rate limiting/
-  idempotency and Member 3 human-confirmed notification workflow;
+  idempotency and Member 1 caregiver dashboard/notification workflow;
   until then, no real-time operational readiness.

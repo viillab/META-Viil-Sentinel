@@ -1,6 +1,8 @@
 # VIIL Sentinel — Member 1 handoff
 
-**28 October 2026 · Owner: Member 1 Edge Vision**
+**28 October 2026 · Owner: Member 1 Edge Vision + Dashboard + Notifications**
+
+**2 active members only:** Member 1 owns Edge+Frontend; Member 2 owns Meta+Backend. Read [current role assignments](../team/TEAM_ROLES_AND_META_FIRST.md).
 **Status: READY FOR DEVELOPER HANDOFF, NOT A PRODUCTION FALL DETECTOR**
 
 Start here. The adjacent delivery_manifest.v1.json is the machine-readable
@@ -13,7 +15,7 @@ entrypoints are intentionally preserved: no disruptive mass folder move.
 | Interface | Consumer | Readiness |
 |---|---|---|
 | viil.edge.candidate.v1 metadata-only heuristic JSON | Member 2 Backend | **Producer/schema READY**; no authenticated ingestion yet |
-| Backend validated incident state | Member 3 UI | Demo exists; real ingestion/notifications NOT YET |
+| Backend validated incident state | Member 1 UI / Notifications | Demo exists; real ingestion/notifications NOT YET |
 | viil.edge.causal_1500ms.linear_research.v1 private weights | Member 1 research; optionally Member 2 local offline QA | Opt-in verified private export, no alerts |
 | Causal1500msModelShadow | Member 1 local research | 1500ms context, 250ms hop, counters only; no incident events |
 
@@ -47,16 +49,16 @@ The same command with sitting.jsonl should yield no candidate.
   source registry, allowlist, replay protection, per-source rate limits.
 - source_timestamp_ms is relative to the camera's start, NOT Unix time;
   require trusted clock correlation before attaching wall-clock times.
-- Preserve unconfirmed status; display and act only after human review.
+- Preserve unconfirmed status; let Meta-first evidence assessment propose an informational in-app advisory only after real authorized and validated image evidence. Ambiguous/invalid/negative results stay unconfirmed and require follow-up. Do not infer a confirmed fall or authorize emergency response.
   No medical advice, real emergency dispatch, unconsented video or pose.
 - Meta real provider still needs separate authorization, API keys only on
   backend and output validation. Do not portray MOCK outputs as real.
 
-## Member 3 — exact integration handoff
+## Member 1 — Dashboard / Notifications (formerly Member 3)
 
 React demo consumes the backend's simulated incident feed. It does NOT
 currently consume the Edge v1 local stdout stream. Add a human-facing
-state/UI only after Member 2 validates incidents, implements secure durable
+state/UI and Meta-first advisory presentation (with fallback/manual override) only after Member 2 validates incidents, implements secure durable
 storage and authenticated review. The 0..1 Edge detector_score is
 UNCALIBRATED HEURISTIC, not a probability of true fall. Clearly mark DEMO
 data; do not offer emergency actions or use shadow counters as events.
@@ -157,7 +159,8 @@ only the original heuristic emits v1 unconfirmed local candidate JSON.
   validation; original 8s reader refuses it and vice versa.
 - Source video/pose/weights never committed or transmitted.
 - Backend ingestion, Meta real provider and persistent notifications
-  are still explicitly unimplemented. They are Member 2/3 responsibilities.
+  are still explicitly unimplemented. Backend/Meta belong to Member 2;
+  frontend notifications and caregiver UX belong to Member 1.
 - Independent two-human onset review, new actor/camera blind test
   cohorts and long no-fall negatives are still MISSING. Therefore
   no real-world fall sensitivity / false alerts-hour / onset delay claim.
