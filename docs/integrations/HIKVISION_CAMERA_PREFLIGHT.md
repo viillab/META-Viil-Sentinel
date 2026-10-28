@@ -21,11 +21,11 @@ The only application-level printed fields are `type`, `status`, `frames_read` an
 The probe discards decoded image objects immediately; no model inference, screenshot, video, upload or event delivery.
 
 5. Only if the camera is readable, run the local Edge candidate runner (details in `HIKVISION_RTSP_MEMBER1.md`). Do not interpret zero emitted candidates as proof that no falls occurred.
-6. Review source changes after switch of camera/NVR, network interruption, codec and resolution. No automatic reconnect or camera alerting is implemented yet.
+6. Review source changes after switch of camera/NVR, network interruption, codec and resolution. No automatic reconnect or camera alerting is implemented yet. FFmpeg RTSP open is bounded at 8 seconds and each read at 4 seconds (where supported by the local OpenCV backend). The Edge runner returns nonzero on RTSP interruption: missing candidates after a disconnect are never proof of safety.
 
 ## Acceptance gates still required
 - Real camera video test on a permitted staged scene, compare H.264 main and substream for pose visibility.
-- Add bounded capture timeout/reconnect on actual target firmware and confirm no stale state across reconnects.
+- Validate the current 8s open / 4s read timeout behavior on target firmware and OpenCV build; implement *explicit session reset* with bounded reconnect in a separate, reviewed phase. There is no auto-reconnect yet.
 - Inspect network/decoder stderr for credential leakage before deployment; library-native logs are **not** guaranteed sanitized.
 - Test at least 30 minutes on the target PC, with dropped packets and disconnects, record p50/p95 throughput and memory.
 - Independently annotated falls and ADLs, actor-disjoint evaluation, false-alarm/hour and onset latency.

@@ -6,7 +6,7 @@ from types import SimpleNamespace as NS
 import pytest
 
 from sentinel_edge.handoff import to_envelope
-from sentinel_edge.runner import process_capture, timestamp_for_frame
+from sentinel_edge.runner import CameraStreamInterrupted, process_capture, timestamp_for_frame
 
 
 class FakeCapture:
@@ -159,3 +159,27 @@ def test_fake_local_video_can_emit_versioned_unverified_contract():
     assert envelope["human_review_required"] is True
     assert envelope["evidence_refs"] == []
     assert "evidence_notes" not in envelope
+
+
+def test_rtsp_stream_loss_fails_closed_instead_of_successful_eof():
+    cap = FakeCapture(range(3))
+    with pytest.raises(CameraStreamInterrupted, match="interrupted"):
+        process_capture(
+            cap, cv2=FakeCv2, mp=FakeMp, landmarker=FakeLandmarker(),
+            webcam=True, source_id="test-rtsp", fail_on_loss=True,
+            output=StringIO(),
+        )
+
+
+def test_native_capture_error_never_discloses_credentials():
+    class ExplodingCapture(FakeCapture):
+        def read(self):
+            raise RuntimeError("rtsp://user:SENSITIVE_TEST_PASSWORD@camera.local")
+
+    with pytest.raises(CameraStreamInterrupted) as caught:
+        process_capture(
+            ExplodingCapture([1]), cv2=FakeCv2, mp=FakeMp,
+            landmarker=FakeLandmarker(), webcam=True, source_id="test-rtsp",
+            fail_on_loss=True,
+        )
+    assert "SENSITIVE_TEST_PASSWORD" not in str(caught.value)

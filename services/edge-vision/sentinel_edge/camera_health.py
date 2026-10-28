@@ -9,6 +9,25 @@ import os
 from urllib.parse import urlsplit
 
 
+RTSP_OPEN_TIMEOUT_MS = 8000
+RTSP_READ_TIMEOUT_MS = 4000
+
+
+def open_rtsp_capture(cv2, url: str):
+    """Open via FFmpeg with bounded blocking; fail closed if backend lacks timeout support.
+
+    OpenCV timeout properties are open-only and cannot be applied after opening.
+    The caller must validate the URL and owns release of the returned capture.
+    """
+    return cv2.VideoCapture(
+        url, cv2.CAP_FFMPEG,
+        [
+            cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, RTSP_OPEN_TIMEOUT_MS,
+            cv2.CAP_PROP_READ_TIMEOUT_MSEC, RTSP_READ_TIMEOUT_MS,
+        ],
+    )
+
+
 def validate_rtsp_env(name: str, environment: dict[str, str] | None = None) -> str:
     """Return an RTSP URL only to the local capture backend; never print it."""
     if not name.isidentifier() or not name.startswith("VIIL_"):
@@ -69,7 +88,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("OpenCV is required; install the edge video extra")
     cap = None
     try:
-        cap = cv2.VideoCapture(url)
+        cap = open_rtsp_capture(cv2, url)
         report = probe_capture(cap, sample_frames=args.frames)
     except Exception:
         # Never stringify native library exceptions that could contain credentials.
