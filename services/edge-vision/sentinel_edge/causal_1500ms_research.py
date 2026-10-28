@@ -10,6 +10,9 @@ from collections import Counter
 import json
 from math import isfinite
 from pathlib import Path
+from typing import Callable
+
+from sentinel_edge.temporal_training import TemporalLinearModel
 
 from sentinel_edge.caucafall_curator import _sha256_file, _video_metadata
 from sentinel_edge.split_audit import audit_subject_splits
@@ -94,7 +97,8 @@ def _preflight(root: Path, pose_task: Path, groups: dict, proposals: dict,
 
 def train_causal_1500ms(root: Path, pose_task: Path, groups: dict,
                         proposals: dict, *, collector=collect_video_frames,
-                        metadata_reader=_video_metadata) -> dict:
+                        metadata_reader=_video_metadata,
+                        model_sink: Callable[[TemporalLinearModel], None] | None = None) -> dict:
     """Train a separate in-memory 1.5s model with validation-only threshold.
 
     No test clip influences selection. Source clips shorter than 1.5s
@@ -146,8 +150,11 @@ def train_causal_1500ms(root: Path, pose_task: Path, groups: dict,
         "windows": windows,
     }
     # Separate NEW weights, trained only from these 1.5s descriptors.
-    # Neither its weights nor a copied 8s artifact are ever serialized.
+    # Only an explicit private model_sink may serialize the 1500ms model;
+    # frozen 8s artifacts must never be copied or silently reused.
     model, fit_report = train_and_evaluate(kept, bundle)
+    if model_sink is not None:
+        model_sink(model)
     coverage = {}
     for split in ("train", "val", "test"):
         coverage[split] = {}
@@ -185,7 +192,7 @@ def train_causal_1500ms(root: Path, pose_task: Path, groups: dict,
         "old_test_cohort_previously_exposed": True,
         "not_a_live_streaming_or_fall_detection_delay_test": True,
         "not_real_world_accuracy_false_alarms_or_recall": True,
-        "retrained_weights_serialized": False,
+        "retrained_weights_serialized": model_sink is not None,
         "alerts_modified_or_authorized": False,
         "raw_video_pose_vectors_and_subject_ids_exported": False,
     }
@@ -197,6 +204,8 @@ def main(argv=None) -> int:
     parser.add_argument("--groups", type=Path, required=True)
     parser.add_argument("--proposals", type=Path, required=True)
     parser.add_argument("--pose-task", type=Path, required=True)
+    parser.add_argument("--private-model-output", type=Path,
+                        help="Opt-in exclusive research-only 1500ms weights (data/private)")
     parser.add_argument("--acknowledge-publisher-labels", action="store_true")
     parser.add_argument("--acknowledge-pose-privacy", action="store_true")
     args = parser.parse_args(argv)
@@ -211,9 +220,36 @@ def main(argv=None) -> int:
                 or not groups_file.is_relative_to(root)
                 or not proposals_file.is_relative_to(root)):
             raise ValueError("Only ignored private local sources accepted")
+        from sentinel_edge.causal_1500ms_artifact import save_causal_artifact
+        from sentinel_edge.window_export import _private_output_path
+        destination = None
+        if args.private_model_output is not None:
+            destination = _private_output_path(args.private_model_output)
+            if destination.exists():
+                raise ValueError("Refusing to overwrite existing private model")
+        groups = _read_json(groups_file)
+        if (not isinstance(groups, dict)
+                or not isinstance(groups.get("clips"), list)
+                or not groups["clips"]):
+            raise ValueError("Research group manifest has no clips")
+        provenance = groups["clips"][0]["dataset_id"]
+        saved = None
+
+        def capture_model(model):
+            nonlocal saved
+            if destination is None:
+                raise ValueError("Unrequested research model export")
+            saved = save_causal_artifact(
+                model, destination, groups_path=groups_file,
+                proposals_path=proposals_file, dataset=provenance,
+            )
+
         report = train_causal_1500ms(
-            root, args.pose_task, _read_json(groups_file), _read_json(proposals_file)
+            root, args.pose_task, groups, _read_json(proposals_file),
+            model_sink=capture_model if destination is not None else None,
         )
+        if saved is not None:
+            report["private_short_model_export"] = saved
     except (OSError, RuntimeError, ValueError, TypeError, KeyError) as exc:
         parser.error("1500ms research pilot refused: " + str(exc))
     print(json.dumps(report, allow_nan=False, sort_keys=True, indent=2))

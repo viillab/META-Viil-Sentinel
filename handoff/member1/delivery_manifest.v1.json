@@ -1,0 +1,55 @@
+{
+  "schema_version": "viil.member1.handoff.v1",
+  "status": "development_handoff_ready_research_only",
+  "as_of": "2026-10-28",
+  "owner": "member1_edge_vision",
+  "consumers": [
+    "member2_backend_meta",
+    "member3_caregiver_dashboard"
+  ],
+  "edge_candidate_contract": {
+    "version": "viil.edge.candidate.v1",
+    "schema_path": "services/edge-vision/docs/edge_candidate_v1.schema.json",
+    "synthetic_example_path": "services/edge-vision/examples/synthetic/candidate_v1.example.json",
+    "event_producer": "sentinel_edge.handoff.to_envelope",
+    "transport": "local_stdout_only",
+    "confidence": "uncalibrated_heuristic",
+    "confirmed_fall": false,
+    "simulated_input_required_for_default_fixture": true,
+    "evidence_refs_authorized": false,
+    "backend_ingestion_endpoint_exists": false
+  },
+  "causal_research_model": {
+    "format": "viil.edge.causal_1500ms.linear_research.v1",
+    "temporal_context_ms": 1500,
+    "sample_slots": 30,
+    "sample_features_per_slot": 6,
+    "descriptor_dimensions": 30,
+    "shadow_hop_ms": 250,
+    "inference_preprocessing": "train_only_zscore_clamp_minus12_plus12",
+    "num_float64_model_parameters": 92,
+    "numeric_model_bytes": 736,
+    "artifact_private_only": true,
+    "real_trained_weights_in_public_repository": false,
+    "auto_alert_authorized": false,
+    "human_event_onset_review_completed": false,
+    "accuracy_on_independent_real_world_actors_proven": false,
+    "model_loader": "sentinel_edge.causal_1500ms_artifact.read_causal_artifact",
+    "shadow_interface": "sentinel_edge.causal_1500ms_shadow.Causal1500msModelShadow",
+    "training_command": "python -m sentinel_edge.causal_1500ms_research"
+  },
+  "handoff_prerequisites": {
+    "authenticated_backend_ingestion": false,
+    "durable_idempotent_event_store": false,
+    "real_meta_provider_connected": false,
+    "persistent_caregiver_notifications": false,
+    "independent_event_level_validation": false
+  },
+  "security": {
+    "never_commit_private_weights": true,
+    "never_commit_video_or_derived_pose": true,
+    "no_automated_emergency_dispatch": true,
+    "source_timestamp_basis": "relative_to_source_start",
+    "no_public_network_export_in_member1": true
+  }
+}

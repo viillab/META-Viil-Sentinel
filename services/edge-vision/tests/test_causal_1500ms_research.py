@@ -113,6 +113,28 @@ def test_real_trained_but_research_only_1500ms_model(tmp_path):
     assert result["model_size_bytes_in_ram"] == 736
 
 
+def test_short_model_export_is_explicit_opt_in_and_receives_new_fitted_weights(tmp_path):
+    params = fixtures(tmp_path)
+    from sentinel_edge.causal_1500ms_artifact import Causal1500msPredictor
+    captured = []
+    groups, proposals, task, poses = params
+    without_export = run(tmp_path, params)
+    assert without_export["retrained_weights_serialized"] is False
+    with_export = train_causal_1500ms(
+        tmp_path, task, groups, proposals,
+        collector=collector_for(poses),
+        metadata_reader=lambda _: (41, 25.0),
+        model_sink=captured.append,
+    )
+    assert with_export["retrained_weights_serialized"] is True
+    assert len(captured) == 1
+    predictor = Causal1500msPredictor(captured[0])
+    assert predictor.temporal_context_ms == 1500
+    assert predictor.input_dimensions == 30
+    assert predictor.linear.model_bytes == 736
+    assert without_export["validation_threshold"] == with_export["validation_threshold"]
+
+
 def test_true_future_frames_do_not_change_causal_trailing_predictions(tmp_path):
     params = fixtures(tmp_path)
     before = run(tmp_path, params)

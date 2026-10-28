@@ -18,6 +18,19 @@
            [Human decides next steps]
 ```
 
+## Current Member 1 handoff and safe trust boundary (28 Oct 2026)
+
+The canonical, tested integration entrypoint is
+[handoff/member1/README.md](../../handoff/member1/README.md). Original
+heuristic emits only strict `viil.edge.candidate.v1` **LOCAL stdout**
+metadata for a FUTURE authenticated Member 2 ingest. The separate
+1500ms research classifier, its private 30D weight JSON and the
+1500ms streaming Shadow are NOT routed to FastAPI or caregiver alerts.
+Member 3 consumes only backend-reviewed incident state, not raw model
+scores, source video or PoseFrames. Full production ingestion/auth/Meta
+provider and real notifications remain incomplete, and no one may
+reinterpret unreviewed publisher clip labels as real fall event accuracy.
+
 ## Current baseline (new hackathon code)
 - FastAPI owns typed incident schemas, in-memory repository and state-transition policy.
 - `IncidentService` runs a strictly simulated event and produces a mock-labelled report.
