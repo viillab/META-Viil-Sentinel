@@ -31,6 +31,25 @@ The opt-in `--profile-rtsp` is available only with
 `--rtsp-retries 1..3`; retry mode already prevents research traces,
 display and experimental shadow model from crossing stream sessions.
 
+**Bounded 30-minute endurance trial (authorized staged scene only):**
+
+```powershell
+.\.venv\Scripts\python.exe -m sentinel_edge.runner --source rtsp --rtsp-env VIIL_CAMERA_RTSP --model ..\..\models\pose_landmarker_lite.task --source-id stage-cam-01 --candidate-format v1 --confirm-consent --rtsp-retries 1 --rtsp-session-seconds 1800 --max-frames 0 --profile-rtsp
+```
+
+`--rtsp-session-seconds` allows 0 (disabled) or 1..3600 seconds and is
+per RTSP session, not a global wall-clock deadline across reconnections.
+If the stream fails, a fresh session can run up to the full budget again.
+The bound is checked before each read and after each successful blocking
+read, so processing stops without emitting a frame after the deadline,
+subject to the time OpenCV spends inside one read (nominal 4s timeout).
+The stream is never certified healthy because a test ends at its budget.
+A zero-frame attempt is a failure and may retry; failure after the bounded
+retry count returns exit code 2. Pose observations, candidate counts and
+the per-session profile are kept separate across reconnections. Avoid
+storing the raw terminal transcript because native decoder logs can be
+sensitive.
+
 **Output separation:**
 - stdout: unconfirmed candidate v1 metadata only (may contain source IDs).
 - stderr: one `RESEARCH_RTSP_PROFILE` JSON line per *processing* attempt
