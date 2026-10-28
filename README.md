@@ -6,6 +6,17 @@
 VIIL Sentinel aims to provide **non-clinical, human-supervised incident awareness**:
 Video → Edge fall candidate → Evidence extraction → Meta multimodal incident interpretation → Structured report → In-app alert → Caregiver verification → Traceable incident management.
 
+## Developer handoff (Member 1 -> Member 2 / 3)
+
+Start at [Member 1 delivery package](handoff/member1/README.md) for the
+live code/API ownership, canonical candidate JSON contract, new strictly
+versioned private 1500ms research-model loader and source-verified model
+reproduction, hardware measurements and honest deployment blockers.
+The 1500ms trained research model is **not yet a validated real fall detector**
+and is **not wired to the backend**. Synthetic/demo endpoints remain separate.
+For safe folder structure and phased refactor instructions see
+[Folder architecture](handoff/member1/ARCHITECTURE.md).
+
 ## Status
 
 | Component | Foundation | Real functionality |
@@ -52,7 +63,6 @@ Open http://127.0.0.1:5173. Click **Generate staged incident** to test the mock 
 - `services/api`: Small FastAPI app with schemas, workflow, in-memory store and mock interpreter.
 - `services/edge-vision`: Member 1 pose-feature temporal heuristic, optional MediaPipe webcam/video runner, synthetic tests and evaluation metrics; see its README.
 - `apps/dashboard`: React + TypeScript caregiver demonstration UI.
-- `services/edge-vision`: Planned webcam/video/pose + temporal classifier interface.
 - `services/meta-intelligence`: Planned official Meta API adapter and schema validation.
 - `services/orchestrator`: Documentation for controlled incident flow.
 - `docs/`: Roadmap, eligibility checks, architectural decisions and demo script.

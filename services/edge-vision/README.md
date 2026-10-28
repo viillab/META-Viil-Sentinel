@@ -8,6 +8,12 @@
 
 **Status:** Actual MediaPipe pose AI inference **works**; fall-candidate heuristics remain **unvalidated for reliable safety alerts**. NOT a clinical or production safety detector.
 
+**New single-entrypoint handoff:** [Member 1 -> 2/3 delivery package](../../handoff/member1/README.md)
+and [folder architecture](../../handoff/member1/ARCHITECTURE.md). A separate
+**2,654-byte private genuine trained 1500ms model artifact** now has strict
+Save/Reload and is connected to the in-memory 1500ms shadow for research.
+It is never checked in, never sent to the backend and never emits incidents.
+
 ## Research-driven model preparation (27 Oct 2026)
 
 New [research-to-engineering audit](docs/DEEP_RESEARCH_MOTION_AND_DATASET_PROTOCOL_2026-10-27.md)
