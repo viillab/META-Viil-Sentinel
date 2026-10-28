@@ -525,10 +525,25 @@ def main(argv: list[str] | None = None) -> int:
             cap = open_rtsp_capture(cv2, source) if is_rtsp else cv2.VideoCapture(source)
         except Exception:
             raise SystemExit("Cannot initialize authorized camera source (redacted)") from None
-        if not cap.isOpened():
-            _release_capture_redacted(cap)
-            raise SystemExit("Cannot open authorized capture source (credentials redacted)")
         stack.callback(_release_capture_redacted, cap)
+        if privacy_check is not None:
+            try:
+                privacy_check()
+            except PrivacyGateDenied:
+                print("Live camera approval revoked/invalid; capture stopped.", file=sys.stderr)
+                return 2
+        try:
+            opened = cap.isOpened()
+        except Exception:
+            raise SystemExit("Cannot inspect authorized capture source (details redacted)") from None
+        if not opened:
+            raise SystemExit("Cannot open authorized capture source (credentials redacted)")
+        if privacy_check is not None:
+            try:
+                privacy_check()
+            except PrivacyGateDenied:
+                print("Live camera approval revoked/invalid; capture stopped.", file=sys.stderr)
+                return 2
         if args.display:
             stack.callback(cv2.destroyAllWindows)
         trace_file = None
@@ -544,6 +559,14 @@ def main(argv: list[str] | None = None) -> int:
         landmarker = stack.enter_context(
             mp.tasks.vision.PoseLandmarker.create_from_options(options)
         )
+        # Model initialization may block. Do not begin decoding/inference
+        # when signed authorization changed during native model creation.
+        if privacy_check is not None:
+            try:
+                privacy_check()
+            except PrivacyGateDenied:
+                print("Live camera approval revoked/invalid; capture stopped.", file=sys.stderr)
+                return 2
         shadow = (RollingModelShadow(load_verified_linear_shadow(args.shadow_model))
                   if args.shadow_model is not None else None)
         early_probe = CausalMotionProbe() if args.early_motion_probe else None
@@ -588,14 +611,23 @@ def main(argv: list[str] | None = None) -> int:
         if early_probe is not None:
             print("RESEARCH_EARLY_MOTION_PROBE "
                   + json.dumps(early_probe.summary(), sort_keys=True), file=sys.stderr)
-        # Status goes to stderr; stdout contains only machine-readable event JSONL.
-        print(
-            f"Processed {stats.frames_processed} frames; "
-            f"invalid/unavailable poses: {stats.invalid_pose_frames}; "
-            f"candidate events: {stats.candidate_events}. "
-            "Events require human review.",
-            file=sys.stderr,
-        )
+    # Native model/capture shutdown can block; recheck after cleanup before
+    # reporting a successful authorized session. JSONL contains only events
+    # emitted under the per-frame approval checks above.
+    if privacy_check is not None:
+        try:
+            privacy_check()
+        except PrivacyGateDenied:
+            print("Live camera approval revoked/invalid; capture stopped.", file=sys.stderr)
+            return 2
+    # Status goes to stderr; stdout contains only machine-readable event JSONL.
+    print(
+        f"Processed {stats.frames_processed} frames; "
+        f"invalid/unavailable poses: {stats.invalid_pose_frames}; "
+        f"candidate events: {stats.candidate_events}. "
+        "Events require human review.",
+        file=sys.stderr,
+    )
     return 0
 
 
