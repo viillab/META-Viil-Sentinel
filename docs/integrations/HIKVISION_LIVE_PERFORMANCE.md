@@ -35,6 +35,17 @@ display and experimental shadow model from crossing stream sessions.
 - stdout: unconfirmed candidate v1 metadata only (may contain source IDs).
 - stderr: one `RESEARCH_RTSP_PROFILE` JSON line per *processing* attempt
   (on successful frame-bound completion or capture interruption).
+- stderr: an `EDGE_POSE_COVERAGE_SUMMARY` per processed retry-mode session,
+  whether profiling was enabled or not. A transition line
+  `EDGE_POSE_COVERAGE` is emitted once when **45 consecutive processed
+  frames have no usable torso landmarks**, and again when pose is observed.
+  Transition counts reset with each new camera/model session. These are
+  **operator diagnostics**, not camera failure diagnoses or alarms.
+  An empty room, darkness, occlusion, long distance, other people or model
+  errors may each cause the same lack of usable pose. There is no assurance
+  that a person is absent, safe or that no fall occurred. A stream can be
+  decodable yet fail to provide usable pose; `stream_interrupted` separately
+  describes RTSP read failure.
 - Some native FFmpeg/OpenCV logs may still disclose connection details.
   Treat the **entire raw terminal output as private** and only publish
   manually checked, aggregate metrics with permission.

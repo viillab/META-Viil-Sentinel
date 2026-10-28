@@ -26,6 +26,7 @@ from sentinel_edge.multipose_spatial_diagnostics import multipose_spatial_catego
 from sentinel_edge.temporal_pose_association import OfflineAssociationObserver
 from sentinel_edge.frame_resize import resize_for_inference, validate_max_side
 from sentinel_edge.live_profile import LiveCycleProfiler
+from sentinel_edge.pose_coverage import PoseCoverageMonitor
 from sentinel_edge.pose_traces import frame_to_trace_record
 
 
@@ -232,6 +233,14 @@ def _run_rtsp_retry_mode(args, cv2: Any, mp: Any, source: str) -> int:
 
     def run_one_epoch(epoch_source_id: str) -> None:
         profiler = LiveCycleProfiler() if args.profile_rtsp else None
+        coverage = PoseCoverageMonitor()
+
+        def observe_pose(frame: PoseFrame) -> None:
+            transition = coverage.observe(bool(frame.landmarks))
+            if transition is not None:
+                print("EDGE_POSE_COVERAGE " + json.dumps(
+                    transition, sort_keys=True,
+                ), file=sys.stderr)
         with ExitStack() as stack:
             try:
                 cap = open_rtsp_capture(cv2, source)
@@ -274,6 +283,7 @@ def _run_rtsp_retry_mode(args, cv2: Any, mp: Any, source: str) -> int:
                     max_frames=args.max_frames, event_encoder=encode,
                     fail_on_loss=True,
                     on_frame_cycle=profiler.observe if profiler is not None else None,
+                    on_frame=observe_pose,
                 )
             except CameraStreamInterrupted:
                 if profiler is not None:
@@ -281,6 +291,10 @@ def _run_rtsp_retry_mode(args, cv2: Any, mp: Any, source: str) -> int:
                         profiler.report(interrupted=True), sort_keys=True,
                     ), file=sys.stderr)
                 raise
+            finally:
+                print("EDGE_POSE_COVERAGE_SUMMARY " + json.dumps(
+                    coverage.summary(), sort_keys=True,
+                ), file=sys.stderr)
             if profiler is not None:
                 print("RESEARCH_RTSP_PROFILE " + json.dumps(
                     profiler.report(interrupted=False), sort_keys=True,
