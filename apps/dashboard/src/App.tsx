@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { deriveReviewPresentation } from "./metaReview";
 
 const API = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
@@ -13,6 +14,8 @@ type Incident = {
   confidence: number;
   simulated: boolean;
   notification_sent: boolean;
+  /** Future optional DTO: only Member 2 authorized backend may populate. */
+  meta_review_v1?: unknown;
   created_at: string;
   observation: {
     posture: string;
@@ -56,6 +59,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [online, setOnline] = useState(false);
   const selectedIncident = incidents.find((incident) => incident.id === selected) ?? incidents[0];
+  const metaReview = selectedIncident ? deriveReviewPresentation(selectedIncident) : null;
 
   const refresh = useCallback(async () => {
     try {
@@ -111,6 +115,7 @@ export default function App() {
 
   const active = incidents.filter((i) => !["RESOLVED", "FALSE_ALERT"].includes(i.status)).length;
   const resolved = incidents.filter((i) => i.status === "RESOLVED").length;
+  const stagedFeedCount = incidents.filter((i) => i.simulated && i.notification_sent).length;
 
   return (
     <div className="shell">
@@ -133,6 +138,11 @@ export default function App() {
           <div className="stat"><small>RESOLVED</small><strong>{resolved}</strong><span>Human-reviewed workflows</span></div>
           <div className="stat"><small>MODEL PROVIDER</small><strong className="provider">MOCK</strong><span>Muse Spark integration pending</span></div>
         </section>
+        <section className="pipeline-readiness" aria-label="Member 1 integration readiness">
+          <div className="pipeline-step"><small>01 · MEMBER 1</small><strong>EDGE CANDIDATE</strong><span>Contract ready · offline handoff only</span></div>
+          <div className="pipeline-step"><small>02 · MEMBER 2</small><strong>META VERIFICATION</strong><span>Pending live authorized integration</span></div>
+          <div className="pipeline-step"><small>03 · MEMBER 1</small><strong>CAREGIVER DASHBOARD</strong><span>Demo feed: {stagedFeedCount} · no push delivery</span></div>
+        </section>
         <div className="content">
           <section className="panel incident-list">
             <div className="panel-head"><h2>Incident feed</h2><span>{incidents.length} events</span></div>
@@ -147,16 +157,22 @@ export default function App() {
             {!selectedIncident ? <div className="empty"><div className="empty-icon">◎</div><strong>Select an incident</strong><p>Evidence, uncertainty, state transitions, and reviewer controls will appear here.</p></div> :
               <div className="inspection">
                 <div className="inspection-row"><div><small>EVENT ID</small><code>{selectedIncident.id.slice(0, 12)}…</code></div><span className="pill">STAGED EVENT</span></div>
-                <div className="inspection-row"><div><small>DETECTOR CONFIDENCE</small><strong>{Math.round(selectedIncident.confidence * 100)}% (simulated)</strong></div><div><small>STATUS</small><strong>{selectedIncident.status}</strong></div></div>
-                <div className="evidence"><span className="evidence-badge">NO REAL VIDEO INPUT</span><div className="evidence-symbol">⌁</div><p>Keyframe viewer to be connected after Edge Vision implementation</p></div>
+                <div className="inspection-row"><div><small>DEMO DETECTOR SCORE · NOT A FALL PROBABILITY</small><strong>{Math.round(selectedIncident.confidence * 100)}% (simulated)</strong></div><div><small>STATUS</small><strong>{selectedIncident.status}</strong></div></div>
+                <div className="evidence"><span className="evidence-badge">NO REAL VIDEO INPUT</span><div className="evidence-symbol">⌁</div><p>Authorized keyframes not connected. Raw video or pose is never displayed in this demo.</p></div>
+                <div className="section-label">META-FIRST ASSESSMENT</div>
+                <div className={"meta-assessment " + (metaReview?.stage ?? "pending")} role="status" aria-live="polite">
+                  <strong>{metaReview?.label ?? "META VERIFICATION · PENDING"}</strong>
+                  <p>{metaReview?.explanation ?? "No incident selected."}</p>
+                  <small>Display status only · no confirmed fall, automatic emergency action, or real notification</small>
+                </div>
                 <div className="section-label">INTERPRETATION</div>
                 <p className="observation">{selectedIncident.observation?.posture ?? "No report available"}</p>
                 <div className="uncertainty"><strong>Uncertainty & limits</strong>{selectedIncident.observation?.uncertainty.map((line, index) => <p key={index}>• {line}</p>)}</div>
-                <div className="section-label">HUMAN REVIEW</div>
+                <div className="section-label">CAREGIVER REVIEW / ACKNOWLEDGEMENT (DEMO)</div>
                 <label htmlFor="reviewer" className="reviewer-label">Reviewer name</label>
                 <input id="reviewer" value={reviewer} maxLength={80} onChange={(event) => setReviewer(event.target.value)} />
                 <div className="actions">{(actionOptions[selectedIncident.status] ?? []).map(([label, action]) => <button key={action} disabled={busy || !reviewer.trim()} onClick={() => update(action, selectedIncident.id)}>{label}</button>)}</div>
-                <div className="section-label">AUDIT TRAIL</div>
+                <div className="section-label">LOCAL DEMO AUDIT TRAIL</div>
                 <div className="audit">{selectedIncident.history.slice().reverse().map((entry, index) => <div className="audit-item" key={index}><span className="audit-dot" /><div><strong>{entry.to_status.replaceAll("_", " ")}</strong><small>{entry.actor} · {displayTime(entry.time)}</small></div></div>)}</div>
               </div>}
           </section>
