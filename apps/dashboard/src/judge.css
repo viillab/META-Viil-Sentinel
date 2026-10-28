@@ -1,55 +1,64 @@
-/* Member 1 judge-facing, truthful workflow walkthrough. */
-.judge-page{padding:29px 0 18px;color:#1d3858}
-.judge-heading{display:flex;justify-content:space-between;gap:20px;align-items:flex-end;margin-bottom:22px}
-.judge-heading h1{font:800 32px Manrope,system-ui,sans-serif;letter-spacing:-.045em;margin:7px 0 6px}
-.judge-heading p{font-size:13px;line-height:1.7;color:#7088a3;margin:0;max-width:670px}
-.judge-demo-badge{flex-shrink:0;padding:10px 12px;color:#5d501f;background:#fff4dd;border:1px solid #dfc287;border-radius:20px;font-size:10px;font-weight:800;letter-spacing:.05em}
-.judge-warning{background:#fff9ea;border:1px solid #e5ce96;border-radius:12px;padding:15px 18px;font-size:12px;line-height:1.7;color:#5d451a;margin-bottom:18px}
-.judge-scenario-panel,.judge-journey,.judge-evidence{background:#fff;border:1px solid #e0e8f2;border-radius:14px;padding:22px;margin-bottom:17px}
-.judge-page h2{font:800 17px Manrope,system-ui,sans-serif;margin:0 0 16px}
-.judge-scenarios{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
-.judge-scenario{min-width:0;min-height:94px;text-align:left;display:flex;flex-direction:column;gap:8px;align-items:flex-start;justify-content:center;border:1px solid #d4dfec;background:#f7faff;border-radius:10px;padding:13px 16px;color:#2c4c70}
-.judge-scenario strong{font-size:12px;line-height:1.5}
-.judge-scenario small{font-size:10px;color:#7187a1;line-height:1.6}
-.judge-scenario.active{border-color:#326ab0;background:#eaf2ff;box-shadow:inset 0 0 0 1px #326ab0}
-.judge-disclosure{margin:15px 0 0;font-size:11px;color:#657d9a}
-.judge-steps{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px}
-.judge-step{min-width:0;min-height:105px;display:flex;flex-direction:column;align-items:flex-start;gap:7px;text-align:left;padding:13px;background:#f7f9fd;border:1px solid #e0e8f2;border-radius:9px;color:#466583}
-.judge-step-number{font:800 15px Manrope,system-ui,sans-serif;color:#5e80aa}
-.judge-step strong{font-size:12px}
-.judge-step small{font-size:10px;line-height:1.5;color:#8297ae}
-.judge-step.active{background:#193b68;color:#fff;border-color:#193b68}
-.judge-step.active .judge-step-number,.judge-step.active small{color:#c5d8f2}
-.judge-active-stage{margin-top:15px;background:#f4f8fd;border:1px solid #dae6f4;border-radius:12px;padding:23px}
-.judge-stage-header{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}
-.judge-stage-count{font-size:10px;letter-spacing:.08em;color:#738aa7;font-weight:800}
-.judge-stage-state{font-size:10px;padding:7px 9px;border-radius:18px;font-weight:800;background:#ecf0f4;color:#52677f}
-.judge-stage-state.offline_implemented{background:#e1f4ed;color:#21684e}
-.judge-stage-state.blocked{background:#fff0db;color:#825416}
-.judge-active-stage h3{font:800 19px Manrope,system-ui,sans-serif;margin:17px 0 9px}
-.judge-active-stage p{font-size:13px;line-height:1.8;color:#496480;max-width:850px;margin:0 0 17px}
-.judge-output{padding:13px 15px;display:flex;gap:12px;flex-wrap:wrap;justify-content:space-between;background:#fff;border:1px solid #d7e3f0;border-radius:9px}
-.judge-output span{font-size:10px;font-weight:800;letter-spacing:.07em;color:#8196ac}
-.judge-output strong{font-size:12px;color:#294f79;overflow-wrap:anywhere}
-.judge-step-actions{display:flex;justify-content:flex-end;gap:9px;margin-top:18px}
-.judge-step-actions button{min-height:43px}
-.judge-evidence-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
-.judge-evidence-grid>div{display:flex;flex-direction:column;gap:8px;padding:16px;border-radius:10px;background:#f4f8fd;border:1px solid #e1ebf6}
-.judge-evidence-grid small{font-size:9px;color:#6481a3;font-weight:800;letter-spacing:.07em}
-.judge-evidence-grid strong{font:800 26px Manrope,system-ui,sans-serif;color:#1e4775}
-.judge-evidence-grid span{font-size:10px;line-height:1.6;color:#6782a1}
-.judge-meta-note{font-size:11px;line-height:1.8;margin:15px 0 0;color:#526f90;overflow-wrap:anywhere}
-.judge-meta-value{background:#19385f;border-radius:14px;padding:27px;color:#edf5ff;display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-bottom:15px}
-.judge-meta-value .eyebrow{font-size:10px;color:#99c5fb;font-weight:800;letter-spacing:.09em}
-.judge-meta-value h2{font-size:22px;line-height:1.35;margin:10px 0}
-.judge-meta-value p{font-size:12px;line-height:1.8;color:#c5d9f1;margin:0}
-.judge-capabilities{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.judge-capabilities>div{background:#244b78;border:1px solid #3a6090;border-radius:9px;padding:14px;display:flex;flex-direction:column;gap:8px}
-.judge-capabilities strong{font-size:12px}
-.judge-capabilities span{font-size:10px;line-height:1.65;color:#cbdbed}
-.judge-handoff{border:1px solid #bdd4ed;border-radius:11px;padding:19px;background:#eef6ff;color:#3c6083;line-height:1.8;font-size:12px}
-.judge-handoff strong{color:#204a76}
-.judge-page button:focus-visible{outline:3px solid #2363ce;outline-offset:3px}
-@media(max-width:1080px){.judge-evidence-grid{grid-template-columns:1fr 1fr}.judge-meta-value{grid-template-columns:1fr}}
-@media(max-width:750px){.judge-heading{flex-direction:column;align-items:flex-start}.judge-scenarios{grid-template-columns:1fr}.judge-scenario{min-height:69px}.judge-steps{grid-template-columns:repeat(2,minmax(0,1fr))}.judge-active-stage{padding:16px}.judge-meta-value{padding:20px}}
-@media(max-width:440px){.judge-evidence-grid,.judge-capabilities{grid-template-columns:1fr}.judge-steps{grid-template-columns:1fr 1fr}.judge-step-actions{flex-wrap:wrap}.judge-step-actions button{flex:1}}
+/* Member 1 Judge Walkthrough — selectors align exactly with JudgeDemoView.tsx */
+.judge-page{padding:29px 0 14px;color:#183554}
+.judge-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:22px;margin-bottom:20px}
+.judge-heading h1{font:800 clamp(23px,3vw,33px) Manrope,system-ui,sans-serif;letter-spacing:-.04em;margin:8px 0}
+.judge-heading p{font-size:13px;line-height:1.7;color:#627a94;margin:0;max-width:690px}
+.judge-offline{white-space:nowrap;background:#eef2fa;border:1px solid #cbdcf0;padding:11px 13px;color:#32639b;font-size:10px;font-weight:800;letter-spacing:.06em;border-radius:12px}
+.judge-important{background:#fff6e6;border:2px solid #d3a765;color:#6d4316;border-radius:12px;padding:17px 19px;margin-bottom:20px}
+.judge-important strong{font-size:12px;letter-spacing:.04em}
+.judge-important p{font-size:12px;line-height:1.65;margin:7px 0 0}
+.judge-layout{display:grid;grid-template-columns:minmax(250px,.75fr) minmax(365px,1.25fr);gap:18px;align-items:start}
+.judge-scenario,.judge-walkthrough{background:#fff;border:1px solid #dce7f2;border-radius:15px;padding:21px;min-width:0}
+.judge-scenario h2,.judge-walkthrough h2{font:800 17px Manrope,system-ui,sans-serif;margin:0 0 5px}
+.judge-muted{margin:0 0 16px;color:#7188a4;font-size:12px;line-height:1.5}
+.judge-tabs{display:flex;flex-direction:column;gap:7px}
+.judge-tabs button{border:1px solid #e0e9f4;background:#f9fbfe;border-radius:9px;text-align:left;padding:13px;font-size:12px;color:#34506e;min-height:44px;font-weight:700}
+.judge-tabs button.selected{border:2px solid #2869b6;padding:12px;background:#ecf5ff;color:#1a4c87}
+.judge-case{margin-top:20px;padding:16px;border-radius:11px;background:#f0f6fe}
+.judge-case>strong{font-size:13px}.judge-case p{font-size:12px;color:#536d8b;line-height:1.6}
+.judge-case div{border-top:1px solid #d4e3f5;padding-top:10px}
+.judge-case small,.judge-facts small{font-size:10px;font-weight:800;color:#6b83a0;letter-spacing:.04em}
+.judge-facts{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:14px}
+.judge-facts>div{background:#f7fafd;border:1px solid #dfebf5;border-radius:9px;padding:12px;min-height:74px}
+.judge-facts strong{font-size:11px;display:block;margin-top:9px;color:#245588}
+.judge-section-title{display:flex;justify-content:space-between;align-items:start;gap:14px}
+.judge-section-title>span{font:800 12px Manrope,system-ui,sans-serif;color:#6b83a0}
+.judge-stage-list{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px}
+.judge-stage{border:1px solid #dce6f2;background:#f9fbfe;border-radius:11px;padding:11px;min-height:80px;text-align:left;display:flex;gap:9px;align-items:start;color:#294663}
+.judge-stage.current{background:#eaf3ff;border:2px solid #2369c3;padding:10px}
+.judge-stage-index{background:#dceaf8;color:#23578c;border-radius:8px;width:25px;height:25px;flex-shrink:0;display:grid;place-items:center;font-size:11px;font-weight:800}
+.judge-stage-name{font-weight:800;font-size:11px;line-height:1.5;flex:1;min-width:0}
+.judge-stage-name small{display:block;font-size:10px;font-weight:500;margin-top:4px;color:#7288a1}
+.judge-stage-state{font-size:8px;letter-spacing:.04em;font-weight:800;border-radius:4px;padding:5px;color:#666;background:#edf0f5;white-space:nowrap}
+.judge-stage-state.simulated{color:#15588b;background:#e0f1ff}
+.judge-stage-state.blocked{color:#8c4a17;background:#fff0d8}
+.judge-stage-state.pending{color:#654b9b;background:#f0e9ff}
+.judge-focus{border-radius:11px;margin-top:16px;background:#152b47;color:#edf5ff;padding:23px;min-height:240px}
+.judge-focus-top{display:flex;justify-content:space-between;gap:10px;font-size:10px;letter-spacing:.06em;color:#94b5dd}
+.judge-focus-top strong{color:#ffcf80}
+.judge-focus h3{font:800 18px Manrope,system-ui,sans-serif;margin:19px 0 9px}
+.judge-focus>p{font-size:13px;line-height:1.8;color:#e0ebf8}
+.judge-evidence{border-top:1px solid #36506e;margin-top:20px;padding-top:14px}
+.judge-evidence small{font-weight:800;letter-spacing:.06em;font-size:10px;color:#9dbde0}
+.judge-evidence p{font-size:12px;line-height:1.7;color:#d2e6fa;margin-bottom:0;overflow-wrap:anywhere}
+.judge-navigation{display:flex;gap:9px;justify-content:space-between;margin-top:14px}
+.judge-navigation button{padding:12px 16px;border-radius:8px;border:1px solid #c6d8ec;background:#f1f6ff;color:#215b9b;font-weight:800;font-size:12px;min-height:44px}
+.judge-navigation button:disabled{opacity:.45;cursor:not-allowed}
+.judge-takeaway{margin-top:20px;padding:21px;border-radius:12px;border:1px solid #b6d3d2;background:#ecf7f3;display:grid;grid-template-columns:.8fr 1.2fr;gap:17px}
+.judge-takeaway small{display:block;font-size:10px;color:#326b64;font-weight:800}
+.judge-takeaway strong{display:block;margin-top:7px;font-size:14px;line-height:1.55;color:#24584a}
+.judge-explain{font-size:12px;color:#345a54;line-height:1.8}
+.judge-explain strong{display:inline;font-size:12px}
+.judge-bottom{padding:15px 18px;font-size:12px;line-height:1.75;border-left:3px solid #729bc7;background:#eff5fc;border-radius:6px;margin-top:18px}
+.judge-page button:focus-visible{outline:3px solid #1c5bb4;outline-offset:3px}
+@media(max-width:1200px){.judge-layout{grid-template-columns:1fr}.judge-tabs{display:grid;grid-template-columns:1fr 1fr}}
+@media(max-width:710px){.judge-heading{align-items:flex-start;flex-direction:column}.judge-stage-list,.judge-takeaway{grid-template-columns:1fr}.judge-tabs{grid-template-columns:1fr}.judge-scenario,.judge-walkthrough{padding:16px}.judge-stage{min-height:65px}}
+
+/* Final cascade override for ALL workspace views: earlier page styles
+   must not shrink the shared mobile sidebar into one narrow column. */
+@media(max-width:700px){
+  .sidebar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-content:start;gap:8px;padding:14px 15px 16px}
+  .sidebar .brand{grid-column:1/-1;margin:0;padding:0 0 8px}
+  .sidebar button.nav-active,.sidebar button.nav-muted{display:flex;width:100%;margin:0;min-width:0;min-height:56px;padding:10px 9px;justify-content:center;align-items:center;gap:7px;font-size:12px;line-height:1.35}
+  .sidebar>.nav-muted:not(button),.sidebar>.nav-label,.sidebar>.side-bottom{display:none}
+}
