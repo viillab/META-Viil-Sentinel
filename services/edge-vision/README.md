@@ -83,6 +83,17 @@ reviewed labels: the freeze path must correctly reject them until legitimate
 human review is completed. Previously reported prototype scores are *not*
 evidence that this approval step has been passed.
 
+## Versioned private research model weights (Member 1)
+
+The [version-2 linear research artifact contract](docs/VERSIONED_LINEAR_RESEARCH_ARTIFACT_2026-10-28.md)
+binds every **new** private 30D Linear V1 weight JSON to the fixed
+train-only Z-score clamp [-12,+12] preprocessing. Legacy version-1 files
+remain strictly validated and readable for older frozen research evidence,
+without rewriting their bytes or changing the frozen shadow SHA/threshold.
+Corrupt/mismatched numeric metadata is refused. The 30D model architecture,
+original heuristic incident path, private dataset rights and lack of real
+Fall accuracy/alert authority are unchanged.
+
 ## V1/V2 train-to-inference normalization parity (Member 1)
 
 The [scaler/inference consistency handoff](docs/TEMPORAL_V1_V2_INFERENCE_SCALER_PARITY_2026-10-28.md)

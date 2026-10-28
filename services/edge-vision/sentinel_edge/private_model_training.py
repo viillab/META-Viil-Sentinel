@@ -17,15 +17,19 @@ from sentinel_edge.temporal_training import (
 )
 from sentinel_edge.window_export import _private_output_path
 
-ARTIFACT_VERSION = 1
+# Historical v1 remains loadable without rewriting; frozen shadow pins its SHA.
+LEGACY_ARTIFACT_VERSION = 1
+ARTIFACT_VERSION = 2
+INFERENCE_PREPROCESSING = "train_only_zscore_clamp_minus12_plus12"
 ARCHITECTURE = "pooled_temporal_logistic_v1_NOT_TCN_OR_GRU"
-MODEL_FIELDS = frozenset({
+LEGACY_MODEL_FIELDS = frozenset({
     "version", "architecture", "dimension", "mean", "scale", "weights",
     "bias", "threshold", "source_manifest_sha256", "source_proposals_sha256",
     "source_dataset", "training_stage", "publisher_labels_only",
     "independent_human_label_review", "model_deployed",
     "automated_fall_alerting_authorized", "real_world_accuracy_established",
 })
+MODEL_FIELDS = LEGACY_MODEL_FIELDS | {"inference_preprocessing"}
 MAX_MODEL_JSON_BYTES = 10000
 
 
@@ -46,6 +50,7 @@ def checked_artifact(model: TemporalLinearModel, *, manifest_digest: str,
         raise ValueError("Invalid private research model values or provenance")
     return {
         "version": ARTIFACT_VERSION,
+        "inference_preprocessing": INFERENCE_PREPROCESSING,
         "architecture": ARCHITECTURE,
         "dimension": 30,
         "mean": arrays[0].tolist(),
@@ -66,7 +71,13 @@ def checked_artifact(model: TemporalLinearModel, *, manifest_digest: str,
 
 
 def read_private_artifact(path: Path) -> TemporalLinearModel:
-    """Strict-load private JSON weights, without any eval/pickle/code execution."""
+    """Strict-load versioned private JSON weights, never execute serialized code.
+
+    Legacy v1 has no encoded scaler version. Its original SHA-pinned bytes
+    remain readable for offline reproducibility, but current inference uses
+    the corrected train-only [-12,+12] scorer and MUST NOT be compared as
+    the same model implementation as old reported results.
+    """
     path = path.resolve(strict=True)
     if not path.is_file() or not 0 < path.stat().st_size <= MAX_MODEL_JSON_BYTES:
         raise ValueError("Missing or oversized private research weights")
@@ -74,9 +85,19 @@ def read_private_artifact(path: Path) -> TemporalLinearModel:
     if not path.is_relative_to(private) or path.suffix != ".json":
         raise ValueError("Weights must remain within ignored data/private")
     item = json.loads(path.read_text("utf-8"))
-    if not isinstance(item, dict) or set(item) != MODEL_FIELDS:
+    if not isinstance(item, dict) or type(item.get("version")) is not int:
         raise ValueError("Unexpected private research weight schema")
-    if (type(item["version"]) is not int or item["version"] != ARTIFACT_VERSION
+    version = item["version"]
+    if version == LEGACY_ARTIFACT_VERSION:
+        if set(item) != LEGACY_MODEL_FIELDS:
+            raise ValueError("Legacy model must preserve exact v1 schema")
+    elif version == ARTIFACT_VERSION:
+        if (set(item) != MODEL_FIELDS
+                or item["inference_preprocessing"] != INFERENCE_PREPROCESSING):
+            raise ValueError("Private V2 preprocessing contract mismatch")
+    else:
+        raise ValueError("Unsupported research model artifact version")
+    if (item["version"] not in (LEGACY_ARTIFACT_VERSION, ARTIFACT_VERSION)
             or item["architecture"] != ARCHITECTURE
             or type(item["dimension"]) is not int or item["dimension"] != 30
             or item["training_stage"] != "publisher_label_real_pose_research_only"
@@ -173,7 +194,9 @@ def fit_private_research_model(root: Path, pose_model: Path, groups_path: Path,
         # the CLI reports failure and requires a human to inspect its path.
         raise
     report["research_weights_saved_privately"] = True
-    report["research_weight_format"] = "strict_v1_json_float64_30d"
+    report["research_weight_format"] = "strict_v2_json_float64_30d"
+    report["research_artifact_version"] = ARTIFACT_VERSION
+    report["inference_preprocessing"] = INFERENCE_PREPROCESSING
     report["model_size_bytes"] = trained.model_bytes
     report["reloaded_model_verified"] = True
     report["separate_fresh_test_cohort_required"] = True
