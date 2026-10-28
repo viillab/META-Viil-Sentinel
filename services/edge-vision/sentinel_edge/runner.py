@@ -308,6 +308,15 @@ def process_capture(
     return StreamStats(frame_number, invalid_poses, candidate_count)
 
 
+def _release_capture_redacted(capture: Any) -> None:
+    """Best-effort native cleanup; decoder errors may embed RTSP credentials."""
+    try:
+        capture.release()
+    except Exception:
+        # Do not surface native codec error text, URLs, or credentials.
+        pass
+
+
 def _run_rtsp_retry_mode(
     args, cv2: Any, mp: Any, source: str, *, source_id: str | None = None,
     privacy_check: Callable[[], None] | None = None,
@@ -336,13 +345,19 @@ def _run_rtsp_retry_mode(
                 raise CameraStreamInterrupted("Camera open failed") from None
             if cap is None:
                 raise CameraStreamInterrupted("Camera unavailable")
-            stack.callback(cap.release)
+            stack.callback(_release_capture_redacted, cap)
+            # A blocking native open may outlive the previous policy check.
+            # Revalidate before inspecting the stream or loading a pose model.
+            if privacy_check is not None:
+                privacy_check()
             try:
                 opened = cap.isOpened()
             except Exception:
                 raise CameraStreamInterrupted("Camera open check failed") from None
             if not opened:
                 raise CameraStreamInterrupted("Camera unavailable")
+            if privacy_check is not None:
+                privacy_check()
 
             # A fresh MediaPipe task is mandatory: native tracking state can survive
             # source changes even when our Python detector has been reset.
@@ -356,6 +371,10 @@ def _run_rtsp_retry_mode(
             landmarker = stack.enter_context(
                 mp.tasks.vision.PoseLandmarker.create_from_options(options)
             )
+            # The model may take time to initialize; a revoked session
+            # must not start a decode/inference loop.
+            if privacy_check is not None:
+                privacy_check()
 
             def encode(event: FallCandidateEvent) -> dict:
                 return to_envelope(
@@ -409,6 +428,14 @@ def _run_rtsp_retry_mode(
     except KeyboardInterrupt:
         print("RTSP stopped by operator; no monitoring.", file=sys.stderr)
         return 130
+    except PrivacyGateDenied:
+        # Preserve the dedicated privacy stop path in main().
+        raise
+    except Exception:
+        # Native decoders and model libraries can include the RTSP credential
+        # in exception text. Never print a live-camera traceback to stderr.
+        print("RTSP runtime error; capture stopped (details redacted).", file=sys.stderr)
+        return 2
     if not outcome.completed:
         print("RTSP retries exhausted; camera unavailable, no monitoring.", file=sys.stderr)
         return 2
@@ -499,9 +526,9 @@ def main(argv: list[str] | None = None) -> int:
         except Exception:
             raise SystemExit("Cannot initialize authorized camera source (redacted)") from None
         if not cap.isOpened():
-            cap.release()
+            _release_capture_redacted(cap)
             raise SystemExit("Cannot open authorized capture source (credentials redacted)")
-        stack.callback(cap.release)
+        stack.callback(_release_capture_redacted, cap)
         if args.display:
             stack.callback(cv2.destroyAllWindows)
         trace_file = None

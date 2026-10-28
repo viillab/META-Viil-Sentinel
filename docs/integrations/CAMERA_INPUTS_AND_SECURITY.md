@@ -128,6 +128,14 @@ transport is separate future work for Member 2.
   default. Trace outputs require separate privacy acknowledgement.
 - Capture opening and reading use OpenCV/FFmpeg *requested* 8s/4s
   timeouts; **native backend timeout support is not guaranteed**.
+- The bounded RTSP reconnect runner now rechecks active live permission
+  after native stream open, after isOpened, and after MediaPipe model
+  initialization, before processing the first frame. Native capture
+  release failures are suppressed rather than printing potentially
+  credential-bearing FFmpeg errors. Unexpected RTSP native exceptions
+  stop the local session with a redacted status and are not retried as
+  ordinary network disconnections. These controls have offline mocked
+  regression coverage, NOT physical camera field validation.
 - Fail-closed RTSP stream interruption and bounded retries with fresh pose
   model and detector sessions; no stale pose history across reconnects.
   Missing pose and camera loss are not negative fall observations.
