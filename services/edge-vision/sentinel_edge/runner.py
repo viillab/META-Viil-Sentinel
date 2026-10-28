@@ -8,11 +8,11 @@ from contextlib import ExitStack
 from dataclasses import asdict, dataclass
 import json
 from pathlib import Path
-import os
 import sys
 from time import monotonic
 from typing import Any, Callable, TextIO
 
+from sentinel_edge.camera_health import open_rtsp_capture, validate_rtsp_env
 from sentinel_edge.contracts import FallCandidateEvent, PoseFrame
 from sentinel_edge.handoff import SOURCE_ID_PATTERN, to_envelope
 from sentinel_edge.model_smoke import _file_sha256
@@ -24,6 +24,10 @@ from sentinel_edge.temporal_pose_association import OfflineAssociationObserver
 from sentinel_edge.frame_resize import resize_for_inference, validate_max_side
 from sentinel_edge.pose_traces import frame_to_trace_record
 
+
+
+class CameraStreamInterrupted(RuntimeError):
+    """RTSP read failed; neither the absence of events nor a clean EOF."""
 
 
 @dataclass(frozen=True)
@@ -114,6 +118,7 @@ def process_capture(
     on_event: Callable[[FallCandidateEvent], None] | None = None,
     detector: TemporalFallDetector | None = None,
     max_inference_side: int = 0,
+    fail_on_loss: bool = False,
 ) -> StreamStats:
     """Read local frames and emit only candidate metadata to an output stream.
 
@@ -138,8 +143,15 @@ def process_capture(
         fps = 30.0
 
     while True:
-        success, bgr = cap.read()
-        if not success:
+        try:
+            success, bgr = cap.read()
+        except Exception:
+            if fail_on_loss:
+                raise CameraStreamInterrupted("Camera stream read failed") from None
+            raise
+        if not success or bgr is None:
+            if fail_on_loss:
+                raise CameraStreamInterrupted("Camera stream interrupted")
             break
         timestamp = (
             max(int((clock() - started) * 1000), last_timestamp + 1)
@@ -203,16 +215,10 @@ def main(argv: list[str] | None = None) -> int:
     is_rtsp = args.source == "rtsp"
     source = int(args.source) if webcam else str(Path(args.source).expanduser())
     if is_rtsp:
-        source = os.environ.get(args.rtsp_env, "")
-        from urllib.parse import urlsplit
         try:
-            parsed = urlsplit(source)
-            valid = (parsed.scheme.lower() == "rtsp" and parsed.hostname is not None
-                     and not parsed.fragment and not any(c in source for c in "\r\n\x00"))
+            source = validate_rtsp_env(args.rtsp_env)
         except ValueError:
-            valid = False
-        if not valid:
-            raise SystemExit("Invalid or missing RTSP environment setting (URL redacted)")
+            raise SystemExit("Invalid or missing RTSP environment setting (URL redacted)") from None
     elif not webcam and not Path(source).is_file():
         raise SystemExit(f"Video file not found: {source}")
 
@@ -225,7 +231,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.early_motion_probe:
         from sentinel_edge.early_motion_probe import CausalMotionProbe
     with ExitStack() as stack:
-        cap = cv2.VideoCapture(source)
+        try:
+            cap = open_rtsp_capture(cv2, source) if is_rtsp else cv2.VideoCapture(source)
+        except Exception:
+            raise SystemExit("Cannot initialize authorized camera source (redacted)") from None
         if not cap.isOpened():
             cap.release()
             raise SystemExit("Cannot open authorized capture source (credentials redacted)")
@@ -270,7 +279,11 @@ def main(argv: list[str] | None = None) -> int:
                 trace_file=trace_file, event_encoder=encoder,
                 on_frame=consume_research if (shadow is not None or early_probe is not None)
                 else None,
+                fail_on_loss=is_rtsp,
             )
+        except CameraStreamInterrupted:
+            print("Camera stream interrupted; no reliable monitoring (redacted).", file=sys.stderr)
+            return 2
         except KeyboardInterrupt:
             print("Interrupted by operator; local capture closed.", file=sys.stderr)
             return 130

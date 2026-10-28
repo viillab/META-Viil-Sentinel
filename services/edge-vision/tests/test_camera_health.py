@@ -1,7 +1,10 @@
 """Camera health tests use fake video capture; never open real networks."""
 import pytest
 
-from sentinel_edge.camera_health import probe_capture, validate_rtsp_env
+from sentinel_edge.camera_health import (
+    RTSP_OPEN_TIMEOUT_MS, RTSP_READ_TIMEOUT_MS,
+    open_rtsp_capture, probe_capture, validate_rtsp_env,
+)
 
 
 class FakeCapture:
@@ -54,3 +57,22 @@ def test_bounded_probe_rejects_unbounded_requests():
         probe_capture(FakeCapture(1000), sample_frames=0)
     with pytest.raises(ValueError):
         probe_capture(FakeCapture(1000), sample_frames=121)
+
+
+def test_rtsp_capture_uses_ffmpeg_open_only_timeouts():
+    class FakeCv2:
+        CAP_FFMPEG = 1900
+        CAP_PROP_OPEN_TIMEOUT_MSEC = 53
+        CAP_PROP_READ_TIMEOUT_MSEC = 54
+
+        @staticmethod
+        def VideoCapture(url, backend, parameters):
+            assert url == "rtsp://camera.local/Streaming/Channels/102"
+            assert backend == FakeCv2.CAP_FFMPEG
+            assert parameters == [
+                FakeCv2.CAP_PROP_OPEN_TIMEOUT_MSEC, RTSP_OPEN_TIMEOUT_MS,
+                FakeCv2.CAP_PROP_READ_TIMEOUT_MSEC, RTSP_READ_TIMEOUT_MS,
+            ]
+            return "fake capture"
+
+    assert open_rtsp_capture(FakeCv2, "rtsp://camera.local/Streaming/Channels/102") == "fake capture"

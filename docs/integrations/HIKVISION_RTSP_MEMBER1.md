@@ -30,7 +30,7 @@ cd D:\VIIL-Sentinel\services\edge-vision
 Do not enable `--display` in a public or screen-shared session.
 stdout contains versioned **unconfirmed candidate metadata** only.
 Normal offline lab import remains manual. RTSP network/device failures end the
-local run; there is **no automatic reconnection or camera health monitor** yet.
+local run with a nonzero status on interruption; there is **no automatic reconnection or continuous camera health monitor** yet. RTSP uses FFmpeg with 8s open and 4s per-read timeouts where supported. A manual restart creates a new detector/model session. Never use stream silence as evidence that nobody fell.
 Even with `--confirm-consent`, this flag is an operator attestation, **not
 independent verification of people's consent**. Camera access and site permission
 must be checked before operation.
