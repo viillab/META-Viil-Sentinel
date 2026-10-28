@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { deriveReviewPresentation } from "./metaReview";
 import EdgeTestLab from "./EdgeTestLab";
+import IntegrationCenter from "./IntegrationCenter";
 
 const API = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+// Demo API writes are unauthenticated in Member 2's current local foundation.
+// They must never be enabled by default or on non-loopback browser origins.
+const LOCAL_DEMO_WRITES = import.meta.env.VITE_ENABLE_LOCAL_DEMO_MUTATIONS === "true"
+  && ["localhost", "127.0.0.1"].includes(window.location.hostname);
 
 type Status =
   | "DETECTED" | "ANALYZING" | "REVIEW_REQUIRED" | "NOTIFIED"
@@ -53,7 +58,7 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
 }
 
 export default function App() {
-  const [view, setView] = useState<"lab" | "operations">("lab");
+  const [view, setView] = useState<"lab" | "integrations" | "operations">("integrations");
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [reviewer, setReviewer] = useState("Demo Caregiver");
@@ -97,6 +102,7 @@ export default function App() {
   }
 
   function createDemo() {
+    if (!LOCAL_DEMO_WRITES) return;
     void run(async () => {
       const incident = await fetchJson<Incident>(`${API}/api/v1/incidents/demo`, {
         method: "POST",
@@ -108,6 +114,7 @@ export default function App() {
   }
 
   function update(action: string, id: string) {
+    if (!LOCAL_DEMO_WRITES) return;
     void run(() =>
       fetchJson(`${API}/api/v1/incidents/${id}/review`, {
         method: "POST",
@@ -126,16 +133,17 @@ export default function App() {
       <aside className="sidebar">
         <div className="brand"><span className="brand-mark">V</span><div><strong>VIIL SENTINEL</strong><small>INCIDENT INTELLIGENCE</small></div></div>
         <div className="nav-label">WORKSPACE</div>
+        <button type="button" className={view === "integrations" ? "nav-active" : "nav-muted"} onClick={() => setView("integrations")} aria-current={view === "integrations" ? "page" : undefined}>▦ <span>Integration center</span></button>
         <button type="button" className={view === "lab" ? "nav-active" : "nav-muted"} onClick={() => setView("lab")} aria-current={view === "lab" ? "page" : undefined}>◎ <span>AI Detect Test Lab</span></button>
         <button type="button" className={view === "operations" ? "nav-active" : "nav-muted"} onClick={() => setView("operations")} aria-current={view === "operations" ? "page" : undefined}>◈ <span>Incident operations (demo)</span></button>
-        <div className="nav-muted">▦ <span>Benchmarking · next phase</span></div>
+        <div className="nav-muted">◇ <span>Meta / camera links · backend-owned</span></div>
         <div className="side-bottom"><strong>HACKATHON FOUNDATION</strong><p>Local development environment — not connected to live cameras or rescue services.</p></div>
       </aside>
       <main className="main">
-        <header className="topbar"><div className="eyebrow">MEMBER 1 / {view === "lab" ? "AI DETECT TEST LAB" : "INCIDENT OPERATIONS"}</div>{view === "lab" ? <span className="connection ok">● Browser-local · no API</span> : <span className={online ? "connection ok" : "connection"}>● {online ? "Local API connected" : "API offline"}</span>}</header>
-        {view === "lab" ? <EdgeTestLab /> : <>
-        <div className="hero"><div><div className="eyebrow blue">OPERATIONAL OVERVIEW</div><h1>Incident intelligence</h1><p>Meta-first visual verification is planned. Current events are MOCK; caregiver review and response tracking remain manual in this demo.</p></div><button className="primary" onClick={createDemo} disabled={busy || !online}>+ Generate staged incident</button></div>
-        <div className="warning"><span>SIMULATION ONLY</span> This foundation uses mock incident interpretation. It does not detect a real fall, query Meta Muse Spark, provide medical advice, or contact emergency services.</div>
+        <header className="topbar"><div className="eyebrow">MEMBER 1 / {view === "lab" ? "AI DETECT TEST LAB" : view === "integrations" ? "INTEGRATION CENTER" : "INCIDENT OPERATIONS"}</div>{view === "lab" ? <span className="connection ok">● Browser-local · no API</span> : view === "integrations" ? <span className="connection">● Read-only connection status</span> : <span className={online ? "connection ok" : "connection"}>● {online ? "Local API reachable · demo only" : "API offline"}</span>}</header>
+        {view === "lab" ? <EdgeTestLab /> : view === "integrations" ? <IntegrationCenter /> : <>
+        <div className="hero"><div><div className="eyebrow blue">OPERATIONAL OVERVIEW</div><h1>Incident intelligence</h1><p>Meta-first visual verification is planned. Current events are MOCK; caregiver review and response tracking remain manual in this demo.</p></div><button className="primary" onClick={createDemo} disabled={!LOCAL_DEMO_WRITES || busy || !online}>+ Generate staged incident</button></div>
+        <div className="warning"><span>SIMULATION ONLY</span> This foundation uses mock incident interpretation. It does not detect a real fall, query Meta Muse Spark, provide medical advice, or contact emergency services. {LOCAL_DEMO_WRITES ? "Local-only demo write actions explicitly enabled (NOT authenticated)." : "Unauthenticated demo write actions disabled by default; local opt-in required."}</div>
         {error && <div className="error" role="alert">Connection / action error: {error}</div>}
         <section className="stats">
           <div className="stat"><small>INCIDENTS LOGGED</small><strong>{incidents.length}</strong><span>Staged development events</span></div>
@@ -176,7 +184,7 @@ export default function App() {
                 <div className="section-label">CAREGIVER REVIEW / ACKNOWLEDGEMENT (DEMO)</div>
                 <label htmlFor="reviewer" className="reviewer-label">Reviewer name</label>
                 <input id="reviewer" value={reviewer} maxLength={80} onChange={(event) => setReviewer(event.target.value)} />
-                <div className="actions">{(actionOptions[selectedIncident.status] ?? []).map(([label, action]) => <button key={action} disabled={busy || !reviewer.trim()} onClick={() => update(action, selectedIncident.id)}>{label}</button>)}</div>
+                <div className="actions">{(actionOptions[selectedIncident.status] ?? []).map(([label, action]) => <button key={action} disabled={!LOCAL_DEMO_WRITES || busy || !reviewer.trim()} onClick={() => update(action, selectedIncident.id)}>{label}</button>)}</div>
                 <div className="section-label">LOCAL DEMO AUDIT TRAIL</div>
                 <div className="audit">{selectedIncident.history.slice().reverse().map((entry, index) => <div className="audit-item" key={index}><span className="audit-dot" /><div><strong>{entry.to_status.replaceAll("_", " ")}</strong><small>{entry.actor} · {displayTime(entry.time)}</small></div></div>)}</div>
               </div>}
