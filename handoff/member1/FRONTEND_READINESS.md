@@ -12,7 +12,8 @@ to emit aggregate research counts only, NOT live fall events.
 
 ## Phase 1 Edge AI Test Lab
 
-A new **AI Detect Test Lab** is the default view. It accepts bounded local
+**Integration Center** is the current default view. **AI Detect Test Lab**
+remains available as a separate offline test tab. It accepts bounded local
 metadata-only Edge candidate JSONL, with a synthetic Fall sample and empty
 Sitting sample, and does not poll the local Backend while that view is active.
 The existing Incident operations tab remains MOCK. See
@@ -92,10 +93,22 @@ npm run build
 npm run dev
 ```
 
-If existing local demo FastAPI is online, click "Generate staged
-incident"; it should stay clearly **MOCK**, display simulated feed
-count, and preserve original human-review-demo controls. The 28 tests
-do not require a server or API key.
+By default the demo incident API is disabled in the browser. Explicitly
+set VITE_ENABLE_LOCAL_DEMO_MUTATIONS=true in a local-only development
+session and open via localhost to enable simulated incident reads/writes.
+The new Caregiver Inbox uses a separate authenticated, read-only future
+endpoint, and the sample preview never sends messages. Contract tests
+run without a backend server or API key.
+
+## Caregiver Inbox and Accessibility handoff
+
+Member 1 implemented a read-only caregiver notification inbox with
+high-contrast and large-text controls, keyboard-friendly layout,
+screen-reader status region, and explicit sample-only preview. The
+backend endpoint does **not** exist yet; production notifications,
+acknowledgments, delivery receipts and genuine Meta events are not live.
+See `docs/integrations/MEMBER1_ACCESSIBLE_CAREGIVER_INBOX.md` and
+`handoff/team/caregiver_inbox.v1.schema.json` for the strict contract.
 
 ## Waiting-for-Member-2 checklist
 

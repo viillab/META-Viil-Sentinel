@@ -1,3 +1,8 @@
+/* Keyboard users can skip repeating the workspace navigation. */
+.skip-navigation{position:absolute;z-index:100;top:-100px;left:12px;
+  padding:12px 18px;background:#ffffff;color:#101d35;border:3px solid #205aba;
+  border-radius:8px;font-weight:800}
+.skip-navigation:focus{top:12px}
 /* System fonts only: no external font fetches in offline test lab. */
 
 :root {font-family:'DM Sans',system-ui,sans-serif;color:#192940;background:#f5f7fb;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased}

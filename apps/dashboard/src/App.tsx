@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { deriveReviewPresentation } from "./metaReview";
 import EdgeTestLab from "./EdgeTestLab";
 import IntegrationCenter from "./IntegrationCenter";
+import CaregiverInbox from "./CaregiverInboxView";
 import {
   allowLocalDemo, listLocalDemoIncidents, createLocalDemoIncident,
   reviewLocalDemoIncident,
@@ -26,7 +27,7 @@ function displayTime(s: string) {
 }
 
 export default function App() {
-  const [view, setView] = useState<"lab" | "integrations" | "operations">("integrations");
+  const [view, setView] = useState<"lab" | "integrations" | "operations" | "caregiver">("integrations");
   const [incidents, setIncidents] = useState<DemoIncident[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [reviewer, setReviewer] = useState("Demo Caregiver");
@@ -119,18 +120,20 @@ export default function App() {
 
   return (
     <div className="shell">
-      <aside className="sidebar">
+      <a className="skip-navigation" href="#main-content">Skip to main content</a>
+      <aside className="sidebar" aria-label="Workspace navigation">
         <div className="brand"><span className="brand-mark">V</span><div><strong>VIIL SENTINEL</strong><small>INCIDENT INTELLIGENCE</small></div></div>
         <div className="nav-label">WORKSPACE</div>
         <button type="button" className={view === "integrations" ? "nav-active" : "nav-muted"} onClick={() => setView("integrations")} aria-current={view === "integrations" ? "page" : undefined}>▦ <span>Integration center</span></button>
         <button type="button" className={view === "lab" ? "nav-active" : "nav-muted"} onClick={() => setView("lab")} aria-current={view === "lab" ? "page" : undefined}>◎ <span>AI Detect Test Lab</span></button>
         <button type="button" className={view === "operations" ? "nav-active" : "nav-muted"} onClick={() => setView("operations")} aria-current={view === "operations" ? "page" : undefined}>◈ <span>Incident operations (demo)</span></button>
+        <button type="button" className={view === "caregiver" ? "nav-active" : "nav-muted"} onClick={() => setView("caregiver")} aria-current={view === "caregiver" ? "page" : undefined}>♡ <span>Caregiver inbox</span></button>
         <div className="nav-muted">◇ <span>Meta / camera links · backend-owned</span></div>
         <div className="side-bottom"><strong>HACKATHON FOUNDATION</strong><p>Local development environment — not connected to live cameras or rescue services.</p></div>
       </aside>
-      <main className="main">
-        <header className="topbar"><div className="eyebrow">MEMBER 1 / {view === "lab" ? "AI DETECT TEST LAB" : view === "integrations" ? "INTEGRATION CENTER" : "INCIDENT OPERATIONS"}</div>{view === "lab" ? <span className="connection ok">● Browser-local · no API</span> : view === "integrations" ? <span className="connection">● Read-only connection status</span> : <span className={online ? "connection ok" : "connection"}>● {!LOCAL_DEMO_WRITES ? "Local demo API disabled" : online ? "Local demo API reachable · no auth" : "Local demo API offline"}</span>}</header>
-        {view === "lab" ? <EdgeTestLab /> : view === "integrations" ? <IntegrationCenter /> : <>
+      <main className="main" id="main-content" tabIndex={-1}>
+        <header className="topbar"><div className="eyebrow">MEMBER 1 / {view === "lab" ? "AI DETECT TEST LAB" : view === "integrations" ? "INTEGRATION CENTER" : view === "caregiver" ? "CAREGIVER INBOX" : "INCIDENT OPERATIONS"}</div>{view === "lab" ? <span className="connection ok">● Browser-local · no API</span> : view === "integrations" || view === "caregiver" ? <span className="connection">● Read-only connection status</span> : <span className={online ? "connection ok" : "connection"}>● {!LOCAL_DEMO_WRITES ? "Local demo API disabled" : online ? "Local demo API reachable · no auth" : "Local demo API offline"}</span>}</header>
+        {view === "lab" ? <EdgeTestLab /> : view === "integrations" ? <IntegrationCenter /> : view === "caregiver" ? <CaregiverInbox /> : <>
         <div className="hero"><div><div className="eyebrow blue">OPERATIONAL OVERVIEW</div><h1>Incident intelligence</h1><p>Meta-first visual verification is planned. Current events are MOCK; caregiver review and response tracking remain manual in this demo.</p></div><button className="primary" onClick={createDemo} disabled={!LOCAL_DEMO_WRITES || busy || !online}>+ Generate staged incident</button></div>
         <div className="warning"><span>SIMULATION ONLY</span> This foundation uses mock incident interpretation. It does not detect a real fall, query Meta AI, provide medical advice, or contact emergency services. {LOCAL_DEMO_WRITES ? "Local-only demo read/write actions explicitly enabled (NOT authenticated)." : "Unauthenticated demo API reads and writes are disabled by default. Developers can opt in only on localhost with VITE_ENABLE_LOCAL_DEMO_MUTATIONS=true. This is not backend authorization."}</div>
         {error && <div className="error" role="alert">Connection / action error: {error}</div>}
