@@ -1,5 +1,5 @@
 import { useState } from "react";
-import syntheticCandidate from "./fixtures/edgeCandidateSynthetic.json";
+import syntheticCandidate from "./fixtures/edgeCandidateSynthetic.json" with { type: "json" };
 import {
   formatSourceOffset, MAX_LOCAL_CANDIDATE_BYTES, parseEdgeCandidateJsonl,
 } from "./edgeLab";
