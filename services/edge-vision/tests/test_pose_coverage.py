@@ -24,11 +24,57 @@ def test_no_pose_gap_once_and_recovery_without_camera_failure_claim():
         "longest_no_pose_streak_frames": 4,
         "no_pose_streak_at_end_frames": 0,
         "gap_threshold_frames": 3,
+        "gap_threshold_ms": 3000,
+        "duration_gate_applied": False,
+        "longest_no_pose_duration_ms": None,
         "condition": "pose_seen",
         "operator_diagnostic_only": True,
         "person_absence_or_fall_inferred": False,
         "not_a_camera_health_or_safety_certification": True,
     }
+
+
+def test_timestamp_aware_gap_requires_both_time_and_frames():
+    monitor = PoseCoverageMonitor(gap_threshold_frames=3, gap_threshold_ms=3000)
+    assert monitor.observe(False, timestamp_ms=100) is None
+    assert monitor.observe(False, timestamp_ms=400) is None
+    assert monitor.observe(False, timestamp_ms=700) is None
+    assert monitor.observe(False, timestamp_ms=1200) is None
+    assert monitor.observe(False, timestamp_ms=3100)["condition"] == "pose_not_observed"
+    assert monitor.observe(False, timestamp_ms=3500) is None
+    assert monitor.observe(True, timestamp_ms=3600)["condition"] == "pose_observed_again"
+    summary = monitor.summary()
+    assert summary["duration_gate_applied"] is True
+    assert summary["longest_no_pose_duration_ms"] == 3400
+    assert summary["gap_threshold_ms"] == 3000
+    assert summary["condition"] == "pose_seen"
+
+
+def test_timestamp_gate_avoids_frame_rate_dependent_false_transition():
+    fast = PoseCoverageMonitor(gap_threshold_frames=45, gap_threshold_ms=3000)
+    # 90 frames at about 30 fps cover less than 3 seconds.
+    for index in range(90):
+        assert fast.observe(False, timestamp_ms=index * 33) is None
+    assert fast.observe(False, timestamp_ms=3001)["condition"] == "pose_not_observed"
+    assert fast.summary()["longest_no_pose_duration_ms"] == 3001
+
+
+def test_reject_time_reversal_and_mixed_timing_mode():
+    monitor = PoseCoverageMonitor(gap_threshold_frames=3)
+    monitor.observe(False, timestamp_ms=100)
+    with pytest.raises(ValueError):
+        monitor.observe(False, timestamp_ms=100)
+    with pytest.raises(ValueError):
+        monitor.observe(False, timestamp_ms=50)
+    with pytest.raises(ValueError):
+        monitor.observe(False)
+    assert monitor.summary()["frames_observed"] == 1
+
+
+@pytest.mark.parametrize("bad_duration", [0, 249, 30001, True, 2000.0])
+def test_reject_bad_duration_threshold(bad_duration):
+    with pytest.raises(ValueError):
+        PoseCoverageMonitor(gap_threshold_ms=bad_duration)
 
 
 def test_camera_session_gaps_are_not_inherited_by_new_session():
