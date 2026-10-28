@@ -22,8 +22,8 @@ def test_real_runner_requires_consent_for_handoff(tmp_path, capsys):
     assert args.confirm_consent is True
 
 
-def test_legacy_runner_does_not_require_new_flag(tmp_path):
+def test_offline_legacy_runner_does_not_require_new_flag(tmp_path):
     model = tmp_path / "pose.task"
     model.write_bytes(b"parser only")
-    args = parse_args(["--source", "0", "--model", str(model)])
+    args = parse_args(["--source", "synthetic-offline.mp4", "--model", str(model)])
     assert args.candidate_format == "legacy"

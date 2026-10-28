@@ -116,7 +116,8 @@ def test_cli_demands_consent_and_known_model(tmp_path):
     task.write_bytes(b"test")
     weight = tmp_path / "research.json"
     weight.write_bytes(b"test")
-    base = ["--source", "0", "--model", str(task), "--shadow-model", str(weight)]
+    base = ["--source", "offline-research.mp4", "--model", str(task),
+            "--shadow-model", str(weight)]
     with pytest.raises(SystemExit):
         parse_args(base)
     flags = base + ["--confirm-consent", "--acknowledge-pose-privacy"]

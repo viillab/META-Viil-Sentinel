@@ -121,7 +121,8 @@ def test_runner_refuses_live_capture_before_importing_cv2(tmp_path, monkeypatch)
     monkeypatch.setitem(sys.modules, "mediapipe", None)
     # The missing approval should win over missing video dependencies.
     with pytest.raises(SystemExit, match="signed privacy approval"):
-        runner.main(["--source", "usb:0", "--model", str(model)])
+        runner.main(["--source", "usb:0", "--model", str(model),
+                     "--candidate-format", "v1", "--confirm-consent"])
     with pytest.raises(SystemExit, match="signed privacy approval"):
         runner.main(["--source", "rtsp", "--rtsp-env", "VIIL_CAM",
                      "--model", str(model), "--candidate-format", "v1",

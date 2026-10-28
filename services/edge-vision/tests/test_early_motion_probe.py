@@ -107,7 +107,8 @@ def test_cooldown_and_bounded_ram_history_no_raw_state_in_summary():
 def test_cli_requires_explicit_local_research_consent(tmp_path):
     task = tmp_path / "pose.task"
     task.write_bytes(b"synthetic task")
-    base = ["--source","0","--model",str(task),"--early-motion-probe"]
+    base = ["--source","offline-research.mp4","--model",str(task),
+            "--early-motion-probe"]
     with pytest.raises(SystemExit):
         parse_args(base)
     args = parse_args(base + ["--confirm-consent","--acknowledge-pose-privacy"])

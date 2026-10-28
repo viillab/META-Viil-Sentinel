@@ -17,7 +17,8 @@ from sentinel_edge.camera_health import open_rtsp_capture, validate_rtsp_env
 from sentinel_edge.camera_inputs import (
     load_camera_registry, parse_usb_index, resolve_camera,
 )
-from sentinel_edge.privacy_gate import verify_privacy_approval, PrivacyGateDenied
+from sentinel_edge.privacy_gate import PrivacyGateDenied
+from sentinel_edge.live_approval import LiveApprovalGuard
 from sentinel_edge.rtsp_reconnect import (
     CameraStreamInterrupted, run_bounded_sessions,
 )
@@ -133,6 +134,14 @@ def parse_args(argv: list[str] | None = None):
         or args.trace_output is not None or args.display
     ):
         parser.error("RTSP retry mode disallows research shadow, trace and display")
+    live_input = args.source in ("rtsp", "camera") or parse_usb_index(args.source) is not None
+    if live_input and (args.candidate_format != "v1" or not args.confirm_consent):
+        parser.error("All live cameras require --candidate-format v1 and --confirm-consent")
+    if live_input and (
+        args.trace_output is not None or args.shadow_model is not None
+        or args.early_motion_probe or args.display
+    ):
+        parser.error("Live cameras disallow trace, shadow, motion research and display")
     if args.rtsp_retries and args.candidate_format != "v1":
         parser.error("RTSP retry mode requires --candidate-format v1")
     if args.max_frames < 0:
@@ -178,6 +187,7 @@ def process_capture(
     display: bool = False, trace_file: TextIO | None = None,
     output: TextIO | None = None, clock: Callable[[], float] = monotonic,
     on_frame: Callable[[PoseFrame], None] | None = None,
+    privacy_check: Callable[[], None] | None = None,
     on_frame_cycle: Callable[[float, bool, bool], None] | None = None,
     pose_reason_consumer: Callable[[str], None] | None = None,
     multipose_category_consumer: Callable[[str], None] | None = None,
@@ -216,6 +226,8 @@ def process_capture(
         fps = 30.0
 
     while True:
+        if privacy_check is not None:
+            privacy_check()
         if max_duration_seconds and clock() - started >= max_duration_seconds:
             break
         cycle_start = perf_counter() if on_frame_cycle is not None else None
@@ -225,6 +237,8 @@ def process_capture(
             if fail_on_loss:
                 raise CameraStreamInterrupted("Camera stream read failed") from None
             raise
+        if privacy_check is not None:
+            privacy_check()
         if not success or bgr is None:
             if fail_on_loss:
                 raise CameraStreamInterrupted("Camera stream interrupted")
@@ -262,6 +276,10 @@ def process_capture(
             on_frame(frame)
         event = detector.process(frame)
         if event is not None:
+            # Recheck the short-lived approval gate before exporting candidate
+            # metadata, even if inference itself took substantial time.
+            if privacy_check is not None:
+                privacy_check()
             if on_event is not None:
                 on_event(event)
             encoded = (event_encoder(event) if event_encoder is not None
@@ -285,11 +303,14 @@ def process_capture(
 
 def _run_rtsp_retry_mode(
     args, cv2: Any, mp: Any, source: str, *, source_id: str | None = None,
+    privacy_check: Callable[[], None] | None = None,
 ) -> int:
     """Run isolated RTSP epochs. Never reuse native tracker or temporal state."""
     model_sha = _file_sha256(args.model)
 
     def run_one_epoch(epoch_source_id: str) -> None:
+        if privacy_check is not None:
+            privacy_check()
         profiler = LiveCycleProfiler() if args.profile_rtsp else None
         coverage = PoseCoverageMonitor()
 
@@ -344,6 +365,7 @@ def _run_rtsp_retry_mode(
                     fail_on_loss=True,
                     on_frame_cycle=profiler.observe if profiler is not None else None,
                     on_frame=observe_pose,
+                    privacy_check=privacy_check,
                     max_duration_seconds=args.rtsp_session_seconds,
                 )
                 if stats.frames_processed == 0:
@@ -393,17 +415,26 @@ def main(argv: list[str] | None = None) -> int:
     live_device = args.source in ("rtsp", "camera")
     if not live_device:
         live_device = parse_usb_index(args.source) is not None
+    privacy_check = None
     if live_device:
         if args.privacy_approval is None:
             raise SystemExit("Live camera requires signed privacy approval (redacted)")
+        if args.candidate_format != "v1" or not args.confirm_consent:
+            raise SystemExit("Live cameras require v1 candidate and explicit consent")
+        if (args.trace_output is not None or args.shadow_model is not None
+                or args.early_motion_probe or args.display):
+            raise SystemExit("Live cameras prohibit trace, shadow, motion and display")
         camera_scope = (
             args.selected_camera.camera_id if args.selected_camera is not None
             else args.source_id
         )
         try:
-            verify_privacy_approval(args.privacy_approval, camera_id=camera_scope)
+            approval_guard = LiveApprovalGuard(
+                args.privacy_approval, camera_id=camera_scope,
+            )
         except PrivacyGateDenied:
             raise SystemExit("Live camera privacy approval denied (redacted)") from None
+        privacy_check = approval_guard.check
     try:
         import cv2
         import mediapipe as mp
@@ -439,7 +470,13 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit(f"Video file not found: {source}")
 
     if is_rtsp and args.rtsp_retries:
-        return _run_rtsp_retry_mode(args, cv2, mp, source, source_id=source_id)
+        try:
+            return _run_rtsp_retry_mode(
+                args, cv2, mp, source, source_id=source_id, privacy_check=privacy_check,
+            )
+        except PrivacyGateDenied:
+            print("Live camera approval revoked/invalid; capture stopped.", file=sys.stderr)
+            return 2
 
     if args.shadow_model is not None:
         # Keep training-window imports out of the camera runner module to
@@ -499,7 +536,11 @@ def main(argv: list[str] | None = None) -> int:
                 on_frame=consume_research if (shadow is not None or early_probe is not None)
                 else None,
                 fail_on_loss=is_rtsp,
+                privacy_check=privacy_check,
             )
+        except PrivacyGateDenied:
+            print("Live camera approval revoked/invalid; capture stopped.", file=sys.stderr)
+            return 2
         except CameraStreamInterrupted:
             print("Camera stream interrupted; no reliable monitoring (redacted).", file=sys.stderr)
             return 2
