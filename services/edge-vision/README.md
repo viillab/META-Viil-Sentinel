@@ -116,6 +116,17 @@ predeclared V1 selection remains unchanged.
 .\.venv\Scripts\python.exe -m sentinel_edge.model_quality --synthetic-demo --dev-crossval
 ```
 
+## Original-heuristic full-video decode integrity (Member 1)
+
+The [original/early full-decode parity handoff](docs/ORIGINAL_HEURISTIC_FULL_DECODE_PARITY_2026-10-28.md)
+hardens the original offline benchmark to reject truncated source decoding,
+invalid frame metadata and mismatched event counts before evidence capture.
+Real source-pinned replay of 11 ASSIST-IoT videos confirms identical source
+hashes and 3,396 decoded frames for both methods, with zero original
+heuristic candidates versus three **untrained, unconfirmed** motion cues.
+These are research-only event-candidate counts, not human-validated accuracy;
+production alerts and reviewer requirements remain unchanged.
+
 ## Human-reviewed event gate for 2-second research motion cues (Member 1)
 
 The [private evidence and two-reviewer protocol](docs/REVIEW_GATED_EARLY_MOTION_EVIDENCE_2026-10-28.md)

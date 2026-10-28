@@ -180,7 +180,8 @@ def test_capture_uses_only_event_timestamps_and_pose_counts(tmp_path):
         event_consumer(E())
         return [], {"frames_processed": 4, "candidate_events": 1}
     manifest = ev.collect_original_heuristic_events(
-        inventory, model, collector=mocked_collector
+        inventory, model, collector=mocked_collector,
+        metadata_reader=lambda _: (4, 2.0),
     )
     assert manifest["clips"][0]["candidate_ms"] == [1200]
     assert manifest["clips"][0]["valid_pose_frames"] == 4
