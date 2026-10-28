@@ -1,13 +1,14 @@
 # VIIL Sentinel
-**Autonomous Fall Detection & Rescue Agent via Edge Vision — Hackathon MVP**
+**Meta-first Fall Candidate Intelligence via Edge Vision — Hackathon MVP**
 
 > **Local development foundation, not a finished fall detector or medical product.** This repository was freshly developed during the 2026 Meta Global AI Developer Hackathon. Existing AFDCare code, model weights, research datasets and proprietary assets have not been copied.
 
 VIIL Sentinel aims to provide **non-clinical, human-supervised incident awareness**:
-Video → Edge fall candidate → Evidence extraction → Meta multimodal incident interpretation → Structured report → In-app alert → Caregiver verification → Traceable incident management.
+Video → Edge fall candidate → consented keyframes → Meta-first evidence assessment (planned; current backend MOCK) → validated informational in-app advisory or follow-up → Caregiver acknowledgement / override → Traceable incident management.
 
-## Developer handoff (Member 1 -> Member 2 / 3)
+## Two-person team: Member 1 (Edge + Dashboard) and Member 2 (Backend + Meta)
 
+See [current two-member assignments and Meta-first design](handoff/team/TEAM_ROLES_AND_META_FIRST.md).
 Start at [Member 1 delivery package](handoff/member1/README.md) for the
 live code/API ownership, canonical candidate JSON contract, new strictly
 versioned private 1500ms research-model loader and source-verified model
@@ -73,7 +74,7 @@ This is a **single-process backend with modular components**, deliberately not a
 ## Competition compliance
 
 - New work between **26 Oct and 4 Nov 2026**; preserve Git history and distinguish all reused dependencies.
-- Team size: three approved members, within the four-person limit.
+- Team size: **two active members**, within the maximum-four rule; Member 1 also owns the Dashboard and Notifications formerly assigned to Member 3.
 - Repository may remain Private during development based on organizer confirmation; make **Public before submission** and test in a logged-out browser.
 - Submit a **3-minute demo video**, team roster and public repository link.
 - Deadline: **5 Nov 2026, 09:00 ICT**; internal target **4 Nov 2026, 21:00 ICT**.
@@ -93,6 +94,6 @@ This is a **single-process backend with modular components**, deliberately not a
 7. Record reproducible metrics and a 3-minute honest demo.
 
 ## Project safety and scope
-Research/staged demonstration only. Use human verification for all consequential decisions. This is not a medical device, patient monitoring guarantee or rescue dispatcher.
+Research/staged demonstration only. Proposed Meta-first assessment can automate routine *informational* advisory screening after real evidence validation; human control remains for consequential decisions. This is not a medical device, patient monitoring guarantee or rescue dispatcher.
 
 See `SECURITY.md`, `CONTRIBUTING.md` and `docs/architecture/ARCHITECTURE.md`.

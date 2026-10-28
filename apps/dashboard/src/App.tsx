@@ -124,7 +124,7 @@ export default function App() {
       </aside>
       <main className="main">
         <header className="topbar"><div className="eyebrow">WORKSPACE / OVERVIEW</div><span className={online ? "connection ok" : "connection"}>● {online ? "Local API connected" : "API offline"}</span></header>
-        <div className="hero"><div><div className="eyebrow blue">OPERATIONAL OVERVIEW</div><h1>Incident intelligence</h1><p>Evidence-led monitoring with human-controlled verification and response tracking.</p></div><button className="primary" onClick={createDemo} disabled={busy || !online}>+ Generate staged incident</button></div>
+        <div className="hero"><div><div className="eyebrow blue">OPERATIONAL OVERVIEW</div><h1>Incident intelligence</h1><p>Meta-first visual verification is planned. Current events are MOCK; caregiver review and response tracking remain manual in this demo.</p></div><button className="primary" onClick={createDemo} disabled={busy || !online}>+ Generate staged incident</button></div>
         <div className="warning"><span>SIMULATION ONLY</span> This foundation uses mock incident interpretation. It does not detect a real fall, query Meta Muse Spark, provide medical advice, or contact emergency services.</div>
         {error && <div className="error" role="alert">Connection / action error: {error}</div>}
         <section className="stats">
@@ -143,7 +143,7 @@ export default function App() {
               </button>)}
           </section>
           <section className="panel details">
-            <div className="panel-head"><h2>Incident inspection</h2><span>HUMAN-IN-THE-LOOP</span></div>
+            <div className="panel-head"><h2>Incident inspection</h2><span>META-FIRST PROPOSED · MOCK NOW</span></div>
             {!selectedIncident ? <div className="empty"><div className="empty-icon">◎</div><strong>Select an incident</strong><p>Evidence, uncertainty, state transitions, and reviewer controls will appear here.</p></div> :
               <div className="inspection">
                 <div className="inspection-row"><div><small>EVENT ID</small><code>{selectedIncident.id.slice(0, 12)}…</code></div><span className="pill">STAGED EVENT</span></div>
