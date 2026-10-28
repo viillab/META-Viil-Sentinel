@@ -83,6 +83,20 @@ reviewed labels: the freeze path must correctly reject them until legitimate
 human review is completed. Previously reported prototype scores are *not*
 evidence that this approval step has been passed.
 
+## Research-backed 1.5s streaming shadow and architecture decision (Member 1)
+
+The [2025-2026 peer-reviewed architecture/evaluation review](docs/RESEARCH_BACKED_EDGE_FALL_DETECTION_2026-10-28.md)
+compares lightweight causal TCN, GRU/Transformer, OmniFall staged-to-wild
+validation and missing real-hardware benchmarks. It recommends a **data-first
+pose + short causal temporal model** candidate, **not** an unverified TCN
+accuracy gain. New `Causal1500msModelShadow` is a separate **research-only**
+in-memory streaming primitive: 1,500ms history, 250ms hop, strict
+source/gap resets, pose-coverage abstention and aggregate counters only.
+It does NOT load the 8s frozen weights, output incidents, update Backend,
+or permit automatic notifications. Any real-source replay with a constant
+synthetic predictor is a processing smoke test, **not a trained classifier
+accuracy, fall detection delay or real-world false-alarm measurement**.
+
 ## Independently trained causal 1.5-second research baseline (Member 1)
 
 The [1.5s real-video training and abstention handoff](docs/CAUSAL_1500MS_TRAINED_RESEARCH_HANDOFF_2026-10-28.md)
