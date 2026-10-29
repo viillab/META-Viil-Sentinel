@@ -49,6 +49,85 @@ def test_template_can_write_private_new_draft_without_approval(tmp_path, capsys)
         operator.main(["template", "--output", str(path)])
 
 
+def test_review_of_default_unsigned_draft_reports_missing_fields(
+    tmp_path, capsys,
+):
+    draft = tmp_path / "draft.json"
+    assert operator.main(["template", "--output", str(draft)]) == 0
+    capsys.readouterr()
+    assert operator.main([
+        "review", "--unsigned", str(draft), "--source-id", "staged-camera-01",
+    ]) == 2
+    result = json.loads(capsys.readouterr().out)
+    assert result["result"] == "draft_fields_incomplete"
+    assert "site_authorization_confirmed" in result["issues"]
+    assert "notices_confirmed" in result["issues"]
+    assert "legal_basis_by_jurisdiction" in result["issues"]
+    assert "validity_window" in result["issues"]
+    assert result["camera_access_granted"] is False
+    assert result["signed_policy_verified"] is False
+
+
+def test_review_of_structurally_complete_draft_does_not_grant_permission(
+    tmp_path, monkeypatch, capsys,
+):
+    draft = unsigned_from_fixture(tmp_path, monkeypatch)
+    assert operator.main([
+        "review", "--unsigned", str(draft), "--source-id", "staged-camera-01",
+    ]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["draft_fields_structurally_complete"] is True
+    assert report["issues"] == []
+    assert report["genuine_site_permission_confirmed_by_tool"] is False
+    assert report["camera_access_granted"] is False
+    assert report["signed_policy_verified"] is False
+    assert TEST_KEY not in json.dumps(report)
+
+
+@pytest.mark.parametrize("changes,fields", [
+    ({"approved_camera_ids": ["other-cam"]}, ["approved_camera_ids"]),
+    ({"approved_camera_ids": [{}]}, ["approved_camera_ids"]),
+    ({"jurisdictions": ["th"]}, ["jurisdictions", "legal_basis_by_jurisdiction"]),
+    ({"jurisdictions": [["TH"]]}, ["jurisdictions", "legal_basis_by_jurisdiction"]),
+    ({"legal_basis_by_jurisdiction": {"TH": "REVIEW_REQUIRED"}}, ["legal_basis_by_jurisdiction"]),
+    ({"cloud_transfer_enabled": True}, ["cloud_transfer_enabled"]),
+    ({"expires_on": "2035-10-01"}, ["validity_window"]),
+    ({"notice_ref": "REPLACE_NOTICE_REF"}, ["notice_ref"]),
+])
+def test_review_reports_only_field_codes_for_invalid_draft(
+    tmp_path, monkeypatch, capsys, changes, fields,
+):
+    draft = unsigned_from_fixture(tmp_path, monkeypatch)
+    content = json.loads(draft.read_text(encoding="utf-8"))
+    content.update(changes)
+    draft.write_text(json.dumps(content), encoding="utf-8")
+    assert operator.main([
+        "review", "--unsigned", str(draft), "--source-id", "staged-camera-01",
+    ]) == 2
+    report = json.loads(capsys.readouterr().out)
+    for field in fields:
+        assert field in report["issues"]
+    assert "staged-camera-01" not in json.dumps(report)
+    assert report["camera_access_granted"] is False
+
+
+def test_review_rejects_unsigned_file_inside_repo_and_bad_json(
+    tmp_path, monkeypatch,
+):
+    outside = tmp_path / "draft.json"
+    outside.write_text('{"dup":1,"dup":2}', encoding="utf-8")
+    with pytest.raises(SystemExit):
+        operator.main([
+            "review", "--unsigned", str(outside), "--source-id", "zone-a",
+        ])
+    repo_root = Path(__file__).resolve().parents[3]
+    with pytest.raises(SystemExit):
+        operator.main([
+            "review", "--unsigned", str(repo_root / "AGENTS.md"),
+            "--source-id", "zone-a",
+        ])
+
+
 def test_explicit_attestation_required_before_signing(tmp_path, monkeypatch):
     unsigned = unsigned_from_fixture(tmp_path, monkeypatch)
     out = tmp_path / "signed.json"

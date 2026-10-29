@@ -31,6 +31,20 @@ The accountable authorized reviewer must independently examine and document:
 
 The reviewer updates the **unsigned JSON** only after those conditions are factually met and approval evidence is retained through the organization's own process. The application cannot verify that legal or human review occurred. Require locally protected file permissions; a user-profile folder alone is not a guarantee that NTFS ACLs are appropriate. Do not put approvals or keys in Git.
 
+## 2a. Offline field review before signing (no camera / no signing key)
+
+At any time, the site reviewer can inspect the incomplete **unsigned** file without a camera, codec or secret:
+
+```powershell
+Set-Location D:\VIIL-Sentinel\services\edge-vision
+$privateFolder = Join-Path $env:USERPROFILE 'VIIL-Private'
+.\.venv\Scripts\python.exe -m sentinel_edge.privacy_approval_operator review `
+  --unsigned (Join-Path $privateFolder 'unsigned-privacy.json') `
+  --source-id staged-camera-01
+```
+
+The review prints **only safe field names** that need attention (for example `notice_ref`, `legal_basis_by_jurisdiction`, `validity_window`, `site_authorization_confirmed`), not policy values, people, IPs, keys or filenames. It exits with code **2** while fields are incomplete, or **0** when its *structural* checklist has no issues. Neither result establishes consent, site authorization or compliance, issues a signature, or grants camera access: the authorized human reviewer must still independently verify evidence, and the full production verifier is enforced at signing and live start.
+
 ## 3. Human operator signs the actually reviewed policy
 
 The designated authorized signer must have an **existing, separately controlled HMAC key** (UTF-8 length at least 32 bytes), provided under the organization's key-management process. On the private Windows console:
