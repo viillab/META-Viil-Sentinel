@@ -37,12 +37,19 @@ class FakeCapture:
 
 class FakeCV2:
     INTER_AREA = 3
+    FONT_HERSHEY_SIMPLEX = 0
+    LINE_AA = 16
 
     def __init__(self, keys=()):
         self.keys = iter(keys)
         self.shown = []
         self.closed = []
         self.resize_requests = []
+        self.hud_labels = []
+
+    def putText(self, img, label, *_args):
+        self.hud_labels.append(label)
+        return img
 
     def imshow(self, title, img):
         self.shown.append((title, img))
@@ -75,9 +82,43 @@ def test_preview_displays_frames_to_local_gui_only_no_recording():
     assert result["ai_inference_run"] is False
     assert not result["fallback_used"]
     assert len(cv2.shown) == 3
+    assert cv2.hud_labels[::2] == [
+        f"LOCAL ONLY | frame {n} | 32x24 | warming up" for n in (1, 2, 3)
+    ]
+    assert len(cv2.hud_labels) == 6  # dark outline + white lettering
+    assert all("fake_primary" not in label for label in cv2.hud_labels)
     assert cv2.closed == [preview.WINDOW_TITLE]
     assert capture.released
     assert len(checks) >= 10
+
+
+def test_local_only_status_hud_uses_display_rate_not_camera_claims():
+    cv2 = FakeCV2()
+    img = frame(432, 768)
+    assert preview._overlay_live_status(
+        cv2, img, frame_number=7, display_fps=12.345,
+    ) is img
+    assert cv2.hud_labels == [
+        "LOCAL ONLY | frame 7 | 768x432 | 12.3 display fps",
+    ] * 2
+    assert "camera fps" not in cv2.hud_labels[0].lower()
+    assert "rtsp" not in cv2.hud_labels[0].lower()
+
+
+def test_unavailable_hud_never_blocks_authorized_preview_or_leaks_errors():
+    cv2 = FakeCV2()
+    def unsupported_overlay(*_a):
+        raise RuntimeError("rtsp://private:password@camera-address")
+    cv2.putText = unsupported_overlay
+    cap = FakeCapture([(True, frame())])
+    result = preview.preview_authorized_stream(
+        cv2, primary_url="fake_primary", alternate_url=None,
+        privacy_check=lambda: None, open_capture=lambda *_: cap,
+        max_frames=1, clock=lambda: 0.0,
+    )
+    assert result["frames_displayed"] == 1
+    assert cap.released and len(cv2.shown) == 1
+    assert "password" not in str(result)
 
 
 def test_corrupt_primary_falls_back_to_approved_alternate_without_stale_frame():
@@ -139,11 +180,10 @@ def test_privacy_revocation_after_read_never_shows_frame_or_falls_back():
 def test_preview_window_closed_even_when_approval_revoked_after_display():
     cv2 = FakeCV2()
     cap = FakeCapture([(True, frame())])
-    calls = 0
     def check():
-        nonlocal calls
-        calls += 1
-        if calls == 6:
+        # Revoke specifically after actual display, independent of the
+        # number of privacy checks added around future image operations.
+        if cv2.shown:
             raise PrivacyGateDenied("revoked")
     with pytest.raises(PrivacyGateDenied):
         preview.preview_authorized_stream(
