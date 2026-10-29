@@ -9,6 +9,7 @@ No keys are generated, stored, printed, or accepted in CLI arguments. Signing
 never substitutes for site permission, consent/notices or legal/privacy review.
 """
 from argparse import ArgumentParser
+from datetime import date
 from getpass import getpass
 import json
 import os
@@ -17,7 +18,8 @@ import sys
 from tempfile import TemporaryDirectory
 
 from sentinel_edge.privacy_gate import (
-    KEY_ENV, MAX_POLICY_BYTES, POLICY_SCHEMA, REQUIRED_FIELDS,
+    BASIS_CODES, CAMERA_PATTERN, COUNTRY_PATTERN, KEY_ENV, MAX_POLICY_BYTES,
+    MAX_VALID_DAYS, POLICY_SCHEMA, REF_PATTERN, REQUIRED_FIELDS,
     PrivacyGateDenied, _no_duplicates, sign_policy, verify_privacy_approval,
 )
 
@@ -47,6 +49,105 @@ def unsigned_template(camera_id: str = "staged-camera-01") -> dict:
         "face_identification_enabled": False,
         "training_reuse_enabled": False,
         "automatic_emergency_dispatch_enabled": False,
+    }
+
+
+def inspect_unsigned_draft(unsigned: Path, camera_id: str) -> dict:
+    """Offline structural checklist. NEVER claims actual site permission.
+
+    Only publishes field names, not reference values, camera URLs, policy
+    contents, individual identities, signing secrets or filesystem paths.
+    The authoritative signature/semantic gate remains verify_privacy_approval.
+    """
+    body = _read_unsigned(unsigned)
+    issues = []
+
+    def flag(name: str) -> None:
+        issues.append(name)
+
+    if body["schema_version"] != POLICY_SCHEMA:
+        flag("schema_version")
+    if body["purpose"] != "consented_staged_fall_candidate_research":
+        flag("purpose")
+
+    for field in (
+        "approval_ref", "controller_ref", "notice_ref",
+        "privacy_impact_review_ref", "sensitive_data_review_ref",
+        "rights_procedure_ref",
+    ):
+        value = body[field]
+        if (not isinstance(value, str)
+                or value.upper().startswith("REPLACE_")
+                or REF_PATTERN.fullmatch(value) is None):
+            flag(field)
+
+    jurisdictions = body["jurisdictions"]
+    valid_jurisdictions = (
+        isinstance(jurisdictions, list)
+        and 1 <= len(jurisdictions) <= 10
+        and all(isinstance(j, str) and COUNTRY_PATTERN.fullmatch(j)
+                for j in jurisdictions)
+        and len(set(jurisdictions)) == len(jurisdictions)
+    ) if isinstance(jurisdictions, list) and all(
+        isinstance(j, str) for j in jurisdictions
+    ) else False
+    if not valid_jurisdictions:
+        flag("jurisdictions")
+    bases = body["legal_basis_by_jurisdiction"]
+    if (not isinstance(bases, dict)
+            or not valid_jurisdictions
+            or set(bases) != set(jurisdictions)
+            or any(type(v) is not str or v not in BASIS_CODES
+                   for v in bases.values())):
+        flag("legal_basis_by_jurisdiction")
+
+    cameras = body["approved_camera_ids"]
+    if (not isinstance(cameras, list)
+            or not 1 <= len(cameras) <= 16
+            or any(not isinstance(c, str) or
+                   CAMERA_PATTERN.fullmatch(c) is None for c in cameras)
+            or len(set(cameras)) != len(cameras)
+            or camera_id not in cameras):
+        flag("approved_camera_ids")
+
+    try:
+        start, end = date.fromisoformat(body["valid_from"]), date.fromisoformat(
+            body["expires_on"],
+        )
+        if (end < start or (end - start).days > MAX_VALID_DAYS
+                or not start <= date.today() <= end):
+            flag("validity_window")
+    except (ValueError, TypeError, OverflowError):
+        flag("validity_window")
+
+    for field in (
+        "site_authorization_confirmed", "notices_confirmed",
+        "human_review_required", "local_only",
+    ):
+        if body[field] is not True:
+            flag(field)
+    for field in (
+        "cloud_transfer_enabled", "face_identification_enabled",
+        "training_reuse_enabled", "automatic_emergency_dispatch_enabled",
+    ):
+        if body[field] is not False:
+            flag(field)
+    if type(body["raw_frame_retention_days"]) is not int or (
+        body["raw_frame_retention_days"] != 0
+    ):
+        flag("raw_frame_retention_days")
+
+    complete = not issues
+    return {
+        "type": "viil.camera.unsigned_draft_review.v1",
+        "result": "fields_complete_review_still_required" if complete
+                  else "draft_fields_incomplete",
+        "draft_fields_structurally_complete": complete,
+        "issues": issues,
+        "genuine_site_permission_confirmed_by_tool": False,
+        "independent_legal_compliance_certified": False,
+        "signed_policy_verified": False,
+        "camera_access_granted": False,
     }
 
 
@@ -155,6 +256,9 @@ def main(argv: list[str] | None = None) -> int:
     templ.add_argument("--source-id", default="staged-camera-01")
     templ.add_argument("--output", type=Path,
                        help="Create a private unsigned draft outside Git (never overwrite)")
+    reviewer = sub.add_parser("review", help="Offline draft field checklist; no approval granted")
+    reviewer.add_argument("--unsigned", required=True, type=Path)
+    reviewer.add_argument("--source-id", required=True)
     signer = sub.add_parser("sign", help="Operator-only: sign reviewed site approval")
     signer.add_argument("--unsigned", required=True, type=Path)
     signer.add_argument("--output", required=True, type=Path)
@@ -177,6 +281,13 @@ def main(argv: list[str] | None = None) -> int:
                 parser.error("Private unsigned draft path unavailable or unsafe (redacted)")
             print(json.dumps({"result": "unsigned_draft_only", "approved": False}))
         return 0
+    if args.command == "review":
+        try:
+            report = inspect_unsigned_draft(args.unsigned, args.source_id)
+        except (ValueError, OSError, UnicodeError):
+            parser.error("Unsigned draft missing or unsafe (redacted)")
+        print(json.dumps(report, sort_keys=True))
+        return 0 if report["draft_fields_structurally_complete"] else 2
     try:
         if args.command == "sign":
             sign_reviewed(
