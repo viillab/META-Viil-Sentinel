@@ -1,4 +1,6 @@
 """Camera health tests use fake video capture; never open real networks."""
+from types import SimpleNamespace as NS
+
 import pytest
 
 from sentinel_edge.camera_health import (
@@ -19,7 +21,7 @@ class FakeCapture:
         if self.count <= 0:
             return False, None
         self.count -= 1
-        return True, object()
+        return True, NS(shape=(480, 640, 3), size=480 * 640 * 3, dtype="uint8")
 
 
 def test_rtsp_configuration_is_private_and_checked():
@@ -35,6 +37,53 @@ def test_rtsp_configuration_is_private_and_checked():
         with pytest.raises(ValueError) as caught:
             validate_rtsp_env(name, {name: value})
         assert secret not in str(caught.value)
+
+
+@pytest.mark.parametrize("frame", [
+    None,
+    object(),  # Native read claims success but no decoded image exists.
+    NS(shape=(0, 640, 3), size=0),
+    NS(shape=(480, 0, 3), size=0),
+    NS(shape=(480, 640, 1), size=480 * 640),
+    NS(shape=(480, 640, 4), size=480 * 640 * 4),
+    NS(shape=(480, 640), size=480 * 640),
+    NS(shape=(480, 640, 3), size=0),
+    NS(shape=(480, 640, 3), size=480 * 640 * 2),
+    NS(shape=(480, 640, 3), size=480 * 640 * 3, dtype="float32"),
+])
+def test_probe_rejects_unusable_decoded_frame_even_when_read_claims_success(frame):
+    class BrokenNativeCapture:
+        def isOpened(self):
+            return True
+
+        def read(self):
+            return True, frame
+
+    result = probe_capture(BrokenNativeCapture(), sample_frames=12)
+    assert result == {
+        "status": "interrupted", "frames_read": 0, "frames_requested": 12,
+    }
+
+
+def test_probe_stops_on_corrupt_frame_after_valid_decode_without_claiming_readable():
+    class IntermittentCapture:
+        def __init__(self):
+            self.calls = 0
+
+        def isOpened(self):
+            return True
+
+        def read(self):
+            self.calls += 1
+            if self.calls == 3:
+                return True, NS(shape=(0, 0, 3), size=0)
+            return True, NS(shape=(480, 640, 3), size=480 * 640 * 3, dtype="uint8")
+
+    cap = IntermittentCapture()
+    report = probe_capture(cap, sample_frames=12)
+    assert report["status"] == "interrupted"
+    assert report["frames_read"] == 2
+    assert cap.calls == 3
 
 
 @pytest.mark.parametrize(("readable", "opened", "status"), [
