@@ -3,6 +3,7 @@ import {
   fetchIntegrationOverview, snapshotIsFresh, INTEGRATION_SCHEMA,
 } from "./integrationOverview";
 import type { IntegrationOverview, CameraSummary } from "./integrationOverview";
+import CameraLivePreview from "./CameraLivePreview";
 
 const SAMPLE: IntegrationOverview = {
   schema_version: INTEGRATION_SCHEMA,
@@ -24,7 +25,9 @@ const SAMPLE: IntegrationOverview = {
 type FeedState = "loading" | "connected" | "unavailable" | "invalid" | "unauthorized";
 const pretty = (value: string) => value.replaceAll("_", " ").toUpperCase();
 
-function CameraTile({ camera, demo }: { camera: CameraSummary; demo: boolean }) {
+function CameraTile({ camera, demo, permitted }: {
+  camera: CameraSummary; demo: boolean; permitted: boolean;
+}) {
   return <article className="integration-camera">
     <div className="integration-camera-head">
       <span className="integration-camera-icon" aria-hidden="true">▣</span>
@@ -32,11 +35,7 @@ function CameraTile({ camera, demo }: { camera: CameraSummary; demo: boolean }) 
     </div>
     <strong>{camera.camera_id}</strong>
     <span className="integration-muted">Pseudonymous device ID · {demo ? "sample only" : "backend reported"}</span>
-    <div className="integration-dark-preview">
-      <div aria-hidden="true" className="integration-crosshair">◎</div>
-      <span>VIDEO PREVIEW DISABLED</span>
-      <small>No raw footage, RTSP URLs or stored frames in browser</small>
-    </div>
+    <CameraLivePreview camera={camera} permitted={permitted && !demo} />
     <div className="integration-camera-footer">
       <span className={"integration-dot " + camera.health} aria-hidden="true" />
       <span>{pretty(camera.health)}</span>
@@ -148,7 +147,7 @@ export default function IntegrationCenter() {
             : feedState === "loading" ? "CHECKING LOCAL BACKEND" : "INTEGRATION ENDPOINT NOT CONNECTED"}</strong>
       <span>{preview
         ? "Illustrative devices are in-memory examples only. No camera or Meta call is made."
-        : "Read-only. Never connects from this browser to cameras, RTSP, or the Meta provider."}</span>
+        : "Camera preview requires an explicit click and an authenticated backend media session. No direct RTSP or camera passwords in browser."}</span>
     </div>
 
     <section className="integration-kpis" aria-label="Connection summary">
@@ -161,7 +160,8 @@ export default function IntegrationCenter() {
     <div className="integration-section-head"><div><h2>Camera sources</h2><p>Vendor-neutral RTSP / USB adapters · local capture stays on the Edge worker</p></div><span>{data ? cameras.length : "0"} sources {preview ? "· SAMPLE" : ""}</span></div>
     {cameras.length
       ? <div className="integration-camera-grid">{cameras.map(c =>
-        <CameraTile key={c.camera_id} camera={c} demo={preview} />)}</div>
+        <CameraTile key={c.camera_id} camera={c} demo={preview}
+          permitted={isLive && c.health === "online" && c.privacy === "approved"} />)}</div>
       : <div className="integration-empty">
         <span className="integration-empty-mark" aria-hidden="true">▣</span>
         <div><strong>No authorized camera metadata available</strong>
@@ -174,7 +174,7 @@ export default function IntegrationCenter() {
         <div className="integration-panel-title"><span className="integration-step">01</span><div><strong>Edge camera adapter</strong><small>Member 1 · implemented</small></div><span className="integration-tag">LOCAL</span></div>
         <p>RTSP-compatible IP cameras and USB/UVC, with signed privacy approval, bounded sessions, camera isolation and revocation checks.</p>
         <div className="integration-rule"><span>Edge heartbeat</span><strong>{isLive && data ? pretty(data.edge.state) : "NOT VERIFIED"}</strong></div>
-        <div className="integration-rule"><span>Raw video in browser</span><strong>DISABLED</strong></div>
+        <div className="integration-rule"><span>Browser live preview</span><strong>BACKEND MEDIA SESSION REQUIRED</strong></div>
       </section>
       <section className="integration-card">
         <div className="integration-panel-title"><span className="integration-step">02</span><div><strong>Meta AI assessment</strong><small>Member 2 · backend-only adapter</small></div><span className="integration-tag">HANDOFF</span></div>
