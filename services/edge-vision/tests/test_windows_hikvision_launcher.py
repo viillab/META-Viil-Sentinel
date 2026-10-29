@@ -11,6 +11,8 @@ import sys
 
 import pytest
 
+from privacy_approval_fixture import make_policy
+
 
 REPO = Path(__file__).resolve().parents[3]
 LAUNCHER = REPO / "scripts" / "start-hikvision-staged.ps1"
@@ -107,6 +109,59 @@ if ($sub.PrimaryEnv -ne 'VIIL_HIK_LAN_SUB' -or
     launcher_text = LAUNCHER.read_text(encoding="utf-8")
     assert "'--rtsp-env', $streamOrder.PrimaryEnv" in launcher_text
     assert "'--rtsp-fallback-env', $streamOrder.FallbackEnv" in launcher_text
+
+
+@WINDOWS_ONLY
+@pytest.mark.parametrize("case,expected", [
+    ("valid", True),
+    ("tampered", False),
+    ("wrong_camera", False),
+    ("expired", False),
+    ("missing_key", False),
+    ("wrong_key", False),
+])
+def test_offline_preflight_checks_real_hmac_and_scope_without_capture(
+    tmp_path, monkeypatch, case, expected,
+):
+    import json
+    import os
+    import re
+    from datetime import date, timedelta
+
+    kwargs = {}
+    if case == "expired":
+        kwargs = {
+            "valid_from": (date.today() - timedelta(days=4)).isoformat(),
+            "expires_on": (date.today() - timedelta(days=1)).isoformat(),
+        }
+    policy = make_policy(tmp_path, monkeypatch, camera_ids=("zone-a",), **kwargs)
+    if case == "tampered":
+        contents = json.loads(policy.read_text(encoding="utf-8"))
+        contents["notices_confirmed"] = False
+        policy.write_text(json.dumps(contents), encoding="utf-8")
+    scoped_id = "zone-b" if case == "wrong_camera" else "zone-a"
+    env = os.environ.copy()
+    if case == "missing_key":
+        env.pop("VIIL_PRIVACY_APPROVAL_KEY", None)
+    elif case == "wrong_key":
+        env["VIIL_PRIVACY_APPROVAL_KEY"] = "different-test-key-that-is-not-valid-123456"
+    result = subprocess.run(
+        [
+            "powershell.exe", "-NoProfile", "-File", str(LAUNCHER),
+            "-CameraIp", "192.168.50.10", "-SourceId", scoped_id,
+            "-PrivacyApproval", str(policy), "-PreflightOnly",
+        ],
+        capture_output=True, text=True, timeout=35, check=False, env=env,
+    )
+    assert result.returncode == 0, result.stderr[-300:]
+    assert re.search(
+        rf"SignedApprovalVerified\s*:\s*{expected}", result.stdout, re.IGNORECASE,
+    ), result.stdout
+    assert re.search(r"CameraDecoded\s*:\s*False", result.stdout)
+    attempted = case != "missing_key"
+    assert re.search(rf"ApprovalVerificationAttempted\s*:\s*{attempted}", result.stdout)
+    assert "test_approval_0001" not in result.stdout + result.stderr
+    assert "synthetic-only-key" not in result.stdout + result.stderr
 
 
 @WINDOWS_ONLY

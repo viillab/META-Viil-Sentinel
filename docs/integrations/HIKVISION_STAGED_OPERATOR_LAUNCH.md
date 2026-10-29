@@ -6,7 +6,7 @@ This launcher is a **bounded, non-clinical staged demo**. It cannot grant itself
 
 `scripts/start-hikvision-staged.ps1` runs on the **Windows Edge host**, accepts one operator-approved RFC1918 camera IP, uses the local MediaPipe virtual environment and private pose asset, and:
 
-1. Supports a credential-free `-PreflightOnly` check: private IPv4, Windows route, model asset, and presence (but not validity) of approval/key.
+1. Supports a camera-credential-free `-PreflightOnly` check: private IPv4, Windows route, model asset and signed policy readiness. If the policy file and verification key are already available in the local process environment, it also runs the real offline HMAC/date/camera-scope policy verifier (no camera/network access); otherwise it explicitly reports that verification was not attempted. The check prints booleans only, not approval contents or secrets.
 2. Before capture, requires a private **signed** approval JSON matching `-SourceId`, verifies its HMAC and dates through the application privacy gate, and requires an operator-approved read-only camera account.
 3. Prompts locally for the camera password and for the existing signing key if not already configured; neither value is passed on the command line nor intentionally written to disk.
 4. Sets temporary `VIIL_HIK_LAN_SUB` (Hikvision channel 102) and `VIIL_HIK_LAN_MAIN` (channel 101) only in the launcher process environment.
