@@ -28,6 +28,16 @@ powershell -NoProfile -File D:\VIIL-Sentinel\scripts\start-hikvision-staged.ps1 
 
 **Preflight-only does not open the camera**.
 
+For one authorized RFC1918 camera, a credential-free **protocol-only** OPTIONS probe can distinguish a TCP handshake from an actual RTSP server response, without accessing a stream or frame:
+
+```powershell
+cd D:\VIIL-Sentinel\services\edge-vision
+.\.venv\Scripts\python.exe -m sentinel_edge.rtsp_protocol_probe `
+  --camera-ip 192.168.10.204 --port 554 --timeout-seconds 3
+```
+
+The output deliberately includes only an RTSP status code (e.g. 200 or 401) and safe booleans. **Any RTSP response only verifies that a server answered OPTIONS; it does not authenticate the camera, identify the physical device, validate credentials, grant privacy consent, negotiate a media stream, decode video or prove fall detection.** This sends one socket request, not a network scan. A status 401 means authentication was requested for OPTIONS only; a 200 does not mean protected video will play.
+
 After the site operator has completed a genuine privacy review, signed the policy (see `docs/security/GLOBAL_PRIVACY_SECURITY_BASELINE.md`) and placed it in a protected folder outside Git:
 
 ```powershell
