@@ -254,6 +254,157 @@ def test_launcher_has_explicit_supervised_pose_option_and_no_unsafe_inference_fl
     script = (Path(__file__).resolve().parents[3] / "scripts" /
               "start-hikvision-staged.ps1").read_text(encoding="utf-8")
     assert "[switch]$ShowPoseOverlay" in script
-    assert "$posePreviewArgs = @('--pose-model', $ModelPath)" in script
+    assert "$posePreviewArgs = @('--pose-model', $ModelPath, '--pose-stride', [string]$PoseStride)" in script
+    assert "[ValidateRange(1, 8)][int]$PoseStride = 2" in script
     assert script.count(") + $posePreviewArgs)") == 2
     assert "$ShowPoseOverlay -and (-not $ShowPreview -or $RunEdge -or $PreflightOnly)" in script
+
+def test_stride_reduces_pose_calls_without_counting_skipped_frames_as_accepted():
+    cv2 = Display()
+    cap = Capture([(True, Frame())] * 5)
+    seen = []
+
+    class FakePose:
+        def annotate(self, _, _frame, timestamp):
+            seen.append(timestamp)
+            return True
+        def close(self):
+            pass
+
+    latency = iter([10.0, 10.005, 20.0, 20.025, 30.0, 30.030])
+    report = preview.preview_authorized_stream(
+        cv2, primary_url="offline", alternate_url=None,
+        privacy_check=lambda: None, open_capture=lambda *_: cap,
+        pose_factory=FakePose, pose_stride=2, max_frames=5,
+        clock=lambda: 1.0, latency_clock=lambda: next(latency),
+    )
+    assert seen == [0, 1, 2]
+    assert report["frames_displayed"] == 5
+    assert report["torso_pose_inference_frames"] == 3
+    assert report["torso_pose_accepted_frames"] == 3
+    assert report["torso_pose_skipped_frames"] == 2
+    assert report["torso_pose_stride"] == 2
+    assert report["torso_inference_p50_ms"] == 25.0
+    assert report["torso_inference_p95_ms"] == 30.0
+    assert [s.split(" | ")[0] for s in cv2.labels if s.startswith("TORSO")] == [
+        "TORSO AVAILABLE", "TORSO NOT SAMPLED", "TORSO AVAILABLE",
+        "TORSO NOT SAMPLED", "TORSO AVAILABLE",
+    ]
+    assert report["video_saved"] is False
+    assert report["remote_streamed"] is False
+    assert report["fall_decision_run"] is False
+
+
+def test_stride_resets_on_same_camera_fallback_and_does_not_keep_old_pose():
+    first = Capture([(True, Frame()), (True, Frame()), (False, None)])
+    second = Capture([(True, Frame()), (True, Frame())])
+    caps = iter([first, second])
+    sessions = []
+
+    class FakePose:
+        def __init__(self):
+            self.calls = 0
+            self.closed = False
+        def annotate(self, *_):
+            self.calls += 1
+            return True
+        def close(self):
+            self.closed = True
+
+    def factory():
+        pose = FakePose()
+        sessions.append(pose)
+        return pose
+
+    summary = preview.preview_authorized_stream(
+        Display(), primary_url="sub", alternate_url="main",
+        privacy_check=lambda: None, open_capture=lambda *_: next(caps),
+        pose_factory=factory, pose_stride=3, max_frames=4, clock=lambda: 1,
+    )
+    assert summary["fallback_used"] is True
+    assert summary["torso_pose_inference_frames"] == 2
+    assert summary["torso_pose_skipped_frames"] == 2
+    assert [s.calls for s in sessions] == [1, 1]
+    assert all(s.closed for s in sessions)
+
+
+def test_reused_native_capture_buffer_never_retains_old_pose_when_skipped():
+    class Reused(Frame):
+        def __init__(self):
+            self.drawings = []
+        def copy(self):
+            return Reused()
+
+    class PaintedDisplay(Display):
+        def __init__(self):
+            super().__init__()
+            self.snapshots = []
+        def putText(self, frame, label, *_):
+            frame.drawings.append(label)
+            super().putText(frame, label, *_)
+        def imshow(self, _title, frame):
+            self.snapshots.append(list(frame.drawings))
+            super().imshow(_title, frame)
+
+    class FakePose:
+        def annotate(self, _, frame, _timestamp):
+            frame.drawings.append("POSE")
+            return True
+        def close(self):
+            pass
+
+    original = Reused()
+    cv2 = PaintedDisplay()
+    report = preview.preview_authorized_stream(
+        cv2, primary_url="camera", alternate_url=None,
+        privacy_check=lambda: None,
+        open_capture=lambda *_: Capture([(True, original)] * 3),
+        pose_factory=FakePose, pose_stride=2, max_frames=3, clock=lambda: 1,
+    )
+    assert report["torso_pose_skipped_frames"] == 1
+    assert ["POSE" in s for s in cv2.snapshots] == [True, False, True]
+    assert original.drawings == []
+
+
+@pytest.mark.parametrize("stride", [False, True, 0, -1, 9, 1.5, "2"])
+def test_invalid_inference_stride_rejected_before_any_camera_or_pose_factory(stride):
+    created = []
+    with pytest.raises(ValueError, match="Pose stride"):
+        preview.preview_authorized_stream(
+            Display(), primary_url="offline", alternate_url=None,
+            privacy_check=lambda: None,
+            open_capture=lambda *_: created.append("capture"),
+            pose_factory=lambda: created.append("pose"),
+            pose_stride=stride,
+        )
+    assert created == []
+
+
+def test_preview_without_pose_retains_false_claims_and_no_latency_sample():
+    report = preview.preview_authorized_stream(
+        Display(), primary_url="offline", alternate_url=None,
+        privacy_check=lambda: None,
+        open_capture=lambda *_: Capture([(True, Frame())]),
+        max_frames=1, clock=lambda: 1,
+    )
+    assert report["torso_pose_stride"] is None
+    assert report["torso_pose_skipped_frames"] == 0
+    assert report["torso_inference_p50_ms"] is None
+    assert report["torso_inference_p95_ms"] is None
+    assert report["ai_inference_run"] is False
+
+
+def test_cli_rejects_invalid_pose_stride_before_approval_or_capture(
+    monkeypatch, tmp_path, capsys,
+):
+    monkeypatch.setenv("VIIL_LOCAL_INVALID", "rtsp://192.168.10.204:554/Streaming/Channels/102")
+    with pytest.raises(SystemExit):
+        preview.main([
+            "--rtsp-env", "VIIL_LOCAL_INVALID", "--source-id", "zone-a",
+            "--privacy-approval", str(tmp_path / "missing.json"),
+            "--confirm-authorized-camera", "--show-local-preview",
+            "--pose-model", str(asset(tmp_path)), "--pose-stride", "9",
+        ])
+    err = capsys.readouterr().err
+    assert "Unsafe or missing camera configuration" in err
+    assert "rtsp://" not in err

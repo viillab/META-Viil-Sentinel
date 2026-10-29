@@ -13,6 +13,7 @@ param(
     [ValidateSet('opencv', 'pyav', 'http-mjpeg')][string]$EdgeDecoder = 'opencv',
     [switch]$ShowPreview,
     [switch]$ShowPoseOverlay,
+    [ValidateRange(1, 8)][int]$PoseStride = 2,
     [ValidateSet('opencv', 'pyav', 'http-mjpeg')][string]$PreviewDecoder = 'opencv',
     [ValidateRange(1, 120)][int]$PreviewSeconds = 30,
     [ValidateRange(1, 900)][int]$PreviewFrames = 450,
@@ -204,7 +205,7 @@ try {
     if ($ShowPoseOverlay) {
         # The Python preview still validates signed approval before importing
         # MediaPipe or opening a real camera source.
-        $posePreviewArgs = @('--pose-model', $ModelPath)
+        $posePreviewArgs = @('--pose-model', $ModelPath, '--pose-stride', [string]$PoseStride)
     }
 
     # The best route can be a subnet/default route, not only an exact /32.

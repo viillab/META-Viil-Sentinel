@@ -6,7 +6,8 @@ Real cameras require the genuine signed privacy gate and an explicit GUI opt-in.
 from argparse import ArgumentParser
 import json
 from pathlib import Path
-from time import monotonic
+from statistics import median
+from time import monotonic, perf_counter
 from typing import Callable
 
 from sentinel_edge.camera_health import (
@@ -81,7 +82,9 @@ def preview_authorized_stream(
     duration_seconds: float = 30.0,
     open_capture: Callable | None = None,
     pose_factory: Callable[[], object] | None = None,
+    pose_stride: int = 1,
     clock: Callable[[], float] = monotonic,
+    latency_clock: Callable[[], float] = perf_counter,
 ) -> dict:
     """Bounded on-screen frame display; never store/transmit frames.
 
@@ -97,6 +100,10 @@ def preview_authorized_stream(
         raise ValueError("Signed privacy check required")
     if pose_factory is not None and not callable(pose_factory):
         raise ValueError("Optional local pose session factory must be callable")
+    if type(pose_stride) is not int or not 1 <= pose_stride <= 8:
+        raise ValueError("Pose stride must be an integer between 1 and 8")
+    if not callable(latency_clock):
+        raise ValueError("Monotonic inference timing clock required")
     if not primary_url or alternate_url == primary_url:
         raise ValueError("Invalid authorized stream selection")
     opener = open_capture or open_rtsp_capture
@@ -105,6 +112,8 @@ def preview_authorized_stream(
     displayed = 0
     pose_processed = 0
     pose_accepted = 0
+    pose_skipped = 0
+    pose_latencies_ms = []
     window_created = False
     used_fallback = False
     stopped_by_operator = False
@@ -137,6 +146,7 @@ def preview_authorized_stream(
                     privacy_check()
                 pose_epoch_started = clock()
                 last_pose_timestamp = -1
+                epoch_frames = 0
                 while displayed < max_frames and clock() - start < duration_seconds:
                     privacy_check()
                     try:
@@ -161,23 +171,41 @@ def preview_authorized_stream(
                             raise PreviewInterrupted("Preview resize failed") from None
                     privacy_check()
                     if pose_session is not None:
-                        # Strict VIDEO timestamps increase within a single epoch.
-                        timestamp_ms = max(
-                            last_pose_timestamp + 1,
-                            int((clock() - pose_epoch_started) * 1000),
-                        )
-                        last_pose_timestamp = timestamp_ms
+                        # Native capture buffers can be reused. Overlay only a
+                        # detached display image; no previous pose is replayed.
+                        copy_frame = getattr(frame, "copy", None)
+                        if callable(copy_frame):
+                            try:
+                                frame = copy_frame()
+                            except Exception:
+                                raise PreviewDisplayUnavailable(
+                                    "Local preview frame copy unavailable",
+                                ) from None
+                        if epoch_frames % pose_stride == 0:
+                            # Strict VIDEO timestamps increase per source epoch.
+                            timestamp_ms = max(
+                                last_pose_timestamp + 1,
+                                int((clock() - pose_epoch_started) * 1000),
+                            )
+                            last_pose_timestamp = timestamp_ms
+                            before = latency_clock()
+                            try:
+                                accepted = pose_session.annotate(cv2, frame, timestamp_ms)
+                            except Exception:
+                                raise PreviewDisplayUnavailable(
+                                    "Local torso preview unavailable",
+                                ) from None
+                            after = latency_clock()
+                            privacy_check()  # discard output if approval revoked
+                            pose_latencies_ms.append(max(0.0, (after - before) * 1000))
+                            pose_processed += 1
+                            pose_accepted += bool(accepted)
+                            status = "TORSO AVAILABLE" if accepted else "TORSO UNAVAILABLE"
+                        else:
+                            pose_skipped += 1
+                            status = "TORSO NOT SAMPLED"
+                        epoch_frames += 1
                         try:
-                            accepted = pose_session.annotate(cv2, frame, timestamp_ms)
-                        except Exception:
-                            raise PreviewDisplayUnavailable(
-                                "Local torso preview unavailable",
-                            ) from None
-                        privacy_check()  # discard result after native inference if revoked
-                        pose_processed += 1
-                        pose_accepted += bool(accepted)
-                        try:
-                            status = ("TORSO AVAILABLE" if accepted else "TORSO UNAVAILABLE")
                             cv2.putText(
                                 frame, status + " | NO FALL DECISION",
                                 (10, 45), cv2.FONT_HERSHEY_SIMPLEX, 0.48,
@@ -239,6 +267,8 @@ def preview_authorized_stream(
         privacy_check()
         if displayed == 0:
             raise PreviewInterrupted("No authorized frames displayed")
+        sorted_latencies = sorted(pose_latencies_ms)
+        p95_index = (95 * len(sorted_latencies) + 99) // 100 - 1
         return {
             "type": "viil.camera.local_preview.v1",
             "result": "operator_stopped" if stopped_by_operator else "bounded_preview_complete",
@@ -249,6 +279,14 @@ def preview_authorized_stream(
             "ai_inference_run": pose_processed > 0,
             "torso_pose_inference_frames": pose_processed,
             "torso_pose_accepted_frames": pose_accepted,
+            "torso_pose_skipped_frames": pose_skipped,
+            "torso_pose_stride": pose_stride if pose_factory is not None else None,
+            "torso_inference_p50_ms": (
+                round(median(sorted_latencies), 2) if sorted_latencies else None
+            ),
+            "torso_inference_p95_ms": (
+                round(sorted_latencies[p95_index], 2) if sorted_latencies else None
+            ),
             "fall_decision_run": False,
         }
     finally:
@@ -266,6 +304,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--show-local-preview", action="store_true")
     parser.add_argument("--pose-model", type=Path,
                         help="Optional local torso-only MediaPipe overlay (not fall detection)")
+    parser.add_argument("--pose-stride", type=int, default=1, metavar="N",
+                        help="Infer every Nth display frame, 1..8; no stale pose (default 1)")
     parser.add_argument("--self-test-gui", action="store_true",
                         help="SYNTHETIC local GUI test: NO CAMERA OR RTSP access")
     parser.add_argument("--max-frames", type=int, default=450)
@@ -316,7 +356,10 @@ def main(argv: list[str] | None = None) -> int:
         else:
             primary = validate_rtsp_env(args.rtsp_env, extra_port=args.rtsp_allow_port)
             alternate = None
-        if not 1 <= args.max_frames <= 900 or not 0 < args.duration_seconds <= 120:
+        if (not 1 <= args.max_frames <= 900
+                or not 0 < args.duration_seconds <= 120
+                or not 1 <= args.pose_stride <= 8
+                or (args.pose_stride != 1 and args.pose_model is None)):
             raise ValueError
     except (ValueError, TypeError):
         parser.error("Unsafe or missing camera configuration (details redacted)")
@@ -353,7 +396,7 @@ def main(argv: list[str] | None = None) -> int:
             cv2, primary_url=primary, alternate_url=alternate,
             privacy_check=check, max_frames=args.max_frames,
             duration_seconds=args.duration_seconds, open_capture=opener,
-            pose_factory=pose_factory,
+            pose_factory=pose_factory, pose_stride=args.pose_stride,
         )
     except PrivacyGateDenied:
         # Never declare a preview successful when approval was revoked.
