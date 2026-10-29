@@ -156,6 +156,44 @@ def test_preview_window_closed_even_when_approval_revoked_after_display():
     assert cv2.closed == [preview.WINDOW_TITLE]
 
 
+def test_closing_gui_window_stops_camera_without_opening_backup():
+    cv2 = FakeCV2()
+    cv2.WND_PROP_VISIBLE = 4
+    cv2.getWindowProperty = lambda *_args: 0
+    camera = FakeCapture([(True, frame())] * 5)
+    opened = []
+    report = preview.preview_authorized_stream(
+        cv2, primary_url="sub", alternate_url="main",
+        privacy_check=lambda: None,
+        open_capture=lambda _cv, url: (opened.append(url), camera)[1],
+        max_frames=5, clock=lambda: 0,
+    )
+    assert report["result"] == "operator_stopped"
+    assert opened == ["sub"]
+    assert report["frames_displayed"] == 1
+    assert camera.released
+    assert cv2.closed == [preview.WINDOW_TITLE]
+
+
+def test_gui_failure_is_not_treated_as_camera_fallback():
+    cv2 = FakeCV2()
+    def fail_gui(*_args):
+        raise RuntimeError("credentialed-url-must-not-leak")
+    cv2.imshow = fail_gui
+    camera = FakeCapture([(True, frame())] * 5)
+    opened = []
+    with pytest.raises(preview.PreviewDisplayUnavailable) as caught:
+        preview.preview_authorized_stream(
+            cv2, primary_url="sub", alternate_url="main",
+            privacy_check=lambda: None,
+            open_capture=lambda _cv, url: (opened.append(url), camera)[1],
+            max_frames=5, clock=lambda: 0,
+        )
+    assert opened == ["sub"]
+    assert camera.released
+    assert "credentialed-url" not in str(caught.value)
+
+
 def test_operator_q_stops_preview_without_reconnect():
     cv2 = FakeCV2(keys=[ord("q")])
     cap = FakeCapture([(True, frame())] * 20)
