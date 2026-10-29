@@ -58,6 +58,19 @@ function Invoke-PrivateEdgePython {
     }
 }
 
+function Test-SignedPrivacyApproval {
+    # Offline application verifier: checks HMAC, dates, camera scope and flags.
+    # No network, OpenCV imports, camera credentials or policy contents logged.
+    param(
+        [Parameter(Mandatory=$true)][string]$PolicyPath,
+        [Parameter(Mandatory=$true)][string]$ApprovedSourceId
+    )
+    $verifyCode = 'import sys; from pathlib import Path; from sentinel_edge.privacy_gate import verify_privacy_approval; verify_privacy_approval(Path(sys.argv[1]), camera_id=sys.argv[2])'
+    return (0 -eq (Invoke-PrivateEdgePython -Arguments @(
+        '-c', $verifyCode, $PolicyPath, $ApprovedSourceId
+    )))
+}
+
 try {
     $ip = [Net.IPAddress]::Parse($CameraIp)
     if ($ip.AddressFamily -ne [Net.Sockets.AddressFamily]::InterNetwork) {
@@ -91,14 +104,28 @@ try {
     }
 
     if ($PreflightOnly) {
+        $approvalFileProvided = [bool]($PrivacyApproval -and
+            (Test-Path -LiteralPath $PrivacyApproval -PathType Leaf))
+        $signingKeyPresent = -not [string]::IsNullOrEmpty($oldKey)
+        $approvalVerificationAttempted = $approvalFileProvided -and $signingKeyPresent
+        $approvalVerified = $false
+        if ($approvalVerificationAttempted) {
+            Push-Location $edge
+            try {
+                $approvalVerified = Test-SignedPrivacyApproval -PolicyPath $PrivacyApproval -ApprovedSourceId $SourceId
+            } finally {
+                Pop-Location
+            }
+        }
         [pscustomobject]@{
             PreflightOnly = $true
             PrivateCameraIp = $true
             Route = $routeAlias
             PoseModelReady = (Test-Path -LiteralPath $ModelPath -PathType Leaf)
-            SignedApprovalFileProvided = [bool]($PrivacyApproval -and
-                (Test-Path -LiteralPath $PrivacyApproval -PathType Leaf))
-            SigningKeyPresent = -not [string]::IsNullOrEmpty($oldKey)
+            SignedApprovalFileProvided = $approvalFileProvided
+            SigningKeyPresent = $signingKeyPresent
+            ApprovalVerificationAttempted = $approvalVerificationAttempted
+            SignedApprovalVerified = $approvalVerified
             CameraDecoded = $false
             EdgeInferenceRun = $false
         } | Format-List
@@ -125,11 +152,9 @@ try {
             throw 'Signed approval verification key is missing/too short.'
         }
         # Check the signed policy before prompting for camera credentials.
-        $verify = 'import sys; from pathlib import Path; from sentinel_edge.privacy_gate import verify_privacy_approval; verify_privacy_approval(Path(sys.argv[1]), camera_id=sys.argv[2])'
         Push-Location $edge
         try {
-            $verifyExit = Invoke-PrivateEdgePython -Arguments @('-c', $verify, $PrivacyApproval, $SourceId)
-            if ($verifyExit -ne 0) {
+            if (-not (Test-SignedPrivacyApproval -PolicyPath $PrivacyApproval -ApprovedSourceId $SourceId)) {
                 throw 'Signed privacy approval was denied; camera not opened.'
             }
 
