@@ -70,6 +70,46 @@ def test_missing_authorization_never_opens_a_camera():
 
 
 @WINDOWS_ONLY
+def test_health_pass_selects_verified_stream_as_edge_primary():
+    # Offline function-level contract: neither RTSP URL nor camera is accessed.
+    code = r"""
+$ErrorActionPreference = 'Stop'
+$t=$null; $e=$null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile($env:VIIL_TEST_LAUNCHER,[ref]$t,[ref]$e)
+if($e.Count){throw 'launcher syntax invalid'}
+$fn = $ast.Find({
+  param($node)
+  ($node -is [System.Management.Automation.Language.FunctionDefinitionAst]) -and
+    ($node.Name -eq 'Resolve-PreferredHikvisionStreams')
+},$true)
+if($null -eq $fn){throw 'missing selection'}
+. ([ScriptBlock]::Create($fn.Extent.Text))
+$sub = Resolve-PreferredHikvisionStreams -SubstreamReadable $true
+$main = Resolve-PreferredHikvisionStreams -SubstreamReadable $false
+if ($sub.PrimaryEnv -ne 'VIIL_HIK_LAN_SUB' -or
+    $sub.FallbackEnv -ne 'VIIL_HIK_LAN_MAIN' -or
+    $main.PrimaryEnv -ne 'VIIL_HIK_LAN_MAIN' -or
+    $main.FallbackEnv -ne 'VIIL_HIK_LAN_SUB') {
+  throw 'No verified stream preference'
+}
+'HEALTH_SELECTED_STREAM_PASS'
+"""
+    import os
+
+    env = os.environ.copy()
+    env["VIIL_TEST_LAUNCHER"] = str(LAUNCHER)
+    result = subprocess.run(
+        ["powershell.exe", "-NoProfile", "-Command", code],
+        capture_output=True, text=True, timeout=25, env=env, check=False,
+    )
+    assert result.returncode == 0, result.stderr[-500:]
+    assert "HEALTH_SELECTED_STREAM_PASS" in result.stdout
+    launcher_text = LAUNCHER.read_text(encoding="utf-8")
+    assert "'--rtsp-env', $streamOrder.PrimaryEnv" in launcher_text
+    assert "'--rtsp-fallback-env', $streamOrder.FallbackEnv" in launcher_text
+
+
+@WINDOWS_ONLY
 def test_preflight_only_reports_no_real_decode():
     result = subprocess.run(
         [

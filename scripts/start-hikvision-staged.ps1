@@ -23,6 +23,22 @@ $exitStatus = 2
 $passSecure = $null
 $keySecure = $null
 
+function Resolve-PreferredHikvisionStreams {
+    # Select only the environment VARIABLE names; never return RTSP secrets.
+    # A successful health probe is bounded decode evidence, not reliability.
+    param([Parameter(Mandatory=$true)][bool]$SubstreamReadable)
+    if ($SubstreamReadable) {
+        return [pscustomobject]@{
+            PrimaryEnv = 'VIIL_HIK_LAN_SUB'
+            FallbackEnv = 'VIIL_HIK_LAN_MAIN'
+        }
+    }
+    return [pscustomobject]@{
+        PrimaryEnv = 'VIIL_HIK_LAN_MAIN'
+        FallbackEnv = 'VIIL_HIK_LAN_SUB'
+    }
+}
+
 function Invoke-PrivateEdgePython {
     # PowerShell 5.1 promotes redirected native stderr to NativeCommandError
     # under ErrorActionPreference=Stop. That previously skipped fallback.
@@ -161,14 +177,17 @@ try {
             if ($healthExit -ne 0) {
                 throw 'No authorized stream produced 12 decoded frames; Edge was not started.'
             }
+            # Prefer the stream that actually decoded in this authorized probe.
+            # If 102 was unreadable, do not waste the next Edge attempt on 102.
+            $streamOrder = Resolve-PreferredHikvisionStreams -SubstreamReadable ($subHealthExit -eq 0)
             Write-Host 'Verified: authorized RTSP decoder read 12/12 frames.'
             if ($RunEdge) {
                 Write-Host 'Starting bounded local Edge trial (max 120 frames / 60 seconds per attempt; max 2 attempts)...'
                 $edgeExit = Invoke-PrivateEdgePython -Arguments @(
                     '-m', 'sentinel_edge',
                     '--source', 'rtsp',
-                    '--rtsp-env', 'VIIL_HIK_LAN_SUB',
-                    '--rtsp-fallback-env', 'VIIL_HIK_LAN_MAIN',
+                    '--rtsp-env', $streamOrder.PrimaryEnv,
+                    '--rtsp-fallback-env', $streamOrder.FallbackEnv,
                     '--source-id', $SourceId,
                     '--privacy-approval', $PrivacyApproval,
                     '--model', $ModelPath, '--candidate-format', 'v1', '--confirm-consent',
