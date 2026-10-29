@@ -1,7 +1,7 @@
 """RTSP health revocation simulations: no real camera, socket or credentials."""
 import json
 import sys
-from types import ModuleType
+from types import ModuleType, SimpleNamespace as NS
 
 import pytest
 
@@ -31,7 +31,7 @@ class FakeCamera:
         self.reads += 1
         if self.on_read is not None:
             self.on_read()
-        return True, object()
+        return True, NS(shape=(480, 640, 3), size=480 * 640 * 3, dtype="uint8")
 
     def release(self):
         self.released = True

@@ -80,6 +80,28 @@ def validate_rtsp_env(
     return value
 
 
+def _valid_decoded_bgr_frame(frame) -> bool:
+    """Accept only a nonempty OpenCV-style HxWx3 BGR frame.
+
+    OpenCV may report a successful native read while returning an unusable
+    placeholder or empty image. Check only metadata; never retain pixels.
+    """
+    try:
+        shape = frame.shape
+        if len(shape) != 3:
+            return False
+        height, width, channels = shape
+        return (
+            type(height) is int and height > 0
+            and type(width) is int and width > 0
+            and channels == 3
+            and frame.size == height * width * 3
+            and frame.dtype == "uint8"
+        )
+    except (AttributeError, TypeError, ValueError, IndexError):
+        return False
+
+
 def probe_capture(
     capture, *, sample_frames: int = 12,
     privacy_check: Callable[[], None] | None = None,
@@ -104,7 +126,7 @@ def probe_capture(
         ok, frame = capture.read()
         if privacy_check is not None:
             privacy_check()
-        if not ok or frame is None:
+        if not ok or not _valid_decoded_bgr_frame(frame):
             break
         frames_read += 1
     return {

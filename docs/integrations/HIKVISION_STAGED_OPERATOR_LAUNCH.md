@@ -50,4 +50,4 @@ The script prompts **locally**, with password masking. If direct Wi-Fi routing (
 
 ## Interpretation
 
-A successful TCP port 554 handshake is **transport only**, not a login. A successful 12/12 health probe is evidence of *some actual video decoding* but not evidence of fall accuracy. A synthetic model smoke is inference validation on synthetic inputs, not camera validation. The system does not authorize unattended surveillance, medical diagnosis or safety-critical alerts.
+A successful TCP port 554 handshake is **transport only**, not a login. A successful 12/12 health probe requires 12 nonempty **HxWx3 uint8 BGR** frames; a placeholder, zero-sized image, unexpected channel count or wrong pixel type now causes an interrupted result. That is evidence of some usable frame decoding, **not** proof of recognizable people, stable FPS, pose coverage or fall accuracy. A synthetic model smoke is inference validation on synthetic inputs, not camera validation. The system does not authorize unattended surveillance, medical diagnosis or safety-critical alerts.

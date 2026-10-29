@@ -170,7 +170,7 @@ def test_health_probe_accepts_registry_and_rejects_usb(monkeypatch, tmp_path, ca
     monkeypatch.setenv("VIIL_TEST_CAM", "rtsp://192.168.2.3/live")
     class Capture:
         def isOpened(self): return True
-        def read(self): return True, object()
+        def read(self): return True, NS(shape=(480, 640, 3), size=480 * 640 * 3, dtype="uint8")
         def release(self): pass
     monkeypatch.setattr(camera_health, "open_rtsp_capture", lambda cv2, url: Capture())
     monkeypatch.setitem(sys.modules, "cv2", NS())
