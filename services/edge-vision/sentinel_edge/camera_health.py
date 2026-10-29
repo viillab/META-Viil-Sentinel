@@ -147,6 +147,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="Signed privacy authorization required for camera probe")
     parser.add_argument("--confirm-authorized-camera", action="store_true")
     parser.add_argument("--frames", type=int, default=12)
+    parser.add_argument("--decoder", choices=("opencv", "pyav"), default="opencv",
+                        help="Authorized in-memory RTSP decoder backend")
     parser.add_argument("--rtsp-allow-port", type=int, default=None,
                         help="Explicitly permit one vendor-specific RTSP port")
     args = parser.parse_args(argv)
@@ -188,7 +190,11 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("OpenCV is required; install the edge video extra")
     cap = None
     try:
-        cap = open_rtsp_capture(cv2, url)
+        if args.decoder == "pyav":
+            from sentinel_edge.pyav_capture import open_pyav_capture
+            cap = open_pyav_capture(cv2, url)
+        else:
+            cap = open_rtsp_capture(cv2, url)
         # Native open can block; revalidate before inspecting/reading frames.
         privacy_recheck()
         report = probe_capture(

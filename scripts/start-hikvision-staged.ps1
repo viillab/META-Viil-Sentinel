@@ -10,6 +10,7 @@ param(
     [string]$ModelPath = 'D:\VIIL-Sentinel\models\pose_landmarker_lite.task',
     [switch]$RunEdge,
     [switch]$ShowPreview,
+    [ValidateSet('opencv', 'pyav')][string]$PreviewDecoder = 'opencv',
     [ValidateRange(1, 120)][int]$PreviewSeconds = 30,
     [ValidateRange(1, 900)][int]$PreviewFrames = 450,
     [switch]$RequireDirectWifi,
@@ -191,6 +192,7 @@ try {
                 '--source-id', $SourceId,
                 '--privacy-approval', $PrivacyApproval,
                 '--confirm-authorized-camera', '--frames', '12',
+                '--decoder', $(if ($ShowPreview) { $PreviewDecoder } else { 'opencv' }),
                 '--rtsp-allow-port', [string]$RtspPort
             )
             $healthExit = $subHealthExit
@@ -204,6 +206,7 @@ try {
                     '--source-id', $SourceId,
                     '--privacy-approval', $PrivacyApproval,
                     '--confirm-authorized-camera', '--frames', '12',
+                    '--decoder', $(if ($ShowPreview) { $PreviewDecoder } else { 'opencv' }),
                     '--rtsp-allow-port', [string]$RtspPort
                 )
             }
@@ -223,6 +226,7 @@ try {
                     '--source-id', $SourceId,
                     '--privacy-approval', $PrivacyApproval,
                     '--confirm-authorized-camera', '--show-local-preview',
+                    '--decoder', $PreviewDecoder,
                     '--duration-seconds', [string]$PreviewSeconds,
                     '--max-frames', [string]$PreviewFrames,
                     '--rtsp-allow-port', [string]$RtspPort
