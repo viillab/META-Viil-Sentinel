@@ -14,6 +14,7 @@ from time import monotonic, perf_counter
 from typing import Any, Callable, TextIO
 
 from sentinel_edge.camera_health import open_rtsp_capture, validate_rtsp_env
+from sentinel_edge.rtsp_failover import resolve_hikvision_stream_pair
 from sentinel_edge.camera_inputs import (
     load_camera_registry, parse_usb_index, resolve_camera,
 )
@@ -51,6 +52,8 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--source", required=True, help="Camera integer (e.g. 0) or authorized video")
     parser.add_argument("--model", required=True, type=Path, help="Local MediaPipe pose .task model")
     parser.add_argument("--rtsp-env", metavar="ENV_NAME", help="Read authorized RTSP URL from an environment variable")
+    parser.add_argument("--rtsp-fallback-env", metavar="ENV_NAME",
+                        help="Optional same-camera alternate Hikvision stream; requires RTSP retries")
     parser.add_argument("--camera-registry", type=Path,
                         help="Local vendor-neutral camera registry JSON (no secrets)")
     parser.add_argument("--camera-id", help="Select camera ID from the registry")
@@ -129,6 +132,13 @@ def parse_args(argv: list[str] | None = None):
         parser.error("--profile-rtsp requires RTSP retry mode")
     if args.rtsp_retries and not network_source:
         parser.error("--rtsp-retries is only supported for RTSP sources")
+    if args.rtsp_fallback_env and (
+        args.source != "rtsp" or args.rtsp_retries < 1
+        or args.rtsp_fallback_env == args.rtsp_env
+        or not args.rtsp_fallback_env.isidentifier()
+        or not args.rtsp_fallback_env.startswith("VIIL_")
+    ):
+        parser.error("Fallback requires a distinct VIIL_ environment and RTSP retry mode")
     if args.rtsp_retries and (
         args.shadow_model is not None or args.early_motion_probe
         or args.trace_output is not None or args.display
@@ -320,13 +330,19 @@ def _release_capture_redacted(capture: Any) -> None:
 def _run_rtsp_retry_mode(
     args, cv2: Any, mp: Any, source: str, *, source_id: str | None = None,
     privacy_check: Callable[[], None] | None = None,
+    fallback_source: str | None = None,
 ) -> int:
     """Run isolated RTSP epochs. Never reuse native tracker or temporal state."""
     model_sha = _file_sha256(args.model)
+    attempt_index = 0
 
     def run_one_epoch(epoch_source_id: str) -> None:
+        nonlocal attempt_index
         if privacy_check is not None:
             privacy_check()
+        # The supervisor limits retries; alternate only within approved streams.
+        epoch_source = source if fallback_source is None or attempt_index % 2 == 0 else fallback_source
+        attempt_index += 1
         profiler = LiveCycleProfiler() if args.profile_rtsp else None
         coverage = PoseCoverageMonitor()
 
@@ -340,7 +356,7 @@ def _run_rtsp_retry_mode(
                 ), file=sys.stderr)
         with ExitStack() as stack:
             try:
-                cap = open_rtsp_capture(cv2, source)
+                cap = open_rtsp_capture(cv2, epoch_source)
             except Exception:
                 raise CameraStreamInterrupted("Camera open failed") from None
             if cap is None:
@@ -480,6 +496,7 @@ def main(argv: list[str] | None = None) -> int:
     is_rtsp = args.source == "rtsp"
     webcam = False
     source_id = args.source_id
+    fallback_source = None
     if args.selected_camera is not None:
         try:
             selected_kind, source = resolve_camera(
@@ -493,7 +510,14 @@ def main(argv: list[str] | None = None) -> int:
             source_id = args.selected_camera.camera_id
     elif is_rtsp:
         try:
-            source = validate_rtsp_env(args.rtsp_env, extra_port=args.rtsp_allow_port)
+            if args.rtsp_fallback_env:
+                stream_pair = resolve_hikvision_stream_pair(
+                    args.rtsp_env, args.rtsp_fallback_env,
+                    extra_port=args.rtsp_allow_port,
+                )
+                source, fallback_source = stream_pair.primary, stream_pair.fallback
+            else:
+                source = validate_rtsp_env(args.rtsp_env, extra_port=args.rtsp_allow_port)
         except ValueError:
             raise SystemExit("Invalid or unsafe RTSP environment setting (redacted)") from None
     else:
@@ -505,9 +529,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if is_rtsp and args.rtsp_retries:
         try:
-            return _run_rtsp_retry_mode(
-                args, cv2, mp, source, source_id=source_id, privacy_check=privacy_check,
-            )
+            retry_kwargs = {"source_id": source_id, "privacy_check": privacy_check}
+            # Preserve the established no-fallback call contract for camera registries.
+            if fallback_source is not None:
+                retry_kwargs["fallback_source"] = fallback_source
+            return _run_rtsp_retry_mode(args, cv2, mp, source, **retry_kwargs)
         except PrivacyGateDenied:
             print("Live camera approval revoked/invalid; capture stopped.", file=sys.stderr)
             return 2
