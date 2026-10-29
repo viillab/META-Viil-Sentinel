@@ -10,7 +10,7 @@ param(
     [string]$PrivacyApproval,
     [string]$ModelPath = 'D:\VIIL-Sentinel\models\pose_landmarker_lite.task',
     [switch]$RunEdge,
-    [ValidateSet('opencv', 'pyav')][string]$EdgeDecoder = 'opencv',
+    [ValidateSet('opencv', 'pyav', 'http-mjpeg')][string]$EdgeDecoder = 'opencv',
     [switch]$ShowPreview,
     [ValidateSet('opencv', 'pyav', 'http-mjpeg')][string]$PreviewDecoder = 'opencv',
     [ValidateRange(1, 120)][int]$PreviewSeconds = 30,
@@ -168,6 +168,9 @@ function Test-SignedPrivacyApproval {
 }
 
 try {
+    if ($EdgeDecoder -eq 'http-mjpeg' -and -not $RunEdge) {
+        throw 'HTTP MJPEG Edge decoder requires -RunEdge.'
+    }
     if ($PreviewDecoder -eq 'http-mjpeg' -and (-not $ShowPreview -or $RunEdge)) {
         throw 'HTTP MJPEG is only available for authorized local preview.'
     }
@@ -274,7 +277,8 @@ try {
                 $authority = "rtsp://${usernameEncoded}:${passwordEncoded}@$CameraIp`:$RtspPort"
                 $env:VIIL_HIK_LAN_SUB = "$authority/Streaming/Channels/102"
                 $env:VIIL_HIK_LAN_MAIN = "$authority/Streaming/Channels/101"
-                if ($ShowPreview -and $PreviewDecoder -eq 'http-mjpeg') {
+                if (($ShowPreview -and $PreviewDecoder -eq 'http-mjpeg') -or
+                    ($RunEdge -and $EdgeDecoder -eq 'http-mjpeg')) {
                     $env:VIIL_HIK_HTTP_URL = "http://$CameraIp`:$HttpPort/ISAPI/Streaming/channels/102/httpPreview"
                     $env:VIIL_HIK_HTTP_USER = $cameraUser
                     $env:VIIL_HIK_HTTP_PASS = $passText
@@ -285,7 +289,8 @@ try {
                 $passwordEncoded = $null
                 $authority = $null
             }
-            if ($ShowPreview -and $PreviewDecoder -eq 'http-mjpeg') {
+            if (($ShowPreview -and $PreviewDecoder -eq 'http-mjpeg') -or
+                ($RunEdge -and $EdgeDecoder -eq 'http-mjpeg')) {
                 Write-Host 'Authorized HTTP Digest MJPEG probe: 12 frames, in-memory only...'
                 $httpHealthExit = Invoke-PrivateEdgePython -Arguments @(
                     '-m', 'sentinel_edge.camera_health',
@@ -300,6 +305,7 @@ try {
                     throw 'HTTP MJPEG unavailable: verify camera supports MJPEG substream 102.'
                 }
                 Write-Host 'Verified: authorized HTTP MJPEG decoder read 12/12 frames.'
+                if ($ShowPreview) {
                 $httpPreviewExit = Invoke-PrivateEdgePython -Arguments @(
                     '-m', 'sentinel_edge.live_preview',
                     '--http-mjpeg-env', 'VIIL_HIK_HTTP_URL',
@@ -315,6 +321,24 @@ try {
                     throw 'Authorized local HTTP MJPEG preview failed (details redacted).'
                 }
                 Write-Host 'HTTP MJPEG preview ended; video was not saved or transmitted.'
+                }
+                if ($RunEdge) {
+                    Write-Host 'Starting bounded HTTP MJPEG Edge trial (120 frames / 60 seconds maximum)...'
+                    $httpEdgeExit = Invoke-PrivateEdgePython -ShowSafeRtspMetrics -Arguments @(
+                        '-m', 'sentinel_edge',
+                        '--source', 'http-mjpeg',
+                        '--http-mjpeg-env', 'VIIL_HIK_HTTP_URL',
+                        '--source-id', $SourceId,
+                        '--privacy-approval', $PrivacyApproval,
+                        '--model', $ModelPath,
+                        '--candidate-format', 'v1', '--confirm-consent',
+                        '--max-frames', '120'
+                    )
+                    if ($httpEdgeExit -ne 0) {
+                        throw 'Bounded HTTP MJPEG Edge trial failed (details redacted).'
+                    }
+                    Write-Host 'HTTP MJPEG Edge trial completed; candidates require human review.'
+                }
             } else {
             Write-Host 'Authorized health probe: attempting 12 frames (no saved video)...'
             $subHealthExit = Invoke-PrivateEdgePython -Arguments @(

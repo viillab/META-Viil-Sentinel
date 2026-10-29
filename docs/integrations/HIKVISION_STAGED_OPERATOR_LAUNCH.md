@@ -75,7 +75,20 @@ powershell -NoProfile -File D:\VIIL-Sentinel\scripts\start-hikvision-staged.ps1 
 
 The script verifies the signed policy **before asking for camera credentials**, then prompts locally for a read-only camera account. It uses HTTP Digest authentication and a strictly private camera URL on HTTP port 80 (or explicitly `-HttpPort 8080`). It performs a **12 decoded-frame in-memory health check** before showing a bounded local video window. HTTP redirects are disabled, the system proxy is bypassed, JPEG buffer size is capped at 2 MiB per frame and the response is closed on all outcomes. No video or credentials are written to files, printed or sent to a dashboard. Because HTTP without TLS is unencrypted, use only a trusted private segment or secure overlay (for example, the existing Tailscale route), and restrict access to read-only accounts. If unsupported, leave existing RTSP/PyAV path in place; **do not automatically change the camera codec**, as other camera viewers may depend on H.264/H.265.
 
-Unlike the RTSP decoder, HTTP-MJPEG is **currently a separate local preview/health transport only**, not an Edge fall inference input or a WebRTC dashboard feed. Do not claim a successful real-camera decode without 12/12 readable frames. This follows Hikvision's documented HTTP MJPEG stream constraints: https://www.hikvision.com/content/dam/hikvision/en/support/how-to/how-to-document/network-cameras/How-to-Get-IPC-MJPEG-Stream-via-HTTP-Commands.pdf
+HTTP-MJPEG also supports **bounded Edge AI experiments** via the same signed-policy workflow. Use a genuine reviewed approval and run:
+
+```powershell
+$approval = Read-Host 'Genuine signed approval path'
+$cameraId = Read-Host 'Approved camera source ID'
+powershell -NoProfile -File D:\VIIL-Sentinel\scripts\start-hikvision-staged.ps1 `
+  -CameraIp 192.168.10.204 `
+  -PrivacyApproval $approval -SourceId $cameraId `
+  -RunEdge -EdgeDecoder http-mjpeg
+```
+
+This first probes **12/12 BGR decoded frames** through HTTP Digest MJPEG, then runs no more than **120 AI frames or 60 seconds**, whichever occurs first. All acquisition, every frame and the output path remain protected by the existing signed-policy gate. It is a **separate HTTP fallback input**, not a mixed automatic RTSP-to-HTTP retry; there is no automatic restart, no saved raw video/pose trace and no browser/dashboard stream. The launcher suppresses raw Edge/stdout/stderr for credential safety and reports only the bounded experiment result; it does not claim accuracy or latency without measurements. The standalone Edge runner supports `--source http-mjpeg --http-mjpeg-env VIIL_HIK_HTTP_URL --max-frames 120` with dedicated read-only HTTP Digest credentials in process-only environment variables, plus `--privacy-approval`, `--candidate-format v1` and `--confirm-consent`.
+
+Do not claim a successful real-camera decode without 12/12 readable frames. This follows Hikvision's documented HTTP MJPEG stream constraints: https://www.hikvision.com/content/dam/hikvision/en/support/how-to/how-to-document/network-cameras/How-to-Get-IPC-MJPEG-Stream-via-HTTP-Commands.pdf
 
 To **show the live video in an actual local window** instead of running AI, execute from an **interactive Windows desktop PowerShell session** after the same genuine signed approval is installed:
 
