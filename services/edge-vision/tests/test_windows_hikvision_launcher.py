@@ -165,6 +165,34 @@ def test_offline_preflight_checks_real_hmac_and_scope_without_capture(
 
 
 @WINDOWS_ONLY
+@pytest.mark.parametrize("extra", [
+    ["-ShowPreview"], ["-ShowPreview", "-RunEdge"],
+])
+def test_preview_launcher_fails_closed_without_signed_approval_or_credential_prompts(extra):
+    result = subprocess.run(
+        [
+            "powershell.exe", "-NoProfile", "-File", str(LAUNCHER),
+            "-CameraIp", "192.168.50.10", *extra,
+            "-PrivacyApproval", "C:\\VIIL_TEST_NONEXISTENT\\signed-policy.json",
+        ],
+        capture_output=True, text=True, timeout=25, check=False,
+    )
+    assert result.returncode == 2
+    assert "No successful live decode claimed" in result.stdout + result.stderr
+    assert "Authorized health probe" not in result.stdout + result.stderr
+
+
+@WINDOWS_ONLY
+def test_preview_switch_routes_to_local_only_gui_and_never_reuses_edge_inference():
+    script = LAUNCHER.read_text(encoding="utf-8")
+    assert "[switch]$ShowPreview" in script
+    assert "'-m', 'sentinel_edge.live_preview'" in script
+    assert "'--show-local-preview'" in script
+    assert "'--fallback-env', $streamOrder.FallbackEnv" in script
+    assert "if ($RunEdge -and $ShowPreview)" in script
+
+
+@WINDOWS_ONLY
 def test_preflight_only_reports_no_real_decode():
     result = subprocess.run(
         [
