@@ -39,6 +39,19 @@ cd D:\VIIL-Sentinel\services\edge-vision
 
 The output deliberately includes only an RTSP status code (e.g. 200 or 401) and safe booleans. **Any RTSP response only verifies that a server answered OPTIONS; it does not authenticate the camera, identify the physical device, validate credentials, grant privacy consent, negotiate a media stream, decode video or prove fall detection.** This sends one socket request, not a network scan. A status 401 means authentication was requested for OPTIONS only; a 200 does not mean protected video will play.
 
+### Verify Hikvision codec configuration without video (read-only ISAPI)
+
+The authorized camera administrator can inspect exactly the **stream-configuration metadata** (not image/video data or camera settings writes) from channels **101** and **102**:
+
+```powershell
+powershell -NoProfile -File D:\VIIL-Sentinel\scripts\inspect-hikvision-streams.ps1 `
+  -CameraIp 192.168.10.204
+```
+
+Enter the **authorized read-only Hikvision camera account** and masked password locally. The helper sends GET-only Hikvision ISAPI requests using HTTP Digest (which can require one 401 challenge/retry per endpoint), with redirects and external proxies disabled, a max 64-KiB XML response per channel, and a 3-second per-request timeout. Credentials are kept in temporary process environment variables and restored on exit; neither credentials, private camera IP, original XML, serial number nor person/video data are printed or saved. An authorized metadata inspection is **not video consent** and does **not** satisfy the Signed Privacy Approval required to view/process footage.
+
+**Real camera configuration verified on 29 October 2026 (read-only ISAPI):** model `DS-2DE2C400MWG-4GUHK`, firmware `V5.8.34 build 260403`; Main `101` = H.264, 2560×1440, 15 configured FPS, about 3994 Kbps; Sub `102` = H.264, 768×432, 10 configured FPS, about 512 Kbps. Values are **configuration settings**, not observed decode rate or AI FPS. The command re-reads the current settings and emits only allowlisted codec/resolution/FPS/bitrate values. It prefers substream `102` for H.264/H.265 Edge experiments; with current H.264 configuration **HTTP-MJPEG cannot be presumed to work** and no codec change should be made automatically. RTSP OPTIONS 200 and ISAPI GET 200 still do not prove live frames decoded.
+
 After the site operator has completed a genuine privacy review, signed the policy (see `docs/security/GLOBAL_PRIVACY_SECURITY_BASELINE.md` and `docs/security/SIGNED_CAMERA_APPROVAL_OPERATOR_WORKFLOW.md`) and placed it in a protected folder outside Git:
 
 ```powershell
