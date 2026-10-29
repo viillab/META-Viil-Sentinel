@@ -54,6 +54,8 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--source", required=True, help="Camera integer (e.g. 0) or authorized video")
     parser.add_argument("--model", required=True, type=Path, help="Local MediaPipe pose .task model")
     parser.add_argument("--rtsp-env", metavar="ENV_NAME", help="Read authorized RTSP URL from an environment variable")
+    parser.add_argument("--http-mjpeg-env", metavar="ENV_NAME",
+                        help="Read authorized private HTTP-MJPEG URL from a VIIL_ environment variable")
     parser.add_argument("--rtsp-fallback-env", metavar="ENV_NAME",
                         help="Optional same-camera alternate Hikvision stream; requires RTSP retries")
     parser.add_argument("--camera-registry", type=Path,
@@ -89,6 +91,14 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--acknowledge-pose-privacy", action="store_true",
                         help="Confirm authorization to export derived pose landmarks")
     args = parser.parse_args(argv)
+    if args.http_mjpeg_env and (
+        not args.http_mjpeg_env.isidentifier() or not args.http_mjpeg_env.startswith("VIIL_")
+    ):
+        parser.error("HTTP MJPEG source requires a VIIL_ environment variable")
+    if (args.source == "http-mjpeg") != bool(args.http_mjpeg_env):
+        parser.error("--source http-mjpeg requires --http-mjpeg-env and vice versa")
+    if args.source == "http-mjpeg" and args.rtsp_env:
+        parser.error("HTTP MJPEG source cannot also use RTSP input")
     if args.rtsp_env and (not args.rtsp_env.isidentifier() or not args.rtsp_env.startswith("VIIL_")):
         parser.error("--rtsp-env must name a VIIL_ prefixed environment variable")
     if args.rtsp_env and args.source != "rtsp":
@@ -108,20 +118,23 @@ def parse_args(argv: list[str] | None = None):
         parser.error("--camera-registry requires --source camera")
     else:
         args.selected_camera = None
-    network_source = args.source == "rtsp" or (
+    network_source = args.source in ("rtsp", "http-mjpeg") or (
         args.selected_camera is not None and args.selected_camera.kind == "rtsp"
     )
     if "://" in args.source or "@" in args.source:
         parser.error("Network URLs and credentials cannot be passed as --source")
     if args.source.startswith(("\\\\", "//")):
         parser.error("UNC/network paths cannot be used as local video sources")
-    if args.rtsp_decoder != "opencv" and not network_source:
+    if args.rtsp_decoder != "opencv" and (
+        not network_source or args.source == "http-mjpeg"
+    ):
         parser.error("--rtsp-decoder pyav requires an authorized RTSP source")
     if args.rtsp_allow_port is not None and (
         not 1 <= args.rtsp_allow_port <= 65535 or not network_source
+        or args.source == "http-mjpeg"
     ):
         parser.error("--rtsp-allow-port requires an RTSP source and port 1..65535")
-    if args.source not in ("rtsp", "camera"):
+    if args.source not in ("rtsp", "camera", "http-mjpeg"):
         try:
             parse_usb_index(args.source)
         except ValueError:
@@ -132,6 +145,11 @@ def parse_args(argv: list[str] | None = None):
         parser.error("--rtsp-retry-delay-ms must be 250..5000")
     if not 0 <= args.rtsp_session_seconds <= 3600:
         parser.error("--rtsp-session-seconds must be 0..3600")
+    if args.source == "http-mjpeg" and (
+        args.rtsp_retries or args.rtsp_fallback_env or args.profile_rtsp
+        or args.rtsp_session_seconds or args.max_frames < 1 or args.max_frames > 120
+    ):
+        parser.error("HTTP MJPEG requires 1..120 frames, no RTSP retry/fallback/profile")
     if args.rtsp_session_seconds and (not network_source or not args.rtsp_retries):
         parser.error("--rtsp-session-seconds requires RTSP retry mode")
     if args.profile_rtsp and (not network_source or not args.rtsp_retries):
@@ -150,7 +168,7 @@ def parse_args(argv: list[str] | None = None):
         or args.trace_output is not None or args.display
     ):
         parser.error("RTSP retry mode disallows research shadow, trace and display")
-    live_input = args.source in ("rtsp", "camera") or parse_usb_index(args.source) is not None
+    live_input = args.source in ("rtsp", "camera", "http-mjpeg") or parse_usb_index(args.source) is not None
     if live_input and (args.candidate_format != "v1" or not args.confirm_consent):
         parser.error("All live cameras require --candidate-format v1 and --confirm-consent")
     if live_input and (
@@ -490,7 +508,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     # Enforce operator authorization before native codec/model imports or any
     # live capture opening. This is not a legal compliance certification.
-    live_device = args.source in ("rtsp", "camera")
+    live_device = args.source in ("rtsp", "camera", "http-mjpeg")
     if not live_device:
         live_device = parse_usb_index(args.source) is not None
     privacy_check = None
@@ -522,6 +540,7 @@ def main(argv: list[str] | None = None) -> int:
         ) from exc
 
     is_rtsp = args.source == "rtsp"
+    is_http_mjpeg = args.source == "http-mjpeg"
     webcam = False
     source_id = args.source_id
     fallback_source = None
@@ -536,6 +555,12 @@ def main(argv: list[str] | None = None) -> int:
         webcam = selected_kind == "usb"
         if args.source_id == "staged-camera-01":
             source_id = args.selected_camera.camera_id
+    elif is_http_mjpeg:
+        try:
+            from sentinel_edge.http_mjpeg_capture import validate_http_mjpeg_env
+            source = validate_http_mjpeg_env(args.http_mjpeg_env)
+        except ValueError:
+            raise SystemExit("Invalid or unsafe HTTP MJPEG input (redacted)") from None
     elif is_rtsp:
         try:
             if args.rtsp_fallback_env:
@@ -576,8 +601,12 @@ def main(argv: list[str] | None = None) -> int:
         from sentinel_edge.early_motion_probe import CausalMotionProbe
     with ExitStack() as stack:
         try:
-            cap = (_open_inference_rtsp_capture(cv2, source, args.rtsp_decoder)
-                   if is_rtsp else cv2.VideoCapture(source))
+            if is_http_mjpeg:
+                from sentinel_edge.http_mjpeg_capture import open_http_mjpeg_capture
+                cap = open_http_mjpeg_capture(cv2, source)
+            else:
+                cap = (_open_inference_rtsp_capture(cv2, source, args.rtsp_decoder)
+                       if is_rtsp else cv2.VideoCapture(source))
         except Exception:
             raise SystemExit("Cannot initialize authorized camera source (redacted)") from None
         stack.callback(_release_capture_redacted, cap)
@@ -632,7 +661,8 @@ def main(argv: list[str] | None = None) -> int:
                 early_probe.observe(frame)
         encoder = None
         if args.candidate_format == "v1":
-            provenance = "authorized_local_camera" if (webcam or is_rtsp) else "consented_staged_video"
+            provenance = ("authorized_local_camera" if (webcam or is_rtsp or is_http_mjpeg)
+                          else "consented_staged_video")
             asset_hash = _file_sha256(args.model)
             def encode_candidate(candidate: FallCandidateEvent) -> dict:
                 return to_envelope(
@@ -642,12 +672,13 @@ def main(argv: list[str] | None = None) -> int:
         try:
             stats = process_capture(
                 cap, cv2=cv2, mp=mp, landmarker=landmarker,
-                webcam=(webcam or is_rtsp), source_id=source_id,
+                webcam=(webcam or is_rtsp or is_http_mjpeg), source_id=source_id,
                 max_frames=args.max_frames, display=args.display,
                 trace_file=trace_file, event_encoder=encoder,
                 on_frame=consume_research if (shadow is not None or early_probe is not None)
                 else None,
-                fail_on_loss=is_rtsp,
+                fail_on_loss=(is_rtsp or is_http_mjpeg),
+                max_duration_seconds=60 if is_http_mjpeg else 0,
                 privacy_check=privacy_check,
             )
         except PrivacyGateDenied:

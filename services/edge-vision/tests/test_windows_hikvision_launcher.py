@@ -274,7 +274,7 @@ def test_preview_switch_routes_to_local_only_gui_and_never_reuses_edge_inference
 @WINDOWS_ONLY
 def test_edge_pyav_launcher_selects_matching_health_and_inference_decoder():
     script = LAUNCHER.read_text(encoding="utf-8")
-    assert "[ValidateSet('opencv', 'pyav')][string]$EdgeDecoder" in script
+    assert "[ValidateSet('opencv', 'pyav', 'http-mjpeg')][string]$EdgeDecoder" in script
     assert "'--rtsp-decoder', $EdgeDecoder" in script
     assert script.count("elseif ($RunEdge) { $EdgeDecoder }") == 2
 
@@ -316,6 +316,34 @@ def test_http_mjpeg_launcher_has_strict_separate_capture_path_and_restores_secre
     assert "$env:VIIL_HIK_HTTP_PASS = $passText" in script
     assert "SetEnvironmentVariable('VIIL_HIK_HTTP_PASS', $oldHttpPass" in script
     assert "if ($PreviewDecoder -eq 'http-mjpeg' -and (-not $ShowPreview -or $RunEdge))" in script
+
+
+@WINDOWS_ONLY
+def test_http_mjpeg_edge_launcher_denies_without_signed_approval():
+    result = subprocess.run(
+        [
+            "powershell.exe", "-NoProfile", "-File", str(LAUNCHER),
+            "-CameraIp", "192.168.50.10", "-RunEdge",
+            "-EdgeDecoder", "http-mjpeg",
+            "-PrivacyApproval", r"C:\VIIL_TEST_NONEXISTENT\signed-policy.json",
+        ],
+        capture_output=True, text=True, timeout=25, check=False,
+    )
+    assert result.returncode == 2
+    assert "No successful live decode claimed" in result.stdout + result.stderr
+    assert "Authorized HTTP Digest MJPEG probe" not in result.stdout + result.stderr
+
+
+@WINDOWS_ONLY
+def test_http_mjpeg_edge_launcher_selects_bounded_guarded_transport():
+    script = LAUNCHER.read_text(encoding="utf-8")
+    assert "[ValidateSet('opencv', 'pyav', 'http-mjpeg')][string]$EdgeDecoder" in script
+    assert "$RunEdge -and $EdgeDecoder -eq 'http-mjpeg'" in script
+    assert "'--source', 'http-mjpeg'" in script
+    assert "'--http-mjpeg-env', 'VIIL_HIK_HTTP_URL'" in script
+    assert "'--max-frames', '120'" in script
+    assert "Invoke-PrivateEdgePython -ShowSafeRtspMetrics" in script
+    assert "SetEnvironmentVariable('VIIL_HIK_HTTP_PASS', $oldHttpPass" in script
 
 
 @WINDOWS_ONLY
