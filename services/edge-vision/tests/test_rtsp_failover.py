@@ -110,6 +110,10 @@ class FakePose:
     def __exit__(self, *_):
         self.closed = True
 
+    def detect_for_video(self, image, timestamp):
+        # Legitimate synthetic pose-missing response, not a fall candidate.
+        return NS(pose_landmarks=[])
+
 
 def fake_mp(created):
     return NS(tasks=NS(
@@ -156,6 +160,53 @@ def test_runtime_first_stream_fails_then_fallback_succeeds(
     logs = capsys.readouterr()
     assert SECRET not in logs.err + logs.out
     assert "no monitoring" in logs.err
+
+
+def test_native_corrupt_rtsp_frame_retries_with_real_processor_and_fresh_resources(
+    tmp_path, monkeypatch, capsys,
+):
+    """Do not mock process_capture: malformed RTSP frame must trigger fallback."""
+    opened = []
+    captures = []
+    poses = []
+
+    class FrameCapture(Capture):
+        def get(self, _key):
+            return 10.0
+
+        def read(self):
+            if len(opened) == 1:
+                # FFmpeg/OpenCV may report ok=True yet return invalid bytes.
+                return True, object()
+            return True, NS(shape=(24, 32, 3), size=24 * 32 * 3, dtype="uint8")
+
+    def fake_open(_cv2, source):
+        opened.append(source)
+        cap = FrameCapture()
+        captures.append(cap)
+        return cap
+
+    cv2 = NS(CAP_PROP_FPS=5, COLOR_BGR2RGB=1, cvtColor=lambda frame, _: frame)
+    pose_mp = fake_mp(poses)
+    mp = NS(
+        tasks=pose_mp.tasks,
+        ImageFormat=NS(SRGB="RGB"),
+        Image=lambda **kwargs: kwargs["data"],
+    )
+    monkeypatch.setattr(runner, "open_rtsp_capture", fake_open)
+
+    outcome = runner._run_rtsp_retry_mode(
+        args(tmp_path), cv2, mp, SUB,
+        fallback_source=MAIN, privacy_check=lambda: None,
+    )
+    assert outcome == 0
+    assert opened == [SUB, MAIN]
+    assert len(captures) == 2 and all(cap.released for cap in captures)
+    assert len(poses) == 2 and all(pose.closed for pose in poses)
+    logs = capsys.readouterr()
+    assert logs.out == ""
+    assert "no monitoring" in logs.err
+    assert SECRET not in logs.err
 
 
 def test_exhausted_fallback_exits_nonzero_with_no_events(

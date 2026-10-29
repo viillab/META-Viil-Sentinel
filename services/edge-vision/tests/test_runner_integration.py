@@ -161,14 +161,66 @@ def test_fake_local_video_can_emit_versioned_unverified_contract():
     assert "evidence_notes" not in envelope
 
 
+class FakeValidRtspCapture(FakeCapture):
+    def read(self):
+        ok, frame = super().read()
+        if not ok:
+            return False, None
+        return True, NS(shape=(24, 32, 3), size=24 * 32 * 3, dtype="uint8")
+
+
 def test_rtsp_stream_loss_fails_closed_instead_of_successful_eof():
-    cap = FakeCapture(range(3))
+    cap = FakeValidRtspCapture(range(3))
     with pytest.raises(CameraStreamInterrupted, match="interrupted"):
         process_capture(
             cap, cv2=FakeCv2, mp=FakeMp, landmarker=FakeLandmarker(),
             webcam=True, source_id="test-rtsp", fail_on_loss=True,
             output=StringIO(),
         )
+
+
+@pytest.mark.parametrize("bad_frame", [
+    object(),
+    NS(shape=(0, 32, 3), size=0, dtype="uint8"),
+    NS(shape=(24, 32, 4), size=24 * 32 * 4, dtype="uint8"),
+    NS(shape=(24, 32, 3), size=24 * 32 * 3, dtype="float32"),
+])
+def test_rtsp_corrupt_frame_causes_bounded_reconnect_before_inference(bad_frame):
+    class CorruptCapture(FakeValidRtspCapture):
+        def read(self):
+            self.index += 1
+            return True, bad_frame
+
+    model = FakeLandmarker()
+    sink = StringIO()
+    with pytest.raises(CameraStreamInterrupted, match="unusable"):
+        process_capture(
+            CorruptCapture(range(1)), cv2=FakeCv2, mp=FakeMp,
+            landmarker=model, webcam=True, source_id="rtsp-test",
+            fail_on_loss=True, max_frames=1, output=sink,
+        )
+    assert model.count == 0
+    assert sink.getvalue() == ""
+
+
+def test_rtsp_valid_frame_then_corrupt_does_not_emit_candidate():
+    class CorruptAfterFirstFrame(FakeValidRtspCapture):
+        def read(self):
+            if self.index == 1:
+                self.index += 1
+                return True, NS(shape=(24, 32, 3), size=0, dtype="uint8")
+            return super().read()
+
+    model = FakeLandmarker()
+    sink = StringIO()
+    with pytest.raises(CameraStreamInterrupted, match="unusable"):
+        process_capture(
+            CorruptAfterFirstFrame(range(4)), cv2=FakeCv2, mp=FakeMp,
+            landmarker=model, webcam=True, source_id="rtsp-test",
+            fail_on_loss=True, output=sink,
+        )
+    assert model.count == 1
+    assert sink.getvalue() == ""
 
 
 def test_native_capture_error_never_discloses_credentials():

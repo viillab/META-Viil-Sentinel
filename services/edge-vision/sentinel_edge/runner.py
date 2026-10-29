@@ -13,7 +13,9 @@ import sys
 from time import monotonic, perf_counter
 from typing import Any, Callable, TextIO
 
-from sentinel_edge.camera_health import open_rtsp_capture, validate_rtsp_env
+from sentinel_edge.camera_health import (
+    _valid_decoded_bgr_frame, open_rtsp_capture, validate_rtsp_env,
+)
 from sentinel_edge.rtsp_failover import resolve_hikvision_stream_pair
 from sentinel_edge.camera_inputs import (
     load_camera_registry, parse_usb_index, resolve_camera,
@@ -257,6 +259,12 @@ def process_capture(
         # before inference so no candidates are emitted after the deadline.
         if max_duration_seconds and clock() - started >= max_duration_seconds:
             break
+        # RTSP read() may return success with an empty/malformed frame.
+        # Treat that as a recoverable stream interruption BEFORE MediaPipe,
+        # allowing the bounded same-camera fallback to create fresh state.
+        # Offline/non-retrying capture behavior stays unchanged.
+        if fail_on_loss and not _valid_decoded_bgr_frame(bgr):
+            raise CameraStreamInterrupted("RTSP decoded frame unusable")
         timestamp = (
             max(int((clock() - started) * 1000), last_timestamp + 1)
             if webcam else timestamp_for_frame(frame_number, fps, last_timestamp)

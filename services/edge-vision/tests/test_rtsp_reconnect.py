@@ -108,7 +108,7 @@ def test_retry_mode_creates_fresh_native_tasks_releases_capture_and_renames_sour
             if self.remaining == 0:
                 return False, None
             self.remaining -= 1
-            return True, object()
+            return True, NS(shape=(24, 32, 3), size=24 * 32 * 3, dtype="uint8")
         def release(self):
             self.released = True
 
