@@ -23,6 +23,25 @@ $exitStatus = 2
 $passSecure = $null
 $keySecure = $null
 
+function Invoke-PrivateEdgePython {
+    # PowerShell 5.1 promotes redirected native stderr to NativeCommandError
+    # under ErrorActionPreference=Stop. That previously skipped fallback.
+    # Keep codec stderr private, return the real child exit code, and continue
+    # only on explicit success. Never stringify native exceptions (URL secrets).
+    param([Parameter(Mandatory=$true)][string[]]$Arguments)
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        & $python @Arguments 2>$null | Out-Host
+        if ($null -eq $LASTEXITCODE) { return 2 }
+        return [int]$LASTEXITCODE
+    } catch {
+        return 2
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+}
+
 try {
     $ip = [Net.IPAddress]::Parse($CameraIp)
     if ($ip.AddressFamily -ne [Net.Sockets.AddressFamily]::InterNetwork) {
@@ -43,14 +62,16 @@ try {
         throw 'Pose Landmarker .task model is missing.'
     }
 
-    $route = Get-NetRoute -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-        Where-Object { $_.DestinationPrefix -eq "$CameraIp/32" } |
-        Sort-Object RouteMetric | Select-Object -First 1
-    $routeAlias = if ($null -ne $route) {
-        (Get-NetAdapter -InterfaceIndex $route.InterfaceIndex -ErrorAction SilentlyContinue).Name
-    } else { 'default system route' }
-    if ($RequireDirectWifi -and $routeAlias -eq 'Tailscale') {
-        throw 'Direct Wi-Fi required but an exact Tailscale route is active. No routes changed.'
+    # The best route can be a subnet/default route, not only an exact /32.
+    # Do not change the OS route or infer direct Wi-Fi just because one VPN
+    # alias is absent. This query performs no camera capture.
+    $routes = @(Find-NetRoute -RemoteIPAddress $CameraIp -ErrorAction Stop)
+    $selected = $routes | Where-Object { $_.InterfaceAlias } | Select-Object -First 1
+    $routeAlias = if ($null -ne $selected) {
+        [string]$selected.InterfaceAlias
+    } else { 'unknown' }
+    if ($RequireDirectWifi -and $routeAlias -ne 'Wi-Fi') {
+        throw 'Direct Wi-Fi required but Windows selected a different interface. No routes changed.'
     }
 
     if ($PreflightOnly) {
@@ -91,8 +112,8 @@ try {
         $verify = 'import sys; from pathlib import Path; from sentinel_edge.privacy_gate import verify_privacy_approval; verify_privacy_approval(Path(sys.argv[1]), camera_id=sys.argv[2])'
         Push-Location $edge
         try {
-            & $python -c $verify $PrivacyApproval $SourceId 2>$null
-            if ($LASTEXITCODE -ne 0) {
+            $verifyExit = Invoke-PrivateEdgePython -Arguments @('-c', $verify, $PrivacyApproval, $SourceId)
+            if ($verifyExit -ne 0) {
                 throw 'Signed privacy approval was denied; camera not opened.'
             }
 
@@ -117,35 +138,44 @@ try {
                 $authority = $null
             }
             Write-Host 'Authorized health probe: attempting 12 frames (no saved video)...'
-            & $python -m sentinel_edge.camera_health `
-                --rtsp-env VIIL_HIK_LAN_SUB `
-                --source-id $SourceId `
-                --privacy-approval $PrivacyApproval `
-                --confirm-authorized-camera --frames 12 2>$null
-            if ($LASTEXITCODE -ne 0) {
+            $subHealthExit = Invoke-PrivateEdgePython -Arguments @(
+                '-m', 'sentinel_edge.camera_health',
+                '--rtsp-env', 'VIIL_HIK_LAN_SUB',
+                '--source-id', $SourceId,
+                '--privacy-approval', $PrivacyApproval,
+                '--confirm-authorized-camera', '--frames', '12'
+            )
+            $healthExit = $subHealthExit
+            if ($subHealthExit -ne 0) {
+                # The first native decoder may fail with stderr. Retry through the
+                # same signed privacy gate on a distinct stream of THIS camera.
                 Write-Warning 'Substream decode failed. Trying same-camera mainstream once.'
-                & $python -m sentinel_edge.camera_health `
-                    --rtsp-env VIIL_HIK_LAN_MAIN `
-                    --source-id $SourceId `
-                    --privacy-approval $PrivacyApproval `
-                    --confirm-authorized-camera --frames 12 2>$null
+                $healthExit = Invoke-PrivateEdgePython -Arguments @(
+                    '-m', 'sentinel_edge.camera_health',
+                    '--rtsp-env', 'VIIL_HIK_LAN_MAIN',
+                    '--source-id', $SourceId,
+                    '--privacy-approval', $PrivacyApproval,
+                    '--confirm-authorized-camera', '--frames', '12'
+                )
             }
-            if ($LASTEXITCODE -ne 0) {
+            if ($healthExit -ne 0) {
                 throw 'No authorized stream produced 12 decoded frames; Edge was not started.'
             }
             Write-Host 'Verified: authorized RTSP decoder read 12/12 frames.'
             if ($RunEdge) {
-                Write-Host 'Starting bounded local Edge trial (max 120 frames / 60 seconds)...'
-                & $python -m sentinel_edge `
-                    --source rtsp `
-                    --rtsp-env VIIL_HIK_LAN_SUB `
-                    --rtsp-fallback-env VIIL_HIK_LAN_MAIN `
-                    --source-id $SourceId `
-                    --privacy-approval $PrivacyApproval `
-                    --model $ModelPath --candidate-format v1 --confirm-consent `
-                    --rtsp-retries 1 --rtsp-retry-delay-ms 500 `
-                    --rtsp-session-seconds 60 --max-frames 120 --profile-rtsp 2>$null
-                if ($LASTEXITCODE -ne 0) {
+                Write-Host 'Starting bounded local Edge trial (max 120 frames / 60 seconds per attempt; max 2 attempts)...'
+                $edgeExit = Invoke-PrivateEdgePython -Arguments @(
+                    '-m', 'sentinel_edge',
+                    '--source', 'rtsp',
+                    '--rtsp-env', 'VIIL_HIK_LAN_SUB',
+                    '--rtsp-fallback-env', 'VIIL_HIK_LAN_MAIN',
+                    '--source-id', $SourceId,
+                    '--privacy-approval', $PrivacyApproval,
+                    '--model', $ModelPath, '--candidate-format', 'v1', '--confirm-consent',
+                    '--rtsp-retries', '1', '--rtsp-retry-delay-ms', '500',
+                    '--rtsp-session-seconds', '60', '--max-frames', '120', '--profile-rtsp'
+                )
+                if ($edgeExit -ne 0) {
                     throw 'Edge bounded trial could not complete (details redacted).'
                 }
                 Write-Host 'Bounded Edge trial completed; candidate events require human review.'

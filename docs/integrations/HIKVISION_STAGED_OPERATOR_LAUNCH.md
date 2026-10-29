@@ -10,8 +10,8 @@ This launcher is a **bounded, non-clinical staged demo**. It cannot grant itself
 2. Before capture, requires a private **signed** approval JSON matching `-SourceId`, verifies its HMAC and dates through the application privacy gate, and requires an operator-approved read-only camera account.
 3. Prompts locally for the camera password and for the existing signing key if not already configured; neither value is passed on the command line nor intentionally written to disk.
 4. Sets temporary `VIIL_HIK_LAN_SUB` (Hikvision channel 102) and `VIIL_HIK_LAN_MAIN` (channel 101) only in the launcher process environment.
-5. Runs at most two separate 12-frame, no-recording RTSP health probes (substream, then mainstream if needed). If neither decodes, returns nonzero and never starts the AI.
-6. With `-RunEdge`, runs a bounded metadata-only Edge experiment with at most 120 frames or 60 seconds per trial, a single retry and same-camera alternate-stream fallback.
+5. Runs at most two separate 12-frame, no-recording RTSP health probes (substream, then mainstream if needed). The PowerShell 5.1 native-command helper intentionally preserves a failed decoder's exit status even if FFmpeg writes to stderr, so the alternate stream can be tried. If neither decodes, returns nonzero and never starts the AI.
+6. With `-RunEdge`, runs a bounded metadata-only Edge experiment with **at most 120 frames or 60 seconds per attempt** and at most two attempts (one retry), each with fresh model/capture state. These limits are not a single global 120-frame/60-second budget.
 7. Restores the previous process environment variables on every exit path. No routing changes, network scans, file recording, API calls, emergency dispatch or dashboard claims.
 
 **Privacy:** Native FFmpeg/OpenCV can emit sensitive diagnostics; the launcher suppresses native stderr in the RTSP probes. Keep the terminal private. The local Python process will briefly hold camera credentials in its environment memory. This is not a secure secret manager and should only be used during supervised lab demos.
@@ -38,7 +38,7 @@ powershell -NoProfile -File D:\VIIL-Sentinel\scripts\start-hikvision-staged.ps1 
   -CameraIp $cameraIp -PrivacyApproval $approval -SourceId $cameraId -RunEdge
 ```
 
-The script prompts **locally**, with password masking. If direct Wi-Fi routing (rather than an existing authorized Tailscale route) is a hard requirement, add `-RequireDirectWifi`; it will **refuse to run** while the exact Tailscale route exists, and it will not alter Windows routing. Route and TCP connectivity alone cannot verify RTSP authentication or decode.
+The script prompts **locally**, with password masking. If direct Wi-Fi routing (rather than an existing authorized Tailscale/VPN route) is a hard requirement, add `-RequireDirectWifi`; it will **refuse to run** unless Windows selects the adapter named `Wi-Fi` for that destination, and it will not alter Windows routing. If your Wi-Fi adapter has been renamed, review the route manually before using this strict option. Route and TCP connectivity alone cannot verify RTSP authentication or decode.
 
 ## Necessary operator inputs
 
