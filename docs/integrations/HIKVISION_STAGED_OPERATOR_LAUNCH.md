@@ -40,6 +40,41 @@ cd D:\VIIL-Sentinel\services\edge-vision
 
 The output deliberately includes only an RTSP status code (e.g. 200 or 401) and safe booleans. **Any RTSP response only verifies that a server answered OPTIONS; it does not authenticate the camera, identify the physical device, validate credentials, grant privacy consent, negotiate a media stream, decode video or prove fall detection.** This sends one socket request, not a network scan. A status 401 means authentication was requested for OPTIONS only; a 200 does not mean protected video will play.
 
+### One-command camera readiness (no video or camera credentials)
+
+Use the operator readiness command to combine one read-only credential-free RTSP
+OPTIONS probe with an optional **existing, genuine** signed privacy approval
+check. This tool never requests DESCRIBE/SETUP/PLAY, authenticates to the camera,
+decodes frames, records footage, checks AI inference, or authorizes a site:
+
+```powershell
+cd D:\\VIIL-Sentinel\\services\\edge-vision
+.\\.venv\\Scripts\\python.exe -m sentinel_edge.hikvision_operator_readiness `
+  --camera-ip 192.168.10.204
+```
+
+It emits only allowlisted status and next-step codes, never the camera IP,
+approval file path, key, URL, user or original headers. Without a signed
+approval, it always marks `eligible_for_separate_supervised_decode_trial=false`,
+even if RTSP OPTIONS responds 200. The tool deliberately exits 2 while blocked.
+A signed approval can be checked **only after the authorized site/privacy review**
+and without prompting for or generating the actual HMAC signing key:
+
+```powershell
+.\\.venv\\Scripts\\python.exe -m sentinel_edge.hikvision_operator_readiness `
+  --camera-ip 192.168.10.204 `
+  --privacy-approval 'C:\\PrivateConfig\\approved-privacy.json' `
+  --source-id staged-camera-01
+```
+
+The second command requires the matching existing private
+`VIIL_PRIVACY_APPROVAL_KEY` in the local process environment. A verified
+policy plus OPTIONS 200/401 means only that an operator may attempt the
+**separate, gated 12-frame decode health test** with local read-only camera
+credentials. It does not prove those credentials, show live footage or establish
+stable camera FPS, real-world fall accuracy or legal compliance. A site-specific
+permission and relevant consent/notice procedures must be complete first.
+
 ### Verify Hikvision codec configuration without video (read-only ISAPI)
 
 The authorized camera administrator can inspect exactly the **stream-configuration metadata** (not image/video data or camera settings writes) from channels **101** and **102**:
