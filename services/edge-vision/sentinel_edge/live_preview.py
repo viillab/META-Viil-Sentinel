@@ -161,6 +161,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--confirm-authorized-camera", action="store_true")
     parser.add_argument("--show-local-preview", action="store_true")
     parser.add_argument("--max-frames", type=int, default=450)
+    parser.add_argument("--decoder", choices=("opencv", "pyav"), default="opencv",
+                        help="In-memory RTSP video decoder backend")
     parser.add_argument("--duration-seconds", type=float, default=30)
     parser.add_argument("--rtsp-allow-port", type=int, default=None)
     args = parser.parse_args(argv)
@@ -190,10 +192,14 @@ def main(argv: list[str] | None = None) -> int:
     except ImportError:
         parser.error("Local OpenCV GUI support is required")
     try:
+        opener = None
+        if args.decoder == "pyav":
+            from sentinel_edge.pyav_capture import open_pyav_capture
+            opener = open_pyav_capture
         report = preview_authorized_stream(
             cv2, primary_url=primary, alternate_url=alternate,
             privacy_check=check, max_frames=args.max_frames,
-            duration_seconds=args.duration_seconds,
+            duration_seconds=args.duration_seconds, open_capture=opener,
         )
     except PrivacyGateDenied:
         # Never declare a preview successful when approval was revoked.

@@ -57,8 +57,10 @@ $cameraId = Read-Host 'Approved pseudonymous camera ID'
 powershell -NoProfile -File D:\VIIL-Sentinel\scripts\start-hikvision-staged.ps1 `
   -CameraIp 192.168.10.204 `
   -PrivacyApproval $approval -SourceId $cameraId `
-  -ShowPreview -PreviewSeconds 30 -PreviewFrames 450
+  -ShowPreview -PreviewDecoder pyav -PreviewSeconds 30 -PreviewFrames 450
 ```
+
+The `-PreviewDecoder pyav` option uses PyAV/FFmpeg to decode RTSP-over-TCP frames in memory, following the local POC's decoder approach. It also uses the same decoder for the required 12-frame Health Check; if channel 102 fails, channel 101 is checked before opening the GUI. Install this **optional** backend into the Edge virtual environment with `D:\VIIL-Sentinel\services\edge-vision\.venv\Scripts\python.exe -m pip install -e ".[pyav]"` from `D:\VIIL-Sentinel\services\edge-vision`. Omit `-PreviewDecoder` to use the original OpenCV path. Neither decoder bypasses the genuine signed policy. The supplied POC's direct credential-only capture and disk-based run logs have **not** been imported into the production preview.
 
 The launcher asks for the existing policy signing key and read-only camera credentials **only on the local operator machine**. After its 12-frame health probe succeeds, OpenCV opens a local video window. Press **Q** or **Esc** in that window to stop, or allow the bounded trial to finish. A background terminal/service (including an unattended remote shell) may not have access to the logged-in user's Windows GUI, so start this command in the interactive desktop. This **does not provide a web/Dashboard video feed**: browser streaming would require a separate, authenticated and privacy-reviewed design. Neither the local preview nor its diagnostic JSON confirms AI fall detection.
 
