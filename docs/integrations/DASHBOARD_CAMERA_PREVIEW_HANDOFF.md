@@ -80,5 +80,65 @@ Security constraints:
 5. Verify manual Stop, idle tab, expired privacy, denied 401/403, stream
    errors, frame budget, no raw recording and redacted errors.
 
+## Member 1: bounded in-process JPEG media adapter (new)
+
+`services/edge-vision/sentinel_edge/edge_mjpeg.py` now exports
+`iter_authorized_mjpeg_parts` and `MJPEG_CONTENT_TYPE`. **This is not
+an HTTP server, a deployed media gateway or a camera-login bypass.**
+It has no socket listener, cannot create a browser session, and imports no
+FastAPI. A *trusted server-side* Member 2 integration may use it only
+after session RBAC and CSRF checks, and must continue to authenticate
+the same viewer on every request and output frame.
+
+Contract (conceptual backend pseudocode, **not currently deployed**):
+
+```python
+from sentinel_edge.edge_mjpeg import (
+    MJPEG_CONTENT_TYPE, iter_authorized_mjpeg_parts,
+)
+
+# In a session-verified, authenticated backend handler (Member 2):
+# - Require current operator login + camera RBAC + CSRF/Origin checks
+# - source_env names an administrator-provisioned VIIL_ RTSP env variable,
+#   never input controlled by the browser
+# - verify that the genuine signed Edge policy covers this camera
+# - check current server-side viewer session on EVERY callback invocation
+parts = iter_authorized_mjpeg_parts(
+    cv2,
+    source_env="VIIL_HIK_LAN_SUB",
+    source_id="staged-camera-01",
+    privacy_approval=operator_approved_policy_path,
+    viewer_check=trusted_current_session_authorizer,
+    decoder="pyav",
+)
+# Server would then pass parts into a guarded StreamingResponse with
+# media_type=MJPEG_CONTENT_TYPE, no-store headers and disconnect cleanup.
+```
+
+The Edge producer:
+- Requires verified genuine HMAC approval for the exact pseudonymous camera ID
+  **and** the trusted server-side per-frame authorization callback before native
+  camera open and after each capture / encode.
+- Accepts only a preconfigured private-IP RTSP URL via the VIIL_ environment
+  validator; public IP, arbitrary hostname, unsafe URL or browser-supplied URL
+  is not accepted.
+- Requires **12/12 successfully decoded camera frames** as an in-memory
+  preflight *before yielding any browser-bound JPEG bytes*.
+- Defaults to max 120 output frames, <=25 seconds, <=5 FPS, 768x432 and
+  <=256 KiB JPEG/frame; configuration never permits >30s or >10 FPS.
+  Native capture is released on stop, error or client iterator close.
+- Never saves a frame, image, key or credential; converts authorized frames
+  to transient JPEG parts solely for a trusted private backend.
+- Rejects a revoked/expired signed policy or viewer session immediately on
+  the next check, without yielding further frames. It **cannot** retract a
+  frame already yielded or replace backend-side authorization.
+
+The synthetic tests verify codec errors, revocation during preflight and
+after emission, invalid IP and session inputs, JPEG/size limits, bounded
+resolution and pacing. These are **not real Hikvision tests**. To finish real
+Dashboard playback, Member 2 must implement protected routes/session storage
+and integrate this producer with correct same-origin browser access, and the
+operator must complete the genuine review and supervised 12-frame trial.
+
 The legacy `scripts/start-hikvision-owner-preview.ps1` remains a
 **local Windows OpenCV** tool and must not be described as Dashboard streaming.
