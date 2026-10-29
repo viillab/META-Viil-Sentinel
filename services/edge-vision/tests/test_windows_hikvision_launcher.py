@@ -193,6 +193,26 @@ def test_preview_switch_routes_to_local_only_gui_and_never_reuses_edge_inference
 
 
 @WINDOWS_ONLY
+def test_edge_pyav_launcher_selects_matching_health_and_inference_decoder():
+    script = LAUNCHER.read_text(encoding="utf-8")
+    assert "[ValidateSet('opencv', 'pyav')][string]$EdgeDecoder" in script
+    assert "'--rtsp-decoder', $EdgeDecoder" in script
+    assert script.count("elseif ($RunEdge) { $EdgeDecoder }") == 2
+
+
+@WINDOWS_ONLY
+def test_edge_pyav_missing_approval_fails_before_credentials_or_decode():
+    result = subprocess.run([
+        "powershell.exe", "-NoProfile", "-File", str(LAUNCHER),
+        "-CameraIp", "192.168.50.10", "-RunEdge", "-EdgeDecoder", "pyav",
+        "-PrivacyApproval", "C:\\VIIL_TEST_NONEXISTENT\\signed-policy.json",
+    ], capture_output=True, text=True, timeout=25, check=False)
+    assert result.returncode == 2
+    assert "No successful live decode claimed" in result.stdout + result.stderr
+    assert "Authorized health probe" not in result.stdout + result.stderr
+
+
+@WINDOWS_ONLY
 def test_preflight_only_reports_no_real_decode():
     result = subprocess.run(
         [

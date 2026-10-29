@@ -1,4 +1,4 @@
-"""Optional PyAV RTSP decoder for authorized, local-only Hikvision preview.
+"""Optional PyAV RTSP decoder for authorized local preview and Edge AI.
 
 This is an in-memory alternative to OpenCV VideoCapture. It intentionally
 exposes the same minimal read/isOpened/get/release interface. No credentials,

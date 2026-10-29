@@ -9,6 +9,7 @@ param(
     [string]$PrivacyApproval,
     [string]$ModelPath = 'D:\VIIL-Sentinel\models\pose_landmarker_lite.task',
     [switch]$RunEdge,
+    [ValidateSet('opencv', 'pyav')][string]$EdgeDecoder = 'opencv',
     [switch]$ShowPreview,
     [ValidateSet('opencv', 'pyav')][string]$PreviewDecoder = 'opencv',
     [ValidateRange(1, 120)][int]$PreviewSeconds = 30,
@@ -192,7 +193,7 @@ try {
                 '--source-id', $SourceId,
                 '--privacy-approval', $PrivacyApproval,
                 '--confirm-authorized-camera', '--frames', '12',
-                '--decoder', $(if ($ShowPreview) { $PreviewDecoder } else { 'opencv' }),
+                '--decoder', $(if ($ShowPreview) { $PreviewDecoder } elseif ($RunEdge) { $EdgeDecoder } else { 'opencv' }),
                 '--rtsp-allow-port', [string]$RtspPort
             )
             $healthExit = $subHealthExit
@@ -206,7 +207,7 @@ try {
                     '--source-id', $SourceId,
                     '--privacy-approval', $PrivacyApproval,
                     '--confirm-authorized-camera', '--frames', '12',
-                    '--decoder', $(if ($ShowPreview) { $PreviewDecoder } else { 'opencv' }),
+                    '--decoder', $(if ($ShowPreview) { $PreviewDecoder } elseif ($RunEdge) { $EdgeDecoder } else { 'opencv' }),
                     '--rtsp-allow-port', [string]$RtspPort
                 )
             }
@@ -248,6 +249,7 @@ try {
                     '--model', $ModelPath, '--candidate-format', 'v1', '--confirm-consent',
                     '--rtsp-retries', '1', '--rtsp-retry-delay-ms', '500',
                     '--rtsp-session-seconds', '60', '--max-frames', '120', '--profile-rtsp',
+                    '--rtsp-decoder', $EdgeDecoder,
                     '--rtsp-allow-port', [string]$RtspPort
                 )
                 if ($edgeExit -ne 0) {
