@@ -3,7 +3,6 @@ import io
 import json
 from types import SimpleNamespace as NS
 
-import cv2
 import numpy as np
 import pytest
 
@@ -28,12 +27,24 @@ class FakeHTTPResponse:
         self.closed = True
 
 
+class FakeCv2:
+    IMREAD_COLOR = 1
+
+    @staticmethod
+    def imdecode(data, mode):
+        assert mode == FakeCv2.IMREAD_COLOR
+        if b"garbage" in data.tobytes():
+            return None
+        return np.zeros((24, 32, 3), dtype=np.uint8)
+
+
+cv2 = FakeCv2()
+
+
 def jpeg_frame():
-    data = np.zeros((24, 32, 3), dtype=np.uint8)
-    data[:, :, 1] = 128
-    ok, image = cv2.imencode(".jpg", data)
-    assert ok
-    return image.tobytes()
+    # Synthetic marker framing: the fake decoder is deterministic and the
+    # Linux CI job deliberately does not install OpenCV or video extras.
+    return b"\xff\xd8" + b"fake-volatile-jpeg-pixels" + b"\xff\xd9"
 
 
 def http_frames(count):
@@ -58,6 +69,21 @@ def test_mjpeg_url_rejects_unsafe_remote_endpoints(url):
     with pytest.raises(ValueError) as error:
         mjpeg.validate_http_mjpeg_env("VIIL_CAM", {"VIIL_CAM": url})
     assert "secret" not in str(error.value)
+
+
+def test_real_bgr_jpeg_decode_on_video_environment_only():
+    native_cv2 = pytest.importorskip("cv2")
+    data = np.zeros((24, 32, 3), dtype=np.uint8)
+    data[:, :, 1] = 128
+    ok, jpg = native_cv2.imencode(".jpg", data)
+    assert ok
+    response = FakeHTTPResponse(b"--frame\r\n\r\n" + jpg.tobytes() + b"\r\n")
+    cap = mjpeg.HTTPMJPEGCapture(
+        native_cv2, URL, username="reader", password=FAKE_PASSWORD,
+        opener_factory=lambda *args: NS(open=lambda req, timeout: response),
+    )
+    assert cap.read()[1].shape == (24, 32, 3)
+    cap.release()
 
 
 def test_mjpeg_url_accepts_only_private_approved_channel_102():
