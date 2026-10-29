@@ -63,6 +63,8 @@ def parse_args(argv: list[str] | None = None):
                         help="Signed privacy authorization for any live camera input")
     parser.add_argument("--rtsp-allow-port", type=int, default=None,
                         help="Explicitly allow a vendor-specific RTSP port")
+    parser.add_argument("--rtsp-decoder", choices=("opencv", "pyav"), default="opencv",
+                        help="Use OpenCV or optional PyAV/FFmpeg for authorized RTSP inference")
     parser.add_argument("--profile-rtsp", action="store_true",
                         help="Opt-in privacy-minimal local RTSP cycle/RSS report")
     parser.add_argument("--rtsp-retries", type=int, default=0,
@@ -113,6 +115,8 @@ def parse_args(argv: list[str] | None = None):
         parser.error("Network URLs and credentials cannot be passed as --source")
     if args.source.startswith(("\\\\", "//")):
         parser.error("UNC/network paths cannot be used as local video sources")
+    if args.rtsp_decoder != "opencv" and not network_source:
+        parser.error("--rtsp-decoder pyav requires an authorized RTSP source")
     if args.rtsp_allow_port is not None and (
         not 1 <= args.rtsp_allow_port <= 65535 or not network_source
     ):
@@ -335,6 +339,20 @@ def _release_capture_redacted(capture: Any) -> None:
         pass
 
 
+def _open_inference_rtsp_capture(cv2: Any, url: str, decoder: str):
+    """Choose the authorized RTSP decoder without exposing URL or credentials.
+
+    The caller must first pass the signed privacy guard and private RTSP
+    validation. Native exceptions are redacted in both runtime paths.
+    """
+    if decoder == "opencv":
+        return open_rtsp_capture(cv2, url)
+    if decoder == "pyav":
+        from sentinel_edge.pyav_capture import open_pyav_capture
+        return open_pyav_capture(cv2, url)
+    raise ValueError("Unsupported authorized RTSP decoder")
+
+
 def _run_rtsp_retry_mode(
     args, cv2: Any, mp: Any, source: str, *, source_id: str | None = None,
     privacy_check: Callable[[], None] | None = None,
@@ -364,7 +382,9 @@ def _run_rtsp_retry_mode(
                 ), file=sys.stderr)
         with ExitStack() as stack:
             try:
-                cap = open_rtsp_capture(cv2, epoch_source)
+                cap = _open_inference_rtsp_capture(
+                    cv2, epoch_source, getattr(args, "rtsp_decoder", "opencv"),
+                )
             except Exception:
                 raise CameraStreamInterrupted("Camera open failed") from None
             if cap is None:
@@ -556,7 +576,8 @@ def main(argv: list[str] | None = None) -> int:
         from sentinel_edge.early_motion_probe import CausalMotionProbe
     with ExitStack() as stack:
         try:
-            cap = open_rtsp_capture(cv2, source) if is_rtsp else cv2.VideoCapture(source)
+            cap = (_open_inference_rtsp_capture(cv2, source, args.rtsp_decoder)
+                   if is_rtsp else cv2.VideoCapture(source))
         except Exception:
             raise SystemExit("Cannot initialize authorized camera source (redacted)") from None
         stack.callback(_release_capture_redacted, cap)
