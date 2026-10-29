@@ -60,6 +60,16 @@
 .integration-handoff code{color:#cee0fb;overflow-wrap:anywhere}
 .integration-handoff-status{font-size:10px;color:#accbf6;background:#243d5e;padding:11px;border-radius:8px;white-space:nowrap;font-weight:800}
 .integration-page button:focus-visible{outline:3px solid #3b82f6;outline-offset:2px}
+.camera-preview-panel{margin:17px 0 13px}
+.camera-preview-panel .integration-dark-preview{margin:0 0 8px}
+.camera-preview-frame{position:relative;aspect-ratio:16/9;border-radius:10px;overflow:hidden;background:#081322;display:flex;align-items:center}
+.camera-preview-frame img{display:block;width:100%;height:100%;object-fit:contain}
+.camera-preview-watermark{position:absolute;left:8px;bottom:8px;background:#071525d9;color:#fff;border-radius:5px;padding:5px 7px;font-size:9px;font-weight:800;letter-spacing:.05em}
+.camera-preview-controls{min-height:27px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.camera-preview-controls button{border:1px solid #b5cbe2;background:#edf5ff;color:#244f88;border-radius:6px;padding:6px 10px;font-size:11px;font-weight:800;cursor:pointer}
+.camera-preview-controls button:disabled{opacity:.6;cursor:not-allowed}
+.camera-preview-controls span,.camera-preview-controls small{font-size:10px;color:#6f8097}
+.camera-preview-controls small[role=alert]{color:#af4343}
 @media(max-width:1200px){.integration-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.integration-panels{grid-template-columns:1fr 1fr}.integration-card>p{min-height:0}.integration-camera-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:800px){.integration-heading{align-items:flex-start;flex-direction:column}.integration-controls{justify-content:flex-start}.integration-panels{grid-template-columns:1fr}.integration-camera-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:700px){.integration-page{padding-top:23px}.integration-heading h1{font-size:28px}.integration-controls{width:100%}.integration-controls button{flex:1}.integration-kpis{gap:9px}.integration-kpi{padding:14px;min-height:136px}.integration-kpi>strong{font-size:26px}.integration-section-head{align-items:flex-start;flex-direction:column}.integration-camera-grid{grid-template-columns:1fr}.integration-dark-preview{height:125px}.integration-handoff{align-items:stretch;flex-direction:column}.integration-handoff-status{align-self:flex-start}.sidebar button.nav-active,.sidebar button.nav-muted{width:calc(33.33% - 5px);font-size:11px}.integration-empty{padding:23px 18px}}
