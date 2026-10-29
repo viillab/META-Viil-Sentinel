@@ -170,6 +170,7 @@ def preview_authorized_stream(
 def main(argv: list[str] | None = None) -> int:
     parser = ArgumentParser(description="Authorized local camera preview, no recording")
     parser.add_argument("--rtsp-env", help="Primary VIIL_ environment variable")
+    parser.add_argument("--http-mjpeg-env", help="Private HTTP-MJPEG URL environment variable")
     parser.add_argument("--fallback-env", help="Same-camera alternative VIIL_ environment variable")
     parser.add_argument("--source-id", help="Approved pseudonymous camera ID")
     parser.add_argument("--privacy-approval", type=Path)
@@ -178,13 +179,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--self-test-gui", action="store_true",
                         help="SYNTHETIC local GUI test: NO CAMERA OR RTSP access")
     parser.add_argument("--max-frames", type=int, default=450)
-    parser.add_argument("--decoder", choices=("opencv", "pyav"), default="opencv",
+    parser.add_argument("--decoder", choices=("opencv", "pyav", "http-mjpeg"), default="opencv",
                         help="In-memory RTSP video decoder backend")
     parser.add_argument("--duration-seconds", type=float, default=30)
     parser.add_argument("--rtsp-allow-port", type=int, default=None)
     args = parser.parse_args(argv)
     if args.self_test_gui:
-        if (args.rtsp_env or args.fallback_env or args.source_id
+        if (args.rtsp_env or args.http_mjpeg_env or args.fallback_env or args.source_id
                 or args.privacy_approval or args.confirm_authorized_camera
                 or args.show_local_preview):
             parser.error("Synthetic GUI test cannot accept camera parameters")
@@ -202,12 +203,22 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("Synthetic local GUI unavailable (details redacted)")
         print(json.dumps(report, sort_keys=True))
         return 0
-    if not args.rtsp_env or not args.source_id or args.privacy_approval is None:
+    if not (args.rtsp_env or args.http_mjpeg_env) or not args.source_id or args.privacy_approval is None:
         parser.error("Authorized camera parameters required")
     if not args.confirm_authorized_camera or not args.show_local_preview:
         parser.error("Explicit authorization and local display opt-in required")
     try:
-        if args.fallback_env:
+        if args.http_mjpeg_env:
+            if args.rtsp_env or args.fallback_env or args.decoder != "http-mjpeg":
+                raise ValueError
+            from sentinel_edge.http_mjpeg_capture import validate_http_mjpeg_env
+            primary = validate_http_mjpeg_env(
+                args.http_mjpeg_env, extra_port=args.rtsp_allow_port,
+            )
+            alternate = None
+        elif args.decoder == "http-mjpeg":
+            raise ValueError
+        elif args.fallback_env:
             pair = resolve_hikvision_stream_pair(
                 args.rtsp_env, args.fallback_env, extra_port=args.rtsp_allow_port,
             )
@@ -234,6 +245,9 @@ def main(argv: list[str] | None = None) -> int:
         if args.decoder == "pyav":
             from sentinel_edge.pyav_capture import open_pyav_capture
             opener = open_pyav_capture
+        elif args.decoder == "http-mjpeg":
+            from sentinel_edge.http_mjpeg_capture import open_http_mjpeg_capture
+            opener = open_http_mjpeg_capture
         report = preview_authorized_stream(
             cv2, primary_url=primary, alternate_url=alternate,
             privacy_check=check, max_frames=args.max_frames,

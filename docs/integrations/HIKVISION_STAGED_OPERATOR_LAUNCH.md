@@ -58,6 +58,25 @@ cd D:\VIIL-Sentinel\services\edge-vision
 
 The window must say **SYNTHETIC / NOT CAMERA VIDEO**, shows a changing frame counter and closes with **Q**, **Esc**, or the window **X**. It cannot prove that a real Hikvision stream is readable or that the current remote shell can display windows on the operator's desktop. It never opens a camera, stores frames or sends media. GUI errors stop the preview rather than needlessly opening an alternate camera stream.
 
+### Alternative transport: HTTP Digest / MJPEG (substream 102)
+
+Some Hikvision IPC cameras can send a live MJPEG multipart stream over HTTP at `/ISAPI/Streaming/channels/102/httpPreview`. This feature is **model/firmware dependent**, and the camera must already have **Substream video encoding MJPEG** configured by an authorized camera administrator. **The launcher never changes camera settings.** A response of `401 Digest` confirms that HTTP authentication is requested; it does **not** establish that any MJPEG frames can be decoded.
+
+To try the independent transport from an interactive Windows desktop after obtaining the genuine site-approved signed privacy policy:
+
+```powershell
+$approval = Read-Host "Genuine signed approval path"
+$cameraId = Read-Host "Approved camera source ID"
+powershell -NoProfile -File D:\VIIL-Sentinel\scripts\start-hikvision-staged.ps1 `
+  -CameraIp 192.168.10.204 `
+  -PrivacyApproval $approval -SourceId $cameraId `
+  -ShowPreview -PreviewDecoder http-mjpeg -PreviewSeconds 30
+```
+
+The script verifies the signed policy **before asking for camera credentials**, then prompts locally for a read-only camera account. It uses HTTP Digest authentication and a strictly private camera URL on HTTP port 80 (or explicitly `-HttpPort 8080`). It performs a **12 decoded-frame in-memory health check** before showing a bounded local video window. HTTP redirects are disabled, the system proxy is bypassed, JPEG buffer size is capped at 2 MiB per frame and the response is closed on all outcomes. No video or credentials are written to files, printed or sent to a dashboard. Because HTTP without TLS is unencrypted, use only a trusted private segment or secure overlay (for example, the existing Tailscale route), and restrict access to read-only accounts. If unsupported, leave existing RTSP/PyAV path in place; **do not automatically change the camera codec**, as other camera viewers may depend on H.264/H.265.
+
+Unlike the RTSP decoder, HTTP-MJPEG is **currently a separate local preview/health transport only**, not an Edge fall inference input or a WebRTC dashboard feed. Do not claim a successful real-camera decode without 12/12 readable frames. This follows Hikvision's documented HTTP MJPEG stream constraints: https://www.hikvision.com/content/dam/hikvision/en/support/how-to/how-to-document/network-cameras/How-to-Get-IPC-MJPEG-Stream-via-HTTP-Commands.pdf
+
 To **show the live video in an actual local window** instead of running AI, execute from an **interactive Windows desktop PowerShell session** after the same genuine signed approval is installed:
 
 ```powershell

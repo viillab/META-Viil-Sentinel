@@ -292,6 +292,33 @@ def test_edge_pyav_missing_approval_fails_before_credentials_or_decode():
 
 
 @WINDOWS_ONLY
+def test_http_mjpeg_preview_launcher_fails_closed_without_approval():
+    result = subprocess.run(
+        [
+            "powershell.exe", "-NoProfile", "-File", str(LAUNCHER),
+            "-CameraIp", "192.168.50.10", "-ShowPreview",
+            "-PreviewDecoder", "http-mjpeg",
+            "-PrivacyApproval", r"C:\VIIL_TEST_NONEXISTENT\signed-policy.json",
+        ],
+        capture_output=True, text=True, timeout=25, check=False,
+    )
+    assert result.returncode == 2
+    assert "No successful live decode claimed" in result.stdout + result.stderr
+    assert "Authorized HTTP Digest MJPEG probe" not in result.stdout + result.stderr
+
+
+@WINDOWS_ONLY
+def test_http_mjpeg_launcher_has_strict_separate_capture_path_and_restores_secrets():
+    script = LAUNCHER.read_text(encoding="utf-8")
+    assert "[ValidateSet('opencv', 'pyav', 'http-mjpeg')]" in script
+    assert "'--http-mjpeg-env', 'VIIL_HIK_HTTP_URL'" in script
+    assert "'--decoder', 'http-mjpeg'" in script
+    assert "$env:VIIL_HIK_HTTP_PASS = $passText" in script
+    assert "SetEnvironmentVariable('VIIL_HIK_HTTP_PASS', $oldHttpPass" in script
+    assert "if ($PreviewDecoder -eq 'http-mjpeg' -and (-not $ShowPreview -or $RunEdge))" in script
+
+
+@WINDOWS_ONLY
 def test_preflight_only_reports_no_real_decode():
     result = subprocess.run(
         [

@@ -139,6 +139,7 @@ def probe_capture(
 def main(argv: list[str] | None = None) -> int:
     parser = ArgumentParser(description="Local-only authorized RTSP decode health check")
     parser.add_argument("--rtsp-env", help="VIIL_ variable containing RTSP URL")
+    parser.add_argument("--http-mjpeg-env", help="VIIL_ variable containing private HTTP MJPEG URL")
     parser.add_argument("--camera-registry", help="Local vendor-neutral camera JSON registry")
     parser.add_argument("--camera-id", help="RTSP camera ID in the registry")
     parser.add_argument("--source-id", default="staged-camera-01",
@@ -147,7 +148,7 @@ def main(argv: list[str] | None = None) -> int:
                         help="Signed privacy authorization required for camera probe")
     parser.add_argument("--confirm-authorized-camera", action="store_true")
     parser.add_argument("--frames", type=int, default=12)
-    parser.add_argument("--decoder", choices=("opencv", "pyav"), default="opencv",
+    parser.add_argument("--decoder", choices=("opencv", "pyav", "http-mjpeg"), default="opencv",
                         help="Authorized in-memory RTSP decoder backend")
     parser.add_argument("--rtsp-allow-port", type=int, default=None,
                         help="Explicitly permit one vendor-specific RTSP port")
@@ -155,9 +156,19 @@ def main(argv: list[str] | None = None) -> int:
     if not args.confirm_authorized_camera:
         parser.error("Real network capture needs --confirm-authorized-camera")
     try:
-        if args.rtsp_env and (args.camera_registry or args.camera_id):
+        if args.http_mjpeg_env:
+            if (args.rtsp_env or args.camera_registry or args.camera_id or
+                    args.decoder != "http-mjpeg"):
+                raise ValueError
+            from sentinel_edge.http_mjpeg_capture import validate_http_mjpeg_env
+            url = validate_http_mjpeg_env(
+                args.http_mjpeg_env, extra_port=args.rtsp_allow_port,
+            )
+        elif args.decoder == "http-mjpeg":
             raise ValueError
-        if args.camera_registry:
+        elif args.rtsp_env and (args.camera_registry or args.camera_id):
+            raise ValueError
+        elif args.camera_registry:
             if not args.camera_id:
                 raise ValueError
             from sentinel_edge.camera_inputs import load_camera_registry, resolve_camera
@@ -193,6 +204,9 @@ def main(argv: list[str] | None = None) -> int:
         if args.decoder == "pyav":
             from sentinel_edge.pyav_capture import open_pyav_capture
             cap = open_pyav_capture(cv2, url)
+        elif args.decoder == "http-mjpeg":
+            from sentinel_edge.http_mjpeg_capture import open_http_mjpeg_capture
+            cap = open_http_mjpeg_capture(cv2, url)
         else:
             cap = open_rtsp_capture(cv2, url)
         # Native open can block; revalidate before inspecting/reading frames.

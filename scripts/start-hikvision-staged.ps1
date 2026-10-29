@@ -5,13 +5,14 @@
 param(
     [Parameter(Mandatory=$true)][string]$CameraIp,
     [ValidateRange(1, 65535)][int]$RtspPort = 554,
+    [ValidateSet(80, 8080)][int]$HttpPort = 80,
     [string]$SourceId = 'staged-camera-01',
     [string]$PrivacyApproval,
     [string]$ModelPath = 'D:\VIIL-Sentinel\models\pose_landmarker_lite.task',
     [switch]$RunEdge,
     [ValidateSet('opencv', 'pyav')][string]$EdgeDecoder = 'opencv',
     [switch]$ShowPreview,
-    [ValidateSet('opencv', 'pyav')][string]$PreviewDecoder = 'opencv',
+    [ValidateSet('opencv', 'pyav', 'http-mjpeg')][string]$PreviewDecoder = 'opencv',
     [ValidateRange(1, 120)][int]$PreviewSeconds = 30,
     [ValidateRange(1, 900)][int]$PreviewFrames = 450,
     [switch]$RequireDirectWifi,
@@ -24,6 +25,9 @@ $python = Join-Path $edge '.venv\Scripts\python.exe'
 $oldSub = [Environment]::GetEnvironmentVariable('VIIL_HIK_LAN_SUB', 'Process')
 $oldMain = [Environment]::GetEnvironmentVariable('VIIL_HIK_LAN_MAIN', 'Process')
 $oldKey = [Environment]::GetEnvironmentVariable('VIIL_PRIVACY_APPROVAL_KEY', 'Process')
+$oldHttpUrl = [Environment]::GetEnvironmentVariable('VIIL_HIK_HTTP_URL', 'Process')
+$oldHttpUser = [Environment]::GetEnvironmentVariable('VIIL_HIK_HTTP_USER', 'Process')
+$oldHttpPass = [Environment]::GetEnvironmentVariable('VIIL_HIK_HTTP_PASS', 'Process')
 $exitStatus = 2
 $passSecure = $null
 $keySecure = $null
@@ -164,6 +168,9 @@ function Test-SignedPrivacyApproval {
 }
 
 try {
+    if ($PreviewDecoder -eq 'http-mjpeg' -and (-not $ShowPreview -or $RunEdge)) {
+        throw 'HTTP MJPEG is only available for authorized local preview.'
+    }
     if ($RunEdge -and $ShowPreview) {
         throw 'Choose either Edge inference or local preview for this supervised session.'
     }
@@ -267,12 +274,48 @@ try {
                 $authority = "rtsp://${usernameEncoded}:${passwordEncoded}@$CameraIp`:$RtspPort"
                 $env:VIIL_HIK_LAN_SUB = "$authority/Streaming/Channels/102"
                 $env:VIIL_HIK_LAN_MAIN = "$authority/Streaming/Channels/101"
+                if ($ShowPreview -and $PreviewDecoder -eq 'http-mjpeg') {
+                    $env:VIIL_HIK_HTTP_URL = "http://$CameraIp`:$HttpPort/ISAPI/Streaming/channels/102/httpPreview"
+                    $env:VIIL_HIK_HTTP_USER = $cameraUser
+                    $env:VIIL_HIK_HTTP_PASS = $passText
+                }
             } finally {
                 [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($passPtr)
                 $passText = $null
                 $passwordEncoded = $null
                 $authority = $null
             }
+            if ($ShowPreview -and $PreviewDecoder -eq 'http-mjpeg') {
+                Write-Host 'Authorized HTTP Digest MJPEG probe: 12 frames, in-memory only...'
+                $httpHealthExit = Invoke-PrivateEdgePython -Arguments @(
+                    '-m', 'sentinel_edge.camera_health',
+                    '--http-mjpeg-env', 'VIIL_HIK_HTTP_URL',
+                    '--decoder', 'http-mjpeg',
+                    '--source-id', $SourceId,
+                    '--privacy-approval', $PrivacyApproval,
+                    '--confirm-authorized-camera', '--frames', '12',
+                    '--rtsp-allow-port', [string]$HttpPort
+                )
+                if ($httpHealthExit -ne 0) {
+                    throw 'HTTP MJPEG unavailable: verify camera supports MJPEG substream 102.'
+                }
+                Write-Host 'Verified: authorized HTTP MJPEG decoder read 12/12 frames.'
+                $httpPreviewExit = Invoke-PrivateEdgePython -Arguments @(
+                    '-m', 'sentinel_edge.live_preview',
+                    '--http-mjpeg-env', 'VIIL_HIK_HTTP_URL',
+                    '--decoder', 'http-mjpeg',
+                    '--source-id', $SourceId,
+                    '--privacy-approval', $PrivacyApproval,
+                    '--confirm-authorized-camera', '--show-local-preview',
+                    '--duration-seconds', [string]$PreviewSeconds,
+                    '--max-frames', [string]$PreviewFrames,
+                    '--rtsp-allow-port', [string]$HttpPort
+                )
+                if ($httpPreviewExit -ne 0) {
+                    throw 'Authorized local HTTP MJPEG preview failed (details redacted).'
+                }
+                Write-Host 'HTTP MJPEG preview ended; video was not saved or transmitted.'
+            } else {
             Write-Host 'Authorized health probe: attempting 12 frames (no saved video)...'
             $subHealthExit = Invoke-PrivateEdgePython -Arguments @(
                 '-m', 'sentinel_edge.camera_health',
@@ -344,6 +387,7 @@ try {
                 }
                 Write-Host 'Bounded Edge trial completed; candidate events require human review.'
             }
+            }
             $exitStatus = 0
         } finally {
             Pop-Location
@@ -355,6 +399,9 @@ try {
 } finally {
     [Environment]::SetEnvironmentVariable('VIIL_HIK_LAN_SUB', $oldSub, 'Process')
     [Environment]::SetEnvironmentVariable('VIIL_HIK_LAN_MAIN', $oldMain, 'Process')
+    [Environment]::SetEnvironmentVariable('VIIL_HIK_HTTP_URL', $oldHttpUrl, 'Process')
+    [Environment]::SetEnvironmentVariable('VIIL_HIK_HTTP_USER', $oldHttpUser, 'Process')
+    [Environment]::SetEnvironmentVariable('VIIL_HIK_HTTP_PASS', $oldHttpPass, 'Process')
     [Environment]::SetEnvironmentVariable('VIIL_PRIVACY_APPROVAL_KEY', $oldKey, 'Process')
     $passSecure = $null
     $keySecure = $null
