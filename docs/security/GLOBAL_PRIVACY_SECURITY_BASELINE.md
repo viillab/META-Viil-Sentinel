@@ -57,6 +57,8 @@ and privacy team BEFORE real collection.** If in doubt, block deployment.
 
 ## Approving staged live cameras — do not commit these private files
 
+For the offline, operator-only **template → human review → sign → verify** process, see [SIGNED_CAMERA_APPROVAL_OPERATOR_WORKFLOW.md](SIGNED_CAMERA_APPROVAL_OPERATOR_WORKFLOW.md). The helper intentionally creates a denied-by-default draft, not an approval; the human controller must review and authorize the real filming scenario before anyone signs it.
+
 An accountable controller should first complete all relevant notices,
 lawful-basis assessment, DPIA/risk review, permission to film, and required
 local approvals. The example below is a **template of the fields to collect,
