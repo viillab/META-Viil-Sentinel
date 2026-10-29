@@ -80,6 +80,7 @@ def preview_authorized_stream(
     max_frames: int = 450,
     duration_seconds: float = 30.0,
     open_capture: Callable | None = None,
+    pose_factory: Callable[[], object] | None = None,
     clock: Callable[[], float] = monotonic,
 ) -> dict:
     """Bounded on-screen frame display; never store/transmit frames.
@@ -94,12 +95,16 @@ def preview_authorized_stream(
         raise ValueError("Invalid preview duration")
     if not callable(privacy_check):
         raise ValueError("Signed privacy check required")
+    if pose_factory is not None and not callable(pose_factory):
+        raise ValueError("Optional local pose session factory must be callable")
     if not primary_url or alternate_url == primary_url:
         raise ValueError("Invalid authorized stream selection")
     opener = open_capture or open_rtsp_capture
     start = clock()
     first_display_at = None
     displayed = 0
+    pose_processed = 0
+    pose_accepted = 0
     window_created = False
     used_fallback = False
     stopped_by_operator = False
@@ -110,6 +115,7 @@ def preview_authorized_stream(
                 break
             privacy_check()
             cap = None
+            pose_session = None
             try:
                 try:
                     cap = opener(cv2, url)
@@ -122,6 +128,15 @@ def preview_authorized_stream(
                     raise PreviewInterrupted("Authorized stream unavailable") from None
                 if not opened:
                     raise PreviewInterrupted("Authorized stream unavailable")
+                if pose_factory is not None:
+                    privacy_check()
+                    try:
+                        pose_session = pose_factory()
+                    except Exception:
+                        raise PreviewDisplayUnavailable("Local pose overlay unavailable") from None
+                    privacy_check()
+                pose_epoch_started = clock()
+                last_pose_timestamp = -1
                 while displayed < max_frames and clock() - start < duration_seconds:
                     privacy_check()
                     try:
@@ -145,6 +160,32 @@ def preview_authorized_stream(
                         except Exception:
                             raise PreviewInterrupted("Preview resize failed") from None
                     privacy_check()
+                    if pose_session is not None:
+                        # Strict VIDEO timestamps increase within a single epoch.
+                        timestamp_ms = max(
+                            last_pose_timestamp + 1,
+                            int((clock() - pose_epoch_started) * 1000),
+                        )
+                        last_pose_timestamp = timestamp_ms
+                        try:
+                            accepted = pose_session.annotate(cv2, frame, timestamp_ms)
+                        except Exception:
+                            raise PreviewDisplayUnavailable(
+                                "Local torso preview unavailable",
+                            ) from None
+                        privacy_check()  # discard result after native inference if revoked
+                        pose_processed += 1
+                        pose_accepted += bool(accepted)
+                        try:
+                            status = ("TORSO AVAILABLE" if accepted else "TORSO UNAVAILABLE")
+                            cv2.putText(
+                                frame, status + " | NO FALL DECISION",
+                                (10, 45), cv2.FONT_HERSHEY_SIMPLEX, 0.48,
+                                (255, 255, 255), 1, cv2.LINE_AA,
+                            )
+                        except Exception:
+                            pass
+                        privacy_check()
                     display_now = clock()
                     if first_display_at is None:
                         first_display_at = display_now
@@ -188,6 +229,11 @@ def preview_authorized_stream(
                 used_fallback = True
                 # No model or temporal state is retained across stream epochs.
             finally:
+                if pose_session is not None:
+                    try:
+                        pose_session.close()
+                    except Exception:
+                        pass
                 _release_quietly(cap)
                 privacy_check()
         privacy_check()
@@ -200,7 +246,10 @@ def preview_authorized_stream(
             "fallback_used": used_fallback,
             "video_saved": False,
             "remote_streamed": False,
-            "ai_inference_run": False,
+            "ai_inference_run": pose_processed > 0,
+            "torso_pose_inference_frames": pose_processed,
+            "torso_pose_accepted_frames": pose_accepted,
+            "fall_decision_run": False,
         }
     finally:
         _close_window_quietly(cv2, created=window_created)
@@ -215,6 +264,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--privacy-approval", type=Path)
     parser.add_argument("--confirm-authorized-camera", action="store_true")
     parser.add_argument("--show-local-preview", action="store_true")
+    parser.add_argument("--pose-model", type=Path,
+                        help="Optional local torso-only MediaPipe overlay (not fall detection)")
     parser.add_argument("--self-test-gui", action="store_true",
                         help="SYNTHETIC local GUI test: NO CAMERA OR RTSP access")
     parser.add_argument("--max-frames", type=int, default=450)
@@ -226,7 +277,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.self_test_gui:
         if (args.rtsp_env or args.http_mjpeg_env or args.fallback_env or args.source_id
                 or args.privacy_approval or args.confirm_authorized_camera
-                or args.show_local_preview):
+                or args.show_local_preview or args.pose_model is not None):
             parser.error("Synthetic GUI test cannot accept camera parameters")
         try:
             import cv2
@@ -275,6 +326,17 @@ def main(argv: list[str] | None = None) -> int:
         check()
     except PrivacyGateDenied:
         parser.error("Signed camera approval denied (details redacted)")
+    pose_factory = None
+    if args.pose_model is not None:
+        try:
+            from sentinel_edge.pose_preview import (
+                TorsoPoseOverlay, validate_local_pose_asset,
+            )
+            local_model = validate_local_pose_asset(args.pose_model)
+        except (ValueError, ImportError):
+            parser.error("Local torso pose asset missing or unsupported (redacted)")
+        def pose_factory():
+            return TorsoPoseOverlay(local_model)
     try:
         import cv2
     except ImportError:
@@ -291,6 +353,7 @@ def main(argv: list[str] | None = None) -> int:
             cv2, primary_url=primary, alternate_url=alternate,
             privacy_check=check, max_frames=args.max_frames,
             duration_seconds=args.duration_seconds, open_capture=opener,
+            pose_factory=pose_factory,
         )
     except PrivacyGateDenied:
         # Never declare a preview successful when approval was revoked.

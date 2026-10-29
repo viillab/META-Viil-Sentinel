@@ -12,6 +12,7 @@ param(
     [switch]$RunEdge,
     [ValidateSet('opencv', 'pyav', 'http-mjpeg')][string]$EdgeDecoder = 'opencv',
     [switch]$ShowPreview,
+    [switch]$ShowPoseOverlay,
     [ValidateSet('opencv', 'pyav', 'http-mjpeg')][string]$PreviewDecoder = 'opencv',
     [ValidateRange(1, 120)][int]$PreviewSeconds = 30,
     [ValidateRange(1, 900)][int]$PreviewFrames = 450,
@@ -31,6 +32,7 @@ $oldHttpPass = [Environment]::GetEnvironmentVariable('VIIL_HIK_HTTP_PASS', 'Proc
 $exitStatus = 2
 $passSecure = $null
 $keySecure = $null
+$posePreviewArgs = @()
 
 function Resolve-PreferredHikvisionStreams {
     # Select only the environment VARIABLE names; never return RTSP secrets.
@@ -177,6 +179,9 @@ try {
     if ($RunEdge -and $ShowPreview) {
         throw 'Choose either Edge inference or local preview for this supervised session.'
     }
+    if ($ShowPoseOverlay -and (-not $ShowPreview -or $RunEdge -or $PreflightOnly)) {
+        throw 'Torso pose visualization requires a supervised local preview.'
+    }
     $ip = [Net.IPAddress]::Parse($CameraIp)
     if ($ip.AddressFamily -ne [Net.Sockets.AddressFamily]::InterNetwork) {
         throw 'A literal private IPv4 camera IP is required.'
@@ -192,8 +197,14 @@ try {
     if (-not (Test-Path -LiteralPath $python -PathType Leaf)) {
         throw 'Edge Python environment is missing.'
     }
-    if ($RunEdge -and -not (Test-Path -LiteralPath $ModelPath -PathType Leaf)) {
+    if (($RunEdge -or $ShowPoseOverlay) -and
+        -not (Test-Path -LiteralPath $ModelPath -PathType Leaf)) {
         throw 'Pose Landmarker .task model is missing.'
+    }
+    if ($ShowPoseOverlay) {
+        # The Python preview still validates signed approval before importing
+        # MediaPipe or opening a real camera source.
+        $posePreviewArgs = @('--pose-model', $ModelPath)
     }
 
     # The best route can be a subnet/default route, not only an exact /32.
@@ -306,7 +317,7 @@ try {
                 }
                 Write-Host 'Verified: authorized HTTP MJPEG decoder read 12/12 frames.'
                 if ($ShowPreview) {
-                $httpPreviewExit = Invoke-PrivateEdgePython -Arguments @(
+                $httpPreviewExit = Invoke-PrivateEdgePython -Arguments (@(
                     '-m', 'sentinel_edge.live_preview',
                     '--http-mjpeg-env', 'VIIL_HIK_HTTP_URL',
                     '--decoder', 'http-mjpeg',
@@ -316,7 +327,7 @@ try {
                     '--duration-seconds', [string]$PreviewSeconds,
                     '--max-frames', [string]$PreviewFrames,
                     '--rtsp-allow-port', [string]$HttpPort
-                )
+                ) + $posePreviewArgs)
                 if ($httpPreviewExit -ne 0) {
                     throw 'Authorized local HTTP MJPEG preview failed (details redacted).'
                 }
@@ -374,7 +385,7 @@ try {
             Write-Host 'Verified: authorized RTSP decoder read 12/12 frames.'
             if ($ShowPreview) {
                 Write-Host 'Opening authorized local-only video preview (press q / Esc to stop; no recording)...'
-                $previewExit = Invoke-PrivateEdgePython -Arguments @(
+                $previewExit = Invoke-PrivateEdgePython -Arguments (@(
                     '-m', 'sentinel_edge.live_preview',
                     '--rtsp-env', $streamOrder.PrimaryEnv,
                     '--fallback-env', $streamOrder.FallbackEnv,
@@ -385,7 +396,7 @@ try {
                     '--duration-seconds', [string]$PreviewSeconds,
                     '--max-frames', [string]$PreviewFrames,
                     '--rtsp-allow-port', [string]$RtspPort
-                )
+                ) + $posePreviewArgs)
                 if ($previewExit -ne 0) {
                     throw 'Local camera preview did not complete (details redacted).'
                 }
