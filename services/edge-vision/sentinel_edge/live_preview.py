@@ -24,6 +24,10 @@ class PreviewInterrupted(Exception):
     """Native stream or local GUI interruption (safe, credential-free message)."""
 
 
+class PreviewDisplayUnavailable(PreviewInterrupted):
+    """A GUI failure is not a camera outage; never retry on the alternate stream."""
+
+
 def _release_quietly(capture) -> None:
     if capture is not None:
         try:
@@ -116,11 +120,20 @@ def preview_authorized_stream(
                         cv2.imshow(WINDOW_TITLE, frame)
                         window_created = True
                         key = cv2.waitKey(1) & 0xFF
+                        window_visible = True
+                        get_property = getattr(cv2, "getWindowProperty", None)
+                        visible_property = getattr(cv2, "WND_PROP_VISIBLE", None)
+                        if callable(get_property) and visible_property is not None:
+                            window_visible = get_property(
+                                WINDOW_TITLE, visible_property,
+                            ) >= 1
                     except Exception:
-                        raise PreviewInterrupted("Local graphical display unavailable") from None
+                        raise PreviewDisplayUnavailable(
+                            "Local graphical display unavailable",
+                        ) from None
                     privacy_check()
                     displayed += 1
-                    if key in (ord("q"), 27):
+                    if key in (ord("q"), ord("Q"), 27) or not window_visible:
                         stopped_by_operator = True
                         break
                 if stopped_by_operator:
@@ -128,7 +141,9 @@ def preview_authorized_stream(
                 # Hitting the explicit frame/time budget is a successful stop.
                 if displayed >= max_frames or clock() - start >= duration_seconds:
                     break
-            except PreviewInterrupted:
+            except PreviewInterrupted as exc:
+                if isinstance(exc, PreviewDisplayUnavailable):
+                    raise
                 if attempt + 1 == len(streams) or clock() - start >= duration_seconds:
                     raise
                 used_fallback = True
@@ -154,18 +169,41 @@ def preview_authorized_stream(
 
 def main(argv: list[str] | None = None) -> int:
     parser = ArgumentParser(description="Authorized local camera preview, no recording")
-    parser.add_argument("--rtsp-env", required=True, help="Primary VIIL_ environment variable")
+    parser.add_argument("--rtsp-env", help="Primary VIIL_ environment variable")
     parser.add_argument("--fallback-env", help="Same-camera alternative VIIL_ environment variable")
-    parser.add_argument("--source-id", required=True, help="Approved pseudonymous camera ID")
-    parser.add_argument("--privacy-approval", required=True, type=Path)
+    parser.add_argument("--source-id", help="Approved pseudonymous camera ID")
+    parser.add_argument("--privacy-approval", type=Path)
     parser.add_argument("--confirm-authorized-camera", action="store_true")
     parser.add_argument("--show-local-preview", action="store_true")
+    parser.add_argument("--self-test-gui", action="store_true",
+                        help="SYNTHETIC local GUI test: NO CAMERA OR RTSP access")
     parser.add_argument("--max-frames", type=int, default=450)
     parser.add_argument("--decoder", choices=("opencv", "pyav"), default="opencv",
                         help="In-memory RTSP video decoder backend")
     parser.add_argument("--duration-seconds", type=float, default=30)
     parser.add_argument("--rtsp-allow-port", type=int, default=None)
     args = parser.parse_args(argv)
+    if args.self_test_gui:
+        if (args.rtsp_env or args.fallback_env or args.source_id
+                or args.privacy_approval or args.confirm_authorized_camera
+                or args.show_local_preview):
+            parser.error("Synthetic GUI test cannot accept camera parameters")
+        try:
+            import cv2
+            import numpy as np
+            from sentinel_edge.preview_gui_test import (
+                LocalGuiUnavailable, show_synthetic_gui,
+            )
+            report = show_synthetic_gui(
+                cv2, np, duration_seconds=min(args.duration_seconds, 8),
+                max_frames=min(args.max_frames, 150),
+            )
+        except (ImportError, ValueError, LocalGuiUnavailable):
+            parser.error("Synthetic local GUI unavailable (details redacted)")
+        print(json.dumps(report, sort_keys=True))
+        return 0
+    if not args.rtsp_env or not args.source_id or args.privacy_approval is None:
+        parser.error("Authorized camera parameters required")
     if not args.confirm_authorized_camera or not args.show_local_preview:
         parser.error("Explicit authorization and local display opt-in required")
     try:

@@ -49,6 +49,15 @@ powershell -NoProfile -File D:\VIIL-Sentinel\scripts\start-hikvision-staged.ps1 
   -CameraIp $cameraIp -PrivacyApproval $approval -SourceId $cameraId -RunEdge
 ```
 
+Before connecting to any real camera, you can test **only the local GUI** (no RTSP credentials, camera capture or approval needed) from an **interactive** Windows desktop PowerShell session:
+
+```powershell
+cd D:\VIIL-Sentinel\services\edge-vision
+.\.venv\Scripts\python.exe -m sentinel_edge.live_preview --self-test-gui --duration-seconds 5
+```
+
+The window must say **SYNTHETIC / NOT CAMERA VIDEO**, shows a changing frame counter and closes with **Q**, **Esc**, or the window **X**. It cannot prove that a real Hikvision stream is readable or that the current remote shell can display windows on the operator's desktop. It never opens a camera, stores frames or sends media. GUI errors stop the preview rather than needlessly opening an alternate camera stream.
+
 To **show the live video in an actual local window** instead of running AI, execute from an **interactive Windows desktop PowerShell session** after the same genuine signed approval is installed:
 
 ```powershell
