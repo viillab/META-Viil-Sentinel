@@ -44,16 +44,103 @@ function Resolve-PreferredHikvisionStreams {
     }
 }
 
+function ConvertTo-SafeRtspProfileLine {
+    # Strictly reconstruct numeric/boolean summaries from known Edge JSON.
+    # NEVER display raw native stderr: FFmpeg may embed RTSP credentials.
+    param([string]$Message)
+    if ([string]::IsNullOrWhiteSpace($Message) -or $Message.Length -gt 4096) {
+        return $null
+    }
+    $marker = 'RESEARCH_RTSP_PROFILE '
+    $at = $Message.IndexOf($marker, [StringComparison]::Ordinal)
+    if ($at -lt 0) { return $null }
+    $payload = $Message.Substring($at + $marker.Length).Trim()
+    if (-not ($payload.StartsWith('{') -and $payload.EndsWith('}'))) {
+        return $null
+    }
+    try {
+        $p = ConvertFrom-Json -InputObject $payload -ErrorAction Stop
+        if ($null -eq $p -or $p.schema_version -cne 'viil.edge.rtsp_profile.v1' -or
+            $p.research_only -cne $true -or
+            $p.no_camera_or_personal_identifiers -cne $true -or
+            $p.stream_interrupted -isnot [bool]) {
+            return $null
+        }
+        foreach ($name in @(
+            'frames_processed', 'pose_unavailable_frames',
+            'candidate_events_unconfirmed'
+        )) {
+            $n = $p.$name
+            if (($n -isnot [int] -and $n -isnot [long]) -or
+                $n -lt 0 -or $n -gt 10000000) {
+                return $null
+            }
+        }
+        if ($p.pose_unavailable_frames -gt $p.frames_processed -or
+            $p.candidate_events_unconfirmed -gt $p.frames_processed) {
+            return $null
+        }
+        foreach ($name in @(
+            'observed_cycle_throughput_fps', 'cycle_p50_ms',
+            'cycle_p95_ms', 'sampled_process_rss_max_mib'
+        )) {
+            $n = $p.$name
+            if ($null -eq $n) { continue }
+            if (($n -isnot [int] -and $n -isnot [long] -and
+                 $n -isnot [double] -and $n -isnot [decimal]) -or
+                [double]::IsNaN([double]$n) -or
+                [double]::IsInfinity([double]$n) -or
+                $n -lt 0 -or $n -gt 1000000000) {
+                return $null
+            }
+        }
+        $fps = if ($null -eq $p.observed_cycle_throughput_fps) {
+            'n/a'
+        } else { '{0:F2}' -f [double]$p.observed_cycle_throughput_fps }
+        $p95 = if ($null -eq $p.cycle_p95_ms) {
+            'n/a'
+        } else { '{0:F2}' -f [double]$p.cycle_p95_ms }
+        $rss = if ($null -eq $p.sampled_process_rss_max_mib) {
+            'n/a'
+        } else { '{0:F2}' -f [double]$p.sampled_process_rss_max_mib }
+        $interrupted = if ($p.stream_interrupted) { 'yes' } else { 'no' }
+        $safeFormat = ('EDGE_SAFE_RTSP_METRICS frames={0} pose_unavailable={1} ' +
+                       'candidates_unconfirmed={2} cycle_fps={3} ' +
+                       'cycle_p95_ms={4} rss_sampled_mib={5} interrupted={6}')
+        return ($safeFormat -f $p.frames_processed, $p.pose_unavailable_frames,
+                $p.candidate_events_unconfirmed, $fps, $p95, $rss,
+                $interrupted)
+    } catch {
+        # Never print parse errors, malicious content, or source text.
+        return $null
+    }
+}
+
 function Invoke-PrivateEdgePython {
     # PowerShell 5.1 promotes redirected native stderr to NativeCommandError
     # under ErrorActionPreference=Stop. That previously skipped fallback.
     # Keep codec stderr private, return the real child exit code, and continue
     # only on explicit success. Never stringify native exceptions (URL secrets).
-    param([Parameter(Mandatory=$true)][string[]]$Arguments)
+    param(
+        [Parameter(Mandatory=$true)][string[]]$Arguments,
+        [switch]$ShowSafeRtspMetrics
+    )
     $previousErrorActionPreference = $ErrorActionPreference
     try {
         $ErrorActionPreference = 'Continue'
-        & $python @Arguments 2>$null | Out-Host
+        if ($ShowSafeRtspMetrics) {
+            # Native stderr and stdout are parsed IN MEMORY, never printed
+            # directly. Even forged metric JSON can only produce sanitized
+            # numeric/boolean output; raw video, credentials and events stay out.
+            & $python @Arguments 2>&1 | ForEach-Object {
+                $safeLine = ConvertTo-SafeRtspProfileLine -Message ([string]$_)
+                if (-not [string]::IsNullOrEmpty($safeLine)) {
+                    Write-Host $safeLine
+                }
+            }
+        } else {
+            & $python @Arguments 2>$null | Out-Host
+        }
         if ($null -eq $LASTEXITCODE) { return 2 }
         return [int]$LASTEXITCODE
     } catch {
@@ -239,7 +326,7 @@ try {
             }
             if ($RunEdge) {
                 Write-Host 'Starting bounded local Edge trial (max 120 frames / 60 seconds per attempt; max 2 attempts)...'
-                $edgeExit = Invoke-PrivateEdgePython -Arguments @(
+                $edgeExit = Invoke-PrivateEdgePython -ShowSafeRtspMetrics -Arguments @(
                     '-m', 'sentinel_edge',
                     '--source', 'rtsp',
                     '--rtsp-env', $streamOrder.PrimaryEnv,
