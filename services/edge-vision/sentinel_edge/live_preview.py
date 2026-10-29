@@ -44,6 +44,34 @@ def _close_window_quietly(cv2, *, created: bool) -> None:
             pass
 
 
+def _overlay_live_status(
+    cv2, frame, *, frame_number: int, display_fps: float | None,
+):
+    """Add a non-identifying HUD in memory. GUI text support is optional.
+
+    Display FPS measures frames shown during this local session; it is not
+    camera FPS, network latency, or the AI inference rate. Never show source
+    IDs, IPs, RTSP URLs, credentials, timestamps or detection claims.
+    """
+    draw_text = getattr(cv2, "putText", None)
+    if not callable(draw_text):
+        return frame
+    try:
+        height, width, _ = frame.shape
+        fps_label = "warming up" if display_fps is None else f"{display_fps:.1f} display fps"
+        label = f"LOCAL ONLY | frame {frame_number} | {width}x{height} | {fps_label}"
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        antialias = cv2.LINE_AA
+        # Shadow and lettering are drawn only on the transient preview frame.
+        draw_text(frame, label, (10, 24), font, 0.48, (0, 0, 0), 3, antialias)
+        draw_text(frame, label, (10, 24), font, 0.48, (255, 255, 255), 1, antialias)
+    except Exception:
+        # Overlay failure must not be mistaken for a camera disconnect, and
+        # native exceptions can contain sensitive camera information.
+        pass
+    return frame
+
+
 def preview_authorized_stream(
     cv2, *,
     primary_url: str,
@@ -70,6 +98,7 @@ def preview_authorized_stream(
         raise ValueError("Invalid authorized stream selection")
     opener = open_capture or open_rtsp_capture
     start = clock()
+    first_display_at = None
     displayed = 0
     window_created = False
     used_fallback = False
@@ -115,6 +144,16 @@ def preview_authorized_stream(
                             )
                         except Exception:
                             raise PreviewInterrupted("Preview resize failed") from None
+                    privacy_check()
+                    display_now = clock()
+                    if first_display_at is None:
+                        first_display_at = display_now
+                    elapsed = display_now - first_display_at
+                    display_fps = displayed / elapsed if elapsed >= 0.5 else None
+                    frame = _overlay_live_status(
+                        cv2, frame, frame_number=displayed + 1,
+                        display_fps=display_fps,
+                    )
                     privacy_check()
                     try:
                         cv2.imshow(WINDOW_TITLE, frame)
