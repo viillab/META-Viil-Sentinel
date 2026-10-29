@@ -56,6 +56,85 @@ if($fail -ne 23 -or $ok -ne 0 -or $ErrorActionPreference -ne 'Stop') {
 
 
 @WINDOWS_ONLY
+def test_operator_metrics_strict_allowlist_and_native_stderr_redaction():
+    # Exercise the production PowerShell functions without launching a camera.
+    # The child emits both a valid metric and invented credential leaks.
+    code = r"""
+$ErrorActionPreference = 'Stop'
+$tokens=$null; $errors=$null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $env:VIIL_TEST_LAUNCHER,[ref]$tokens,[ref]$errors
+)
+if ($errors.Count) { throw 'Launcher syntax error' }
+foreach($name in @('ConvertTo-SafeRtspProfileLine','Invoke-PrivateEdgePython')) {
+    $fn = $ast.Find({
+        param($node)
+        ($node -is [System.Management.Automation.Language.FunctionDefinitionAst]) -and
+        ($node.Name -eq $name)
+    }, $true)
+    if ($null -eq $fn) { throw 'Required helper unavailable' }
+    . ([ScriptBlock]::Create($fn.Extent.Text))
+}
+$python = $env:VIIL_TEST_PYTHON
+$p = @{
+  schema_version='viil.edge.rtsp_profile.v1'
+  research_only=$true
+  no_camera_or_personal_identifiers=$true
+  stream_interrupted=$false
+  frames_processed=120
+  pose_unavailable_frames=10
+  candidate_events_unconfirmed=2
+  observed_cycle_throughput_fps=12.35
+  cycle_p50_ms=77.2
+  cycle_p95_ms=110.4
+  sampled_process_rss_max_mib=185.45
+  camera_url='rtsp://reader:FAKE-SECRET-NOT-FOR-LOGS@192.168.88.1'
+}
+$line = 'RESEARCH_RTSP_PROFILE ' + ($p | ConvertTo-Json -Compress)
+$parsed = ConvertTo-SafeRtspProfileLine -Message $line
+if (-not $parsed -or $parsed -notmatch 'frames=120' -or
+    $parsed -notmatch 'cycle_p95_ms=110.40' -or
+    $parsed -match 'FAKE-SECRET') { throw 'Profile sanitization failed' }
+$p.cycle_p95_ms = 'FAKE-SECRET-NOT-FOR-LOGS'
+$malicious = ConvertTo-SafeRtspProfileLine -Message (
+    'RESEARCH_RTSP_PROFILE ' + ($p | ConvertTo-Json -Compress)
+)
+if ($null -ne $malicious) { throw 'Unsafe profile type allowed' }
+$p.cycle_p95_ms = 110.4
+$p.schema_version = 'VIIL_NOT_THE_PRODUCTION_SCHEMA'
+if ($null -ne (ConvertTo-SafeRtspProfileLine -Message (
+    'RESEARCH_RTSP_PROFILE ' + ($p | ConvertTo-Json -Compress)
+))) { throw 'Wrong schema was accepted' }
+$env:VIIL_TEST_SAFE_STDERR = $line +
+    [Environment]::NewLine + 'raw-stderr-FAKE-SECRET-NOT-FOR-LOGS'
+$env:VIIL_TEST_SAFE_STDOUT = 'stdout-FAKE-SECRET-NOT-FOR-LOGS'
+$source = "import os,sys;sys.stderr.write(os.environ['VIIL_TEST_SAFE_STDERR']+chr(10));sys.stdout.write(os.environ['VIIL_TEST_SAFE_STDOUT']+chr(10));sys.exit(23)"
+$exit = Invoke-PrivateEdgePython -ShowSafeRtspMetrics -Arguments @('-c',$source)
+if ($exit -ne 23 -or $ErrorActionPreference -ne 'Stop') {
+    throw ('Native status/EAP not preserved: exit=' + $exit + '; eap=' + $ErrorActionPreference)
+}
+'FILTER_NATIVE_PASS'
+"""
+    import os
+
+    env = os.environ.copy()
+    env["VIIL_TEST_LAUNCHER"] = str(LAUNCHER)
+    env["VIIL_TEST_PYTHON"] = sys.executable
+    result = subprocess.run(
+        ["powershell.exe", "-NoProfile", "-Command", code],
+        capture_output=True, text=True, timeout=35, check=False, env=env,
+    )
+    assert result.returncode == 0, result.stderr[-500:]
+    combined = result.stdout + result.stderr
+    assert "FILTER_NATIVE_PASS" in combined
+    assert "EDGE_SAFE_RTSP_METRICS" in combined
+    assert "frames=120" in combined
+    assert "cycle_fps=12.35" in combined
+    assert "FAKE-SECRET-NOT-FOR-LOGS" not in combined
+    assert "192.168.88.1" not in combined
+
+
+@WINDOWS_ONLY
 def test_missing_authorization_never_opens_a_camera():
     # A deliberately nonexistent policy path must fail before credential
     # prompts, FFmpeg/MediaPipe imports, or RTSP connection attempts.
