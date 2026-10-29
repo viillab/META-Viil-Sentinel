@@ -85,3 +85,48 @@ powershell -NoProfile -File D:\VIIL-Sentinel\scripts\start-hikvision-staged.ps1 
 This launcher prompts locally for the camera's **dedicated read-only account** and HMAC key, verifies the same signed approval before capture, and attempts 12 decoded frames. Only then does it display a bounded local OpenCV window. Press Q/Esc to stop. PyAV is an optional dependency; it is currently installed on the checked Windows Edge development environment. This is **not a browser/Dashboard stream**. RTSP `OPTIONS 200 OK` or unit tests cannot prove camera video is readable.
 
 A real signed approval with HMAC is a **technical gate**, not independent certification of lawfulness or a replacement for a signed permission document. See `GLOBAL_PRIVACY_SECURITY_BASELINE.md` for the deployment and legal review boundaries.
+
+## 5. Camera owner's **one-session** shortcut (no key storage)
+
+**The actual owner/controller may attest to their own camera's site
+authorization.** Owner status does **not** automatically establish that
+other people in the scene have been appropriately notified or that the
+legal basis/impact review is complete. The signed policy must still be
+based on truthful, completed site/privacy checks; never fabricate review
+references. This shortcut does not remove the production policy gate.
+
+1. Create the **unsigned, denied-by-default** draft using step 1 above.
+2. As the responsible camera owner, complete the real camera scope,
+   legal basis, notice/reference IDs, controller/impact/rights review
+   references and valid dates in the private unsigned JSON. Set
+   `site_authorization_confirmed` and `notices_confirmed` true **only
+   when genuinely satisfied**, including appropriate notice/consent for
+   people appearing on the camera.
+3. Run the offline `review` command in step 2a to check structure.
+4. On the interactive owner's Windows desktop, launch:
+
+```powershell
+powershell -NoProfile -File D:\VIIL-Sentinel\scripts\start-hikvision-owner-preview.ps1 `
+  -CameraIp 192.168.10.204 `
+  -ReviewedUnsignedApproval "$env:USERPROFILE\VIIL-Private\unsigned-privacy.json" `
+  -SourceId staged-camera-01 `
+  -ConfirmSiteOwnership -ConfirmPrivacyReviewAndNotices `
+  -ShowPoseOverlay -PoseStride 2 `
+  -PreviewDecoder pyav -PreviewSeconds 20 -PreviewFrames 200
+```
+
+The wrapper uses the existing **production signer** and verifier to issue
+a scoped HMAC-signed approval in a random, restricted local-user session
+directory. It generates a fresh cryptographic signing key **in process
+memory only** (not written, echoed, stored or reused). The existing
+staged-camera launcher then prompts for a **dedicated read-only Hikvision
+account** and attempts its gated 12-frame decode. Only if that succeeds
+does it show the local OpenCV window. Press Q/Esc to exit; the signed
+session file is deleted and the process key restored even when startup
+fails. Avoid entering the camera administrator password when a read-only
+viewer is available.
+
+To test signing, scope and cleanup **without opening a camera or video**,
+run the same command with `-VerifyPolicyOnly` appended. A successful
+offline verification is **not** evidence of live frames. The wrapper
+never grants access to a remote browser/Dashboard or cloud service.
