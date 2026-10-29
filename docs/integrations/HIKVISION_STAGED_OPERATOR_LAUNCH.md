@@ -12,7 +12,8 @@ This launcher is a **bounded, non-clinical staged demo**. It cannot grant itself
 4. Sets temporary `VIIL_HIK_LAN_SUB` (Hikvision channel 102) and `VIIL_HIK_LAN_MAIN` (channel 101) only in the launcher process environment.
 5. Runs at most two separate 12-frame, no-recording RTSP health probes (substream, then mainstream if needed). The PowerShell 5.1 native-command helper intentionally preserves a failed decoder's exit status even if FFmpeg writes to stderr, so the alternate stream can be tried. If neither decodes, returns nonzero and never starts the AI. **If only the mainstream probe passes, Edge starts with that verified mainstream as primary**, keeping the substream as the bounded retry fallback; it does not needlessly reopen the already-failed substream first.
 6. With `-RunEdge`, runs a bounded metadata-only Edge experiment with **at most 120 frames or 60 seconds per attempt** and at most two attempts (one retry), each with fresh model/capture state. These limits are not a single global 120-frame/60-second budget. The RTSP inference path rechecks frame metadata (nonempty HxWx3 BGR uint8) before MediaPipe; an unusable frame is treated as a camera interruption eligible for the same-camera bounded fallback, without emitting a candidate from the corrupt frame.
-7. Restores the previous process environment variables on every exit path. No routing changes, network scans, file recording, API calls, emergency dispatch or dashboard claims.
+7. With **`-ShowPreview`**, opens an explicit operator-only OpenCV window on the Windows desktop, shows live decoded BGR frames (max 960px), responds to `Q` / `Esc`, and falls back to the other verified same-camera channel if the stream breaks. The preview is bounded (default max 450 frames / 30 seconds, configurable 1–900 frames and 1–120 seconds), re-verifies the real signed policy before and after every read and before display, saves **no** frames and sends **no** video to a backend, browser, cloud or other machine. Preview and Edge inference are separate, mutually exclusive modes.
+8. Restores the previous process environment variables on every exit path. No routing changes, network scans, file recording, API calls, emergency dispatch or dashboard claims.
 
 **Privacy:** Native FFmpeg/OpenCV can emit sensitive diagnostics; the launcher suppresses native stderr in the RTSP probes. Keep the terminal private. The local Python process will briefly hold camera credentials in its environment memory. This is not a secure secret manager and should only be used during supervised lab demos.
 
@@ -47,6 +48,19 @@ $cameraId = Read-Host 'Pseudonymous camera ID authorized by that policy'
 powershell -NoProfile -File D:\VIIL-Sentinel\scripts\start-hikvision-staged.ps1 `
   -CameraIp $cameraIp -PrivacyApproval $approval -SourceId $cameraId -RunEdge
 ```
+
+To **show the live video in an actual local window** instead of running AI, execute from an **interactive Windows desktop PowerShell session** after the same genuine signed approval is installed:
+
+```powershell
+$approval = Read-Host 'Genuine signed approval file path'
+$cameraId = Read-Host 'Approved pseudonymous camera ID'
+powershell -NoProfile -File D:\VIIL-Sentinel\scripts\start-hikvision-staged.ps1 `
+  -CameraIp 192.168.10.204 `
+  -PrivacyApproval $approval -SourceId $cameraId `
+  -ShowPreview -PreviewSeconds 30 -PreviewFrames 450
+```
+
+The launcher asks for the existing policy signing key and read-only camera credentials **only on the local operator machine**. After its 12-frame health probe succeeds, OpenCV opens a local video window. Press **Q** or **Esc** in that window to stop, or allow the bounded trial to finish. A background terminal/service (including an unattended remote shell) may not have access to the logged-in user's Windows GUI, so start this command in the interactive desktop. This **does not provide a web/Dashboard video feed**: browser streaming would require a separate, authenticated and privacy-reviewed design. Neither the local preview nor its diagnostic JSON confirms AI fall detection.
 
 The script prompts **locally**, with password masking. If direct Wi-Fi routing (rather than an existing authorized Tailscale/VPN route) is a hard requirement, add `-RequireDirectWifi`; it will **refuse to run** unless Windows selects the adapter named `Wi-Fi` for that destination, and it will not alter Windows routing. If your Wi-Fi adapter has been renamed, review the route manually before using this strict option. Route and TCP connectivity alone cannot verify RTSP authentication or decode.
 

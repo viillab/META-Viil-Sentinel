@@ -9,6 +9,9 @@ param(
     [string]$PrivacyApproval,
     [string]$ModelPath = 'D:\VIIL-Sentinel\models\pose_landmarker_lite.task',
     [switch]$RunEdge,
+    [switch]$ShowPreview,
+    [ValidateRange(1, 120)][int]$PreviewSeconds = 30,
+    [ValidateRange(1, 900)][int]$PreviewFrames = 450,
     [switch]$RequireDirectWifi,
     [switch]$PreflightOnly
 )
@@ -72,6 +75,9 @@ function Test-SignedPrivacyApproval {
 }
 
 try {
+    if ($RunEdge -and $ShowPreview) {
+        throw 'Choose either Edge inference or local preview for this supervised session.'
+    }
     $ip = [Net.IPAddress]::Parse($CameraIp)
     if ($ip.AddressFamily -ne [Net.Sockets.AddressFamily]::InterNetwork) {
         throw 'A literal private IPv4 camera IP is required.'
@@ -184,7 +190,8 @@ try {
                 '--rtsp-env', 'VIIL_HIK_LAN_SUB',
                 '--source-id', $SourceId,
                 '--privacy-approval', $PrivacyApproval,
-                '--confirm-authorized-camera', '--frames', '12'
+                '--confirm-authorized-camera', '--frames', '12',
+                '--rtsp-allow-port', [string]$RtspPort
             )
             $healthExit = $subHealthExit
             if ($subHealthExit -ne 0) {
@@ -196,7 +203,8 @@ try {
                     '--rtsp-env', 'VIIL_HIK_LAN_MAIN',
                     '--source-id', $SourceId,
                     '--privacy-approval', $PrivacyApproval,
-                    '--confirm-authorized-camera', '--frames', '12'
+                    '--confirm-authorized-camera', '--frames', '12',
+                    '--rtsp-allow-port', [string]$RtspPort
                 )
             }
             if ($healthExit -ne 0) {
@@ -206,6 +214,24 @@ try {
             # If 102 was unreadable, do not waste the next Edge attempt on 102.
             $streamOrder = Resolve-PreferredHikvisionStreams -SubstreamReadable ($subHealthExit -eq 0)
             Write-Host 'Verified: authorized RTSP decoder read 12/12 frames.'
+            if ($ShowPreview) {
+                Write-Host 'Opening authorized local-only video preview (press q / Esc to stop; no recording)...'
+                $previewExit = Invoke-PrivateEdgePython -Arguments @(
+                    '-m', 'sentinel_edge.live_preview',
+                    '--rtsp-env', $streamOrder.PrimaryEnv,
+                    '--fallback-env', $streamOrder.FallbackEnv,
+                    '--source-id', $SourceId,
+                    '--privacy-approval', $PrivacyApproval,
+                    '--confirm-authorized-camera', '--show-local-preview',
+                    '--duration-seconds', [string]$PreviewSeconds,
+                    '--max-frames', [string]$PreviewFrames,
+                    '--rtsp-allow-port', [string]$RtspPort
+                )
+                if ($previewExit -ne 0) {
+                    throw 'Local camera preview did not complete (details redacted).'
+                }
+                Write-Host 'Local camera preview ended; no video was saved or sent to the dashboard.'
+            }
             if ($RunEdge) {
                 Write-Host 'Starting bounded local Edge trial (max 120 frames / 60 seconds per attempt; max 2 attempts)...'
                 $edgeExit = Invoke-PrivateEdgePython -Arguments @(
@@ -217,7 +243,8 @@ try {
                     '--privacy-approval', $PrivacyApproval,
                     '--model', $ModelPath, '--candidate-format', 'v1', '--confirm-consent',
                     '--rtsp-retries', '1', '--rtsp-retry-delay-ms', '500',
-                    '--rtsp-session-seconds', '60', '--max-frames', '120', '--profile-rtsp'
+                    '--rtsp-session-seconds', '60', '--max-frames', '120', '--profile-rtsp',
+                    '--rtsp-allow-port', [string]$RtspPort
                 )
                 if ($edgeExit -ne 0) {
                     throw 'Edge bounded trial could not complete (details redacted).'
