@@ -39,7 +39,7 @@ cd D:\VIIL-Sentinel\services\edge-vision
 
 The output deliberately includes only an RTSP status code (e.g. 200 or 401) and safe booleans. **Any RTSP response only verifies that a server answered OPTIONS; it does not authenticate the camera, identify the physical device, validate credentials, grant privacy consent, negotiate a media stream, decode video or prove fall detection.** This sends one socket request, not a network scan. A status 401 means authentication was requested for OPTIONS only; a 200 does not mean protected video will play.
 
-After the site operator has completed a genuine privacy review, signed the policy (see `docs/security/GLOBAL_PRIVACY_SECURITY_BASELINE.md`) and placed it in a protected folder outside Git:
+After the site operator has completed a genuine privacy review, signed the policy (see `docs/security/GLOBAL_PRIVACY_SECURITY_BASELINE.md` and `docs/security/SIGNED_CAMERA_APPROVAL_OPERATOR_WORKFLOW.md`) and placed it in a protected folder outside Git:
 
 ```powershell
 $cameraIp = Read-Host 'Authorized private camera IP'
