@@ -1,7 +1,8 @@
 """Authorized HTTP Digest/MJPEG tests: fake HTTP body, no sockets or camera."""
 import io
 import json
-from types import SimpleNamespace as NS
+import sys
+from types import ModuleType, SimpleNamespace as NS
 
 import numpy as np
 import pytest
@@ -167,6 +168,9 @@ def test_http_mjpeg_preview_denied_before_decoder_open(monkeypatch, tmp_path):
 def test_http_mjpeg_health_with_signed_test_fixture(monkeypatch, tmp_path, capsys):
     signed = make_policy(tmp_path, monkeypatch, camera_ids=("zone-a",))
     monkeypatch.setenv("VIIL_TEST_HTTP_MJPEG", URL)
+    # Linux CI intentionally does not install native video extras. Health
+    # needs only a cv2 module import because this capture is injected.
+    monkeypatch.setitem(sys.modules, "cv2", ModuleType("cv2"))
     frames = []
     class FakeCapture:
         def isOpened(self):
