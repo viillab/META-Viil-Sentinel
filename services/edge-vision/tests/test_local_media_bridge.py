@@ -345,6 +345,55 @@ def test_real_edge_producer_is_connected_to_http_preflight(
             assert camera.reads == 12
 
 
+@pytest.mark.parametrize("revocation", ["delete", "logout"])
+def test_revoke_while_decoder_preflight_busy_releases_global_slot(
+    tmp_path, monkeypatch, revocation,
+):
+    """Never allow a second decoder while the first preflight is unwinding."""
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    started = Event()
+    release = Event()
+    cleanup = Event()
+
+    def blocked_camera(_cv2, **kwargs):
+        try:
+            started.set()
+            assert release.wait(timeout=6), "synthetic decoder never released"
+            # Real Edge checks this both before reads and after each frame.
+            if kwargs["viewer_check"]():
+                yield b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: 8\r\n\r\n\xff\xd8FAKE\xff\xd9\r\n"
+        finally:
+            cleanup.set()
+
+    client, _, _ = setup(tmp_path, monkeypatch, fake=blocked_camera)
+    with client:
+        assert login(client).status_code == 200
+        sid = start(client).json()["session_id"]
+        path = f"{POST_PATH}/{sid}/mjpeg"
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            task = pool.submit(client.get, path)
+            try:
+                assert started.wait(timeout=4)
+                if revocation == "delete":
+                    assert client.delete(f"{POST_PATH}/{sid}",
+                                         headers={"Origin": ORIGIN}).status_code == 204
+                else:
+                    assert client.post("/api/v1/operator/logout",
+                                       headers={"Origin": ORIGIN}).status_code == 204
+                    assert login(client).status_code == 200
+                # Even with original preview revoked, native capture has
+                # not been released yet. A new POST must NOT open a decoder.
+                assert start(client).status_code == 409
+            finally:
+                release.set()
+            result = task.result(timeout=7)
+            assert result.status_code == 503
+            assert cleanup.wait(timeout=2)
+            assert start(client).status_code == 201
+
+
 def test_camera_readiness_requires_operator_and_is_metadata_only(tmp_path, monkeypatch):
     import sentinel_edge.local_media_bridge as local_bridge
     # CI need not install optional camera/video dependencies.

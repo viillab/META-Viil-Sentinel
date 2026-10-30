@@ -229,6 +229,24 @@ auto-stops on an error or 25-second expiration. Offline tests cover both
 empty/malformed frames, exception redaction, capacity and revocation.
 A synthetic HTTP 200 test does NOT establish a real Hikvision 200.
 
+**30 Oct browser stream lifecycle hardening:** when a user explicitly opens
+the camera, Dashboard waits for an actual browser image event, bounded to
+**20 seconds** and always shorter than the server's 25-second session
+deadline. If the event never arrives, the browser detaches the image and
+sends a best-effort DELETE to revoke the local session, displaying a
+redacted, actionable timeout error. A missing browser image event does NOT
+prove that the Edge had no decoded frames; multipart MJPEG image events
+may vary by browser. On genuine image load the pending timeout is cancelled.
+Late browser `onLoad`/`onError` events after Stop, tab hide, permission
+loss or session replacement do not overwrite the intentionally closed UI.
+The server still independently enforces signed approval and expiry.
+
+New offline concurrency regressions verify that DELETE and logout
+**while decoder preflight is in flight** revoke the session and block
+another camera decoder until the first worker has finished unwinding;
+the session slot is then reusable. These tests exercise synthetic
+captures, not actual Hikvision or browser networking.
+
 ### Local camera readiness diagnostics (30 Oct 2026)
 
 After signing into the opt-in loopback operator bridge, Dashboard Integration
