@@ -30,6 +30,8 @@ provider or caregiver notification.** The synthetic event emitter belongs
 to the existing original **unvalidated heuristic**. It is NOT derived
 from the newly trained 1500ms model.
 
+**Member 2 repeatable status check:** [Read-only Git/route integration checker](MEMBER2_READONLY_INTEGRATION_CHECK.md). After `git fetch origin --prune`, run `python -m sentinel_edge.member2_status` to report the newest local Member 2 branch SHA and backend demo/candidate-route *static evidence* without contacting a camera or claiming production readiness.
+
 ## Member 2 — exact integration handoff
 
 Canonical files in services/edge-vision:
