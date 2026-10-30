@@ -28,6 +28,7 @@ from sentinel_edge.edge_mjpeg import (
     MAX_MJPEG_PART_BYTES, MJPEG_CONTENT_TYPE, iter_authorized_mjpeg_parts,
 )
 from sentinel_edge.privacy_gate import CAMERA_PATTERN, PrivacyGateDenied, verify_privacy_approval
+from sentinel_edge.privacy_approval_operator import inspect_unsigned_draft
 
 SESSION_SECONDS = 600
 PREVIEW_SECONDS = 25
@@ -35,6 +36,7 @@ COOKIE_NAME = "viil_local_operator"
 MEDIA_SCHEMA = "viil.backend.camera_preview_session.v1"
 OVERVIEW_SCHEMA = "viil.backend.integration_overview.v1"
 READINESS_SCHEMA = "viil.local.camera_readiness.v1"
+DRAFT_CHECKLIST_SCHEMA = "viil.local.unsigned_approval_checklist.v1"
 SESSION_ID_RE = re.compile(r"^[A-Za-z0-9_-]{16,80}$", re.ASCII)
 LOOPBACK_ORIGINS = frozenset({
     "http://127.0.0.1:5173", "http://localhost:5173",
@@ -131,16 +133,19 @@ class BridgeConfig:
     source_env: str = "VIIL_CAMERA_RTSP"
     approval_path: Path | None = None
     operator_password: str = ""
+    unsigned_draft_path: Path | None = None
 
     @classmethod
     def from_env(cls) -> "BridgeConfig":
         raw_path = os.getenv("VIIL_BRIDGE_APPROVAL_PATH", "").strip()
+        draft_path = os.getenv("VIIL_BRIDGE_UNSIGNED_DRAFT_PATH", "").strip()
         return cls(
             enabled=os.getenv("VIIL_BRIDGE_ENABLED", "0") == "1",
             camera_id=os.getenv("VIIL_BRIDGE_CAMERA_ID", "staged-camera-01"),
             source_env=os.getenv("VIIL_BRIDGE_RTSP_ENV", "VIIL_CAMERA_RTSP"),
             approval_path=Path(raw_path) if raw_path else None,
             operator_password=os.getenv("VIIL_BRIDGE_OPERATOR_PASSWORD", ""),
+            unsigned_draft_path=Path(draft_path) if draft_path else None,
         )
 
     def valid(self) -> bool:
@@ -340,6 +345,54 @@ def create_bridge_app(
                 policy_ok and rtsp_ok and pyav_ok and cv2_ok
             ),
             "real_camera_frame_verified": False,
+        }
+
+    @app.get("/api/v1/operator/approval-checklist")
+    def approval_checklist(request: Request):
+        """Read-only, redacted unsigned draft field review for local operator.
+
+        No camera, signing key, reference value, legal approval or signature
+        access. Only a small set of known field names can leave this route.
+        """
+        active_operator(request)
+        draft = cfg.unsigned_draft_path
+        available = False
+        complete = False
+        issues: list[str] = []
+        if isinstance(draft, Path) and draft.is_absolute():
+            try:
+                report = inspect_unsigned_draft(draft, cfg.camera_id)
+                safe_issue_names = frozenset({
+                    "schema_version", "purpose", "approval_ref", "controller_ref",
+                    "notice_ref", "privacy_impact_review_ref",
+                    "sensitive_data_review_ref", "rights_procedure_ref",
+                    "jurisdictions", "legal_basis_by_jurisdiction",
+                    "approved_camera_ids", "validity_window",
+                    "site_authorization_confirmed", "notices_confirmed",
+                    "human_review_required", "local_only",
+                    "cloud_transfer_enabled", "face_identification_enabled",
+                    "training_reuse_enabled", "automatic_emergency_dispatch_enabled",
+                    "raw_frame_retention_days",
+                })
+                raw_issues = report["issues"]
+                if (isinstance(raw_issues, list)
+                        and len(raw_issues) <= len(safe_issue_names)
+                        and all(type(v) is str and v in safe_issue_names
+                                for v in raw_issues)
+                        and len(raw_issues) == len(set(raw_issues))):
+                    issues = raw_issues
+                    available = True
+                    complete = report["draft_fields_structurally_complete"] is True
+            except (OSError, ValueError, TypeError, KeyError):
+                pass
+        return {
+            "schema_version": DRAFT_CHECKLIST_SCHEMA,
+            "draft_available": available,
+            "draft_fields_structurally_complete": available and complete,
+            "issues": issues,
+            "genuine_site_permission_confirmed_by_tool": False,
+            "signed_policy_verified": False,
+            "camera_access_granted": False,
         }
 
     @app.post("/api/v1/cameras/{camera_id}/preview-sessions", status_code=201)

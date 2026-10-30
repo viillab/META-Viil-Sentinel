@@ -6,6 +6,8 @@ import type { IntegrationOverview, CameraSummary } from "./integrationOverview";
 import CameraLivePreview from "./CameraLivePreview";
 import { fetchCameraReadiness } from "./cameraReadiness";
 import type { CameraReadiness } from "./cameraReadiness";
+import { fetchApprovalChecklist } from "./approvalChecklist";
+import type { ApprovalChecklist } from "./approvalChecklist";
 import { loginLocalOperator, logoutLocalOperator } from "./localOperatorSession";
 
 const SAMPLE: IntegrationOverview = {
@@ -57,6 +59,7 @@ export default function IntegrationCenter() {
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [refreshToken, setRefreshToken] = useState(0);
   const [readiness, setReadiness] = useState<{ value: CameraReadiness; at: number } | null>(null);
+  const [approvalReview, setApprovalReview] = useState<{ value: ApprovalChecklist; at: number } | null>(null);
   const [operatorPassword, setOperatorPassword] = useState("");
   const [loginState, setLoginState] = useState<"idle" | "pending" | "denied">("idle");
 
@@ -165,6 +168,30 @@ export default function IntegrationCenter() {
       window.clearInterval(interval);
     };
   }, [isLive, preview, refreshToken]);
+  useEffect(() => {
+    if (!isLive || preview) {
+      setApprovalReview(null);
+      return;
+    }
+    let active = true;
+    const controller = new AbortController();
+    async function checkDraft() {
+      try {
+        const result = await fetchApprovalChecklist(controller.signal);
+        if (active) setApprovalReview({ value: result, at: Date.now() });
+      } catch {
+        if (active) setApprovalReview(null);
+      }
+    }
+    void checkDraft();
+    const interval = window.setInterval(() => void checkDraft(), 10_000);
+    return () => {
+      active = false;
+      controller.abort();
+      window.clearInterval(interval);
+    };
+  }, [isLive, preview, refreshToken]);
+
   const data = preview ? SAMPLE : isLive ? snapshot : null;
   const cameras = data?.cameras ?? [];
   const readyCameras = isLive ? cameras.filter(c => c.health === "online" && c.privacy === "approved").length : 0;
@@ -220,6 +247,24 @@ export default function IntegrationCenter() {
         <small>{readiness.value.eligible_for_supervised_trial
           ? "Configuration eligible for a supervised trial. Real camera frames NOT verified."
           : "Complete missing prerequisites before a supervised camera trial."}</small>
+      </section>}
+
+    {isLive && approvalReview && nowMs - approvalReview.at <= 30_000
+      && <section className="integration-readiness" aria-label="Unsigned privacy draft checklist">
+        <strong>Unsigned camera privacy draft · review checklist</strong>
+        <p>Field names only. No legal permission, camera approval or signed policy is granted here.</p>
+        {!approvalReview.value.draft_available
+          ? <small>Private draft unavailable or invalid. Check the configured local draft path.</small>
+          : approvalReview.value.issues.length > 0
+            ? <>
+              <small>Fields requiring the authorized human review:</small>
+              <div className="integration-readiness-items">
+                {approvalReview.value.issues.map(issue =>
+                  <span key={issue}>○ {pretty(issue)}</span>)}
+              </div>
+            </>
+            : <small>Draft fields structurally complete. Independent site/privacy review
+                and a genuinely signed approval are still required.</small>}
       </section>}
 
     {!preview && feedState === "unauthorized" && <form
