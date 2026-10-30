@@ -178,7 +178,7 @@ and camera Tailscale route exist):
 
 ```powershell
 cd D:\VIIL-Sentinel\services\edge-vision
-.\.venv\Scripts\python.exe -m pip install -e ".[dev,media,pyav]"
+.\.venv\Scripts\python.exe -m pip install -e ".[dev,media,pyav,jpeg]"
 ```
 
 After the owner has *truthfully completed and reviewed* the private unsigned
@@ -228,6 +228,33 @@ auto-stops on an error or 25-second expiration. Offline tests cover both
 11-frame failure and 13-frame success using **synthetic capture**, plus
 empty/malformed frames, exception redaction, capacity and revocation.
 A synthetic HTTP 200 test does NOT establish a real Hikvision 200.
+
+### Local camera readiness diagnostics (30 Oct 2026)
+
+After signing into the opt-in loopback operator bridge, Dashboard Integration
+Center now shows a metadata-only **Local Edge camera prerequisites** panel.
+Its authenticated `GET /api/v1/operator/camera-readiness` endpoint checks
+four independently useful prerequisites: the camera-scoped HMAC signed
+approval is currently valid, a private-IP RTSP environment value is present
+and passes validation, PyAV is installed, and OpenCV's JPEG encoder package
+is installed. This GET endpoint **does not open the camera, use credentials,
+decode a frame, save an image, or call Meta AI**. It never returns raw RTSP
+values, credentials, HMAC keys, URLs or video bytes. Cross-site requests and
+unauthenticated operators are denied. Missing Media Bridge/Member 2 API causes
+the panel to disappear rather than show fabricated green statuses.
+
+`eligible_for_supervised_trial` means the four checks pass; it does **not**
+prove successful RTSP authentication, actual camera connectivity, video decode
+or actual permission of any people on camera. `real_camera_frame_verified`
+remains `false` from this diagnostic by design. No real camera may be
+claimed online until the separate signed-policy supervised decode succeeds.
+
+For a fresh Windows installation, use
+`python -m pip install -e ".[dev,media,pyav,jpeg]"` in Edge's environment.
+The optional `jpeg` extra explicitly supplies `opencv-python` for JPEG
+encoding. Keep third-party packages pinned and validate licensing/usage for
+the hackathon, and avoid installing both `opencv-python` and
+`opencv-python-headless` in one environment unless separately verified.
 
 **This is NOT verified Hikvision playback:** the local operator's private
 `approved-privacy.json` was absent at the last inspection, camera credentials
