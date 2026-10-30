@@ -157,9 +157,12 @@ refuses non-loopback clients, and authenticates an operator with a **different
 random secret** from the Hikvision viewer password. It sets a SameSite=Strict,
 HttpOnly session cookie, checks the browser Origin for all state-changing
 requests, limits login retries and grants at most one 25-second, camera-scoped
-stream per operator. Deletion, logout and timeout invalidate the in-memory
-session. It invokes the existing Member 1 Edge JPEG producer with
-per-frame signed privacy and session checks.
+stream **globally on the local worker**. Up to eight simultaneous operator
+login cookies may exist, but the camera decoder has only one active
+slot. Deletion, logout and timeout invalidate the in-memory session.
+Native streaming slots remain reserved until the decoder has actually
+released its resources. The bridge invokes the existing Member 1 Edge JPEG
+producer with per-frame signed privacy and session checks.
 
 **Genuine review and private configuration required:** a verified camera-
 specific signed approval file, matching HMAC signing key held in the
@@ -213,6 +216,18 @@ camera appears with `privacy: approved` and `health: unknown`.
 **Open live preview** to try the supervised stream. Actual media can only be
 shown after the 12-frame Edge preflight. The browser never receives an
 RTSP URL. A missing policy reports unverified and cannot open.
+
+**30 Oct safety improvement:** the GET `.../mjpeg` endpoint now waits for the
+Edge's required **12/12 real decoded-frame preflight AND the first validated
+JPEG part** *before* returning HTTP 200. If the camera fails to decode,
+privacy is revoked, there are no JPEGs, or the first bytes are malformed,
+the endpoint fails closed with a redacted 503/403 instead of a fake-success
+`200 multipart`. Opening a camera session (201) alone is never a video success.
+The UI stays in `WAITING FOR FIRST FRAME` until a browser image event and
+auto-stops on an error or 25-second expiration. Offline tests cover both
+11-frame failure and 13-frame success using **synthetic capture**, plus
+empty/malformed frames, exception redaction, capacity and revocation.
+A synthetic HTTP 200 test does NOT establish a real Hikvision 200.
 
 **This is NOT verified Hikvision playback:** the local operator's private
 `approved-privacy.json` was absent at the last inspection, camera credentials

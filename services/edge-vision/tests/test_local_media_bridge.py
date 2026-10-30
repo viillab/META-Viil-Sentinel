@@ -205,3 +205,141 @@ def test_no_signed_policy_no_video(tmp_path, monkeypatch):
         assert snap["cameras"][0]["privacy"] == "unverified"
         assert start(client).status_code == 403
     assert not calls
+
+def test_empty_decoder_returns_503_not_fake_live_video(tmp_path, monkeypatch):
+    def no_frames(_cv2, **_kwargs):
+        if False:
+            yield b"never"
+    client, _, _ = setup(tmp_path, monkeypatch, fake=no_frames)
+    with client:
+        assert login(client).status_code == 200
+        sid = start(client).json()["session_id"]
+        response = client.get(f"{POST_PATH}/{sid}/mjpeg")
+        assert response.status_code == 503
+        assert "no-store" in response.headers["cache-control"]
+        assert "rtsp://" not in response.text
+        # Preflight must revoke the failed session and release its global slot.
+        assert start(client).status_code == 201
+
+
+def test_native_decoder_exception_redacted_and_503(tmp_path, monkeypatch):
+    def bad_camera(_cv2, **_kwargs):
+        raise RuntimeError("rtsp://synthetic:TOP-SECRET@192.168.1.2/stream")
+        yield b"never"
+    client, _, _ = setup(tmp_path, monkeypatch, fake=bad_camera)
+    with client:
+        assert login(client).status_code == 200
+        sid = start(client).json()["session_id"]
+        response = client.get(f"{POST_PATH}/{sid}/mjpeg")
+        assert response.status_code == 503
+        assert "TOP-SECRET" not in response.text
+        assert "192.168" not in response.text
+        assert start(client).status_code == 201
+
+
+@pytest.mark.parametrize("first", [
+    b"not a jpeg",
+    b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: 7\r\n\r\n\xff\xd8FAKE\xff\xd9\r\n",
+    b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: 8\r\n\r\n\xff\xd8FAKE\xff\xd9",
+    b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: 8\r\n\r\nhello!!!\r\n",
+    b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: 999999\r\n\r\n\xff\xd8\xff\xd9\r\n",
+])
+def test_malformed_first_frame_does_not_receive_http_200(tmp_path, monkeypatch, first):
+    def fake_frames(_cv2, **_kwargs):
+        yield first
+    client, _, _ = setup(tmp_path, monkeypatch, fake=fake_frames)
+    with client:
+        assert login(client).status_code == 200
+        sid = start(client).json()["session_id"]
+        assert client.get(f"{POST_PATH}/{sid}/mjpeg").status_code == 503
+
+
+def test_only_one_active_camera_session_even_across_logins(tmp_path, monkeypatch):
+    client, calls, _ = setup(tmp_path, monkeypatch)
+    with client:
+        assert login(client).status_code == 200
+        first = start(client).json()["session_id"]
+        assert start(client).status_code == 409
+        # Logging in from another tab changes the cookie but not the
+        # camera's global single-decoder budget.
+        assert login(client).status_code == 200
+        assert start(client).status_code == 409
+        assert client.delete(f"{POST_PATH}/{first}", headers={"Origin": ORIGIN}).status_code == 204
+        # A different owner cannot revoke another owner's session.
+        assert start(client).status_code == 409
+    assert not calls
+
+
+def test_per_process_operator_session_capacity_capped(tmp_path, monkeypatch):
+    client, _, _ = setup(tmp_path, monkeypatch)
+    with client:
+        for _ in range(8):
+            assert login(client).status_code == 200
+        assert login(client).status_code == 429
+
+
+def test_revoked_policy_blocks_queued_stream_without_decoder(tmp_path, monkeypatch):
+    client, calls, policy = setup(tmp_path, monkeypatch)
+    with client:
+        assert login(client).status_code == 200
+        sid = start(client).json()["session_id"]
+        policy.unlink()
+        assert client.get(f"{POST_PATH}/{sid}/mjpeg").status_code == 403
+    assert not calls
+
+@pytest.mark.parametrize("available_frames, expected_status", [(11, 503), (13, 200)])
+def test_real_edge_producer_is_connected_to_http_preflight(
+    tmp_path, monkeypatch, available_frames, expected_status,
+):
+    """No camera device: exercise the actual Edge 12/12 gate over FastAPI."""
+    from types import SimpleNamespace as NS
+
+    from sentinel_edge import pyav_capture
+    from sentinel_edge.edge_mjpeg import iter_authorized_mjpeg_parts
+
+    class FakeCamera:
+        reads = 0
+        released = False
+
+        def isOpened(self):
+            return True
+
+        def read(self):
+            self.reads += 1
+            if self.reads > available_frames:
+                return False, None
+            return True, NS(
+                shape=(432, 768, 3), size=432 * 768 * 3, dtype="uint8",
+            )
+
+        def release(self):
+            self.released = True
+
+    class FakeCodec:
+        IMWRITE_JPEG_QUALITY = 1
+
+        def imencode(self, _ext, _frame, _options):
+            return True, NS(tobytes=lambda: b"\xff\xd8MOCK\xff\xd9")
+
+    camera = FakeCamera()
+    monkeypatch.setattr(pyav_capture, "open_pyav_capture", lambda _cv2, _url: camera)
+    _, _, policy = setup(tmp_path, monkeypatch)
+    app = create_bridge_app(
+        BridgeConfig(enabled=True, camera_id=CAMERA,
+                     source_env="VIIL_CAMERA_RTSP", approval_path=policy,
+                     operator_password=SECRET),
+        media_factory=iter_authorized_mjpeg_parts, cv2_loader=FakeCodec,
+    )
+    with TestClient(app, base_url="http://127.0.0.1:8001",
+                    client=("127.0.0.1", 33912)) as api:
+        assert login(api).status_code == 200
+        sid = start(api).json()["session_id"]
+        response = api.get(f"{POST_PATH}/{sid}/mjpeg")
+        assert response.status_code == expected_status
+        assert camera.released
+        if expected_status == 200:
+            assert b"MOCK" in response.content
+            assert camera.reads >= 13
+        else:
+            assert b"MOCK" not in response.content
+            assert camera.reads == 12

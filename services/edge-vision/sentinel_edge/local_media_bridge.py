@@ -22,7 +22,9 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ConfigDict
 
 from sentinel_edge.camera_health import validate_rtsp_env
-from sentinel_edge.edge_mjpeg import MJPEG_CONTENT_TYPE, iter_authorized_mjpeg_parts
+from sentinel_edge.edge_mjpeg import (
+    MAX_MJPEG_PART_BYTES, MJPEG_CONTENT_TYPE, iter_authorized_mjpeg_parts,
+)
 from sentinel_edge.privacy_gate import CAMERA_PATTERN, PrivacyGateDenied, verify_privacy_approval
 
 SESSION_SECONDS = 600
@@ -41,6 +43,26 @@ HEADERS = {
     "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
     "Referrer-Policy": "no-referrer",
 }
+
+
+def valid_first_mjpeg_part(part: object) -> bool:
+    """Reject missing/malformed frames before an HTTP 200 media response."""
+    if type(part) is not bytes or len(part) > MAX_MJPEG_PART_BYTES + 128:
+        return False
+    header, delimiter, payload = part.partition(b"\r\n\r\n")
+    prefix = b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: "
+    if delimiter != b"\r\n\r\n" or not header.startswith(prefix):
+        return False
+    size_text = header[len(prefix):]
+    if not 1 <= len(size_text) <= 6 or not size_text.isdigit():
+        return False
+    jpeg = payload[:-2] if payload.endswith(b"\r\n") else b""
+    return (
+        len(jpeg) == int(size_text)
+        and len(jpeg) <= MAX_MJPEG_PART_BYTES
+        and jpeg.startswith(b"\xff\xd8")
+        and jpeg.endswith(b"\xff\xd9")
+    )
 
 
 class OperatorLogin(BaseModel):
@@ -188,6 +210,11 @@ def create_bridge_app(
             raise HTTPException(401, "Operator credentials rejected")
         token = secrets.token_urlsafe(32)
         with guard:
+            for old, expires in list(tokens.items()):
+                if expires <= clock():
+                    tokens.pop(old, None)
+            if len(tokens) >= 8:
+                raise HTTPException(429, "Operator login capacity reached")
             failed_logins.clear()
             tokens[token] = clock() + SESSION_SECONDS
         response.set_cookie(
@@ -205,7 +232,8 @@ def create_bridge_app(
             for key, (operator, _, _) in list(previews.items()):
                 if operator == token:
                     previews.pop(key, None)
-                    streaming.discard(key)
+                    # Do not start another decoder until the active native
+                    # generator has released its resources in finally.
         response.delete_cookie(COOKIE_NAME, path="/api/v1", samesite="strict")
 
     @app.get("/api/v1/integrations/overview")
@@ -243,10 +271,13 @@ def create_bridge_app(
         sid = secrets.token_urlsafe(24)
         deadline = clock() + PREVIEW_SECONDS
         with guard:
-            for key, (owner, current_camera, _) in list(previews.items()):
-                if owner == token and current_camera == camera_id:
+            # One live decoder globally, including revoked/expired sessions
+            # whose generator has not yet released the native camera handle.
+            for key, (_, _, expires) in list(previews.items()):
+                if expires <= clock() and key not in streaming:
                     previews.pop(key, None)
-                    streaming.discard(key)
+            if previews or streaming:
+                raise HTTPException(409, "Local camera already has an active preview")
             previews[sid] = (token, camera_id, deadline)
         return {
             "schema_version": MEDIA_SCHEMA, "camera_id": camera_id,
@@ -294,8 +325,32 @@ def create_bridge_app(
                     previews.pop(sid, None)
                     streaming.discard(sid)
 
+        # Synchronous endpoint thread: actually open/decode the camera's
+        # 12-frame privacy-gated preflight BEFORE committing HTTP status 200.
+        # A dead camera must produce a redacted 503, not a misleading 200 MJPEG.
+        iterator = parts()
+        try:
+            first = next(iterator)
+            if (not valid_first_mjpeg_part(first)
+                    or not preview_authorized(sid, token, camera_id)
+                    or not verify_policy(cfg)):
+                raise ValueError("Camera media unavailable")
+        except Exception:
+            iterator.close()
+            raise HTTPException(503, "Protected camera frames unavailable") from None
+
+        def ready_parts():
+            try:
+                # The session might be revoked between the preflight and
+                # browser consumption. Recheck BEFORE yielding first frame.
+                if preview_authorized(sid, token, camera_id) and verify_policy(cfg):
+                    yield first
+                    yield from iterator
+            finally:
+                iterator.close()
+
         return StreamingResponse(
-            parts(), media_type=MJPEG_CONTENT_TYPE,
+            ready_parts(), media_type=MJPEG_CONTENT_TYPE,
             headers=HEADERS,
         )
 
@@ -309,7 +364,7 @@ def create_bridge_app(
         with guard:
             if previews.get(sid, ("", "", 0))[0] == token:
                 previews.pop(sid, None)
-                streaming.discard(sid)
+                # Keep the streaming lock until the native generator releases.
 
     return app
 
