@@ -37,6 +37,7 @@ MEDIA_SCHEMA = "viil.backend.camera_preview_session.v1"
 OVERVIEW_SCHEMA = "viil.backend.integration_overview.v1"
 READINESS_SCHEMA = "viil.local.camera_readiness.v1"
 DRAFT_CHECKLIST_SCHEMA = "viil.local.unsigned_approval_checklist.v1"
+TRANSPORT_STATUS_SCHEMA = "viil.local.preview_transport_status.v1"
 SESSION_ID_RE = re.compile(r"^[A-Za-z0-9_-]{16,80}$", re.ASCII)
 LOOPBACK_ORIGINS = frozenset({
     "http://127.0.0.1:5173", "http://localhost:5173",
@@ -214,6 +215,7 @@ def create_bridge_app(
     tokens: dict[str, float] = {}
     previews: dict[str, tuple[str, str, float]] = {}
     streaming: set[str] = set()
+    edge_first_jpeg_verified: set[str] = set()
     failed_logins: list[float] = []
     guard = Lock()
 
@@ -291,6 +293,7 @@ def create_bridge_app(
             for key, (operator, _, _) in list(previews.items()):
                 if operator == token:
                     previews.pop(key, None)
+                    edge_first_jpeg_verified.discard(key)
                     # Do not start another decoder until the active native
                     # generator has released its resources in finally.
         response.delete_cookie(COOKIE_NAME, path="/api/v1", samesite="strict")
@@ -413,6 +416,7 @@ def create_bridge_app(
             for key, (_, _, expires) in list(previews.items()):
                 if expires <= clock() and key not in streaming:
                     previews.pop(key, None)
+                    edge_first_jpeg_verified.discard(key)
             if previews or streaming:
                 raise HTTPException(409, "Local camera already has an active preview")
             previews[sid] = (token, camera_id, deadline)
@@ -422,6 +426,33 @@ def create_bridge_app(
             "expires_at": (utc_now() + timedelta(seconds=PREVIEW_SECONDS)).isoformat(
                 timespec="milliseconds"
             ).replace("+00:00", "Z"),
+        }
+
+    @app.get("/api/v1/cameras/{camera_id}/preview-sessions/{sid}/status")
+    def preview_transport_status(camera_id: str, sid: str, request: Request):
+        """Local-only diagnostics; never opens the camera or carries image data.
+
+        The server knows its decoder produced a JPEG, but cannot verify the
+        browser displayed it. No camera configuration or frame content leaks.
+        """
+        token = active_operator(request)
+        if (camera_id != cfg.camera_id or SESSION_ID_RE.fullmatch(sid) is None
+                or not verify_policy(cfg)):
+            raise HTTPException(403, "Protected preview status denied")
+        with guard:
+            state = previews.get(sid)
+            if (state is None or state[0] != token or state[1] != camera_id
+                    or state[2] <= clock() or tokens.get(token, 0) <= clock()):
+                raise HTTPException(403, "Protected preview status denied")
+            edge_verified = sid in edge_first_jpeg_verified
+            preflight_started = sid in streaming
+        return {
+            "schema_version": TRANSPORT_STATUS_SCHEMA,
+            "camera_id": camera_id,
+            "session_id": sid,
+            "edge_first_jpeg_verified": edge_verified,
+            "edge_preflight_started": preflight_started,
+            "browser_image_display_verified": False,
         }
 
     @app.get("/api/v1/cameras/{camera_id}/preview-sessions/{sid}/mjpeg")
@@ -460,6 +491,7 @@ def create_bridge_app(
             finally:
                 with guard:
                     previews.pop(sid, None)
+                    edge_first_jpeg_verified.discard(sid)
                     streaming.discard(sid)
 
         # Synchronous endpoint thread: actually open/decode the camera's
@@ -476,6 +508,12 @@ def create_bridge_app(
             iterator.close()
             raise HTTPException(503, "Protected camera frames unavailable") from None
 
+        with guard:
+            # A successful RTSP OPTIONS or session POST never sets this flag:
+            # only 12/12 decoded frames followed by a valid first JPEG can.
+            if sid in previews and sid in streaming:
+                edge_first_jpeg_verified.add(sid)
+
         def ready_parts():
             try:
                 # The session might be revoked between the preflight and
@@ -489,6 +527,7 @@ def create_bridge_app(
         def revoke():
             with guard:
                 previews.pop(sid, None)
+                edge_first_jpeg_verified.discard(sid)
 
         def released():
             with guard:
@@ -508,6 +547,7 @@ def create_bridge_app(
         with guard:
             if previews.get(sid, ("", "", 0))[0] == token:
                 previews.pop(sid, None)
+                edge_first_jpeg_verified.discard(sid)
                 # Keep the streaming lock until the native generator releases.
 
     return app

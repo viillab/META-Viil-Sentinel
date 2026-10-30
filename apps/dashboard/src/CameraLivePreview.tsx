@@ -5,6 +5,7 @@ import {
 } from "./cameraPreview";
 import type { CameraPreviewSession } from "./cameraPreview";
 import { firstImageEventWaitMs, isActivePreviewId } from "./previewTiming";
+import { fetchPreviewTransportStatus } from "./previewTransport";
 
 type PreviewPhase = "idle" | "connecting" | "waiting_frame" | "first_frame" | "error";
 
@@ -19,6 +20,7 @@ export default function CameraLivePreview({
   const [phase, setPhase] = useState<PreviewPhase>("idle");
   const [session, setSession] = useState<CameraPreviewSession | null>(null);
   const [message, setMessage] = useState("");
+  const [edgeFirstJpeg, setEdgeFirstJpeg] = useState(false);
   const currentSession = useRef<CameraPreviewSession | null>(null);
   const pending = useRef<AbortController | null>(null);
   const expiryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -34,6 +36,7 @@ export default function CameraLivePreview({
     const active = currentSession.current;
     currentSession.current = null;
     setSession(null); // detach live <img> immediately on revoke/stop
+    setEdgeFirstJpeg(false);
     setPhase("idle");
     setMessage("");
     if (active) void closeCameraPreview(active);
@@ -55,11 +58,45 @@ export default function CameraLivePreview({
     return () => document.removeEventListener("visibilitychange", hidden);
   }, [stop]);
 
+  useEffect(() => {
+    if (!session || !permitted) return;
+    const scopedSession = session;
+    let active = true;
+    let inFlight = false;
+    const controller = new AbortController();
+    async function checkEdge() {
+      if (!active || inFlight || document.visibilityState !== "visible") return;
+      inFlight = true;
+      try {
+        const status = await fetchPreviewTransportStatus(scopedSession, controller.signal);
+        if (active && isActivePreviewId(scopedSession.session_id,
+            currentSession.current?.session_id)) {
+          setEdgeFirstJpeg(status.edge_first_jpeg_verified);
+        }
+      } catch {
+        // Member2 production may not implement this optional local route.
+        // A missing/invalid status never creates a claim about decoded frames.
+        if (active && isActivePreviewId(scopedSession.session_id,
+            currentSession.current?.session_id)) setEdgeFirstJpeg(false);
+      } finally {
+        inFlight = false;
+      }
+    }
+    void checkEdge();
+    const interval = window.setInterval(() => void checkEdge(), 1500);
+    return () => {
+      active = false;
+      controller.abort();
+      window.clearInterval(interval);
+    };
+  }, [session, permitted]);
+
   async function start() {
     if (!permitted || pending.current || currentSession.current) return;
     const controller = new AbortController();
     pending.current = controller;
     setMessage("");
+    setEdgeFirstJpeg(false);
     setPhase("connecting");
     try {
       const issued = await openCameraPreview(camera.camera_id, controller.signal);
@@ -130,7 +167,9 @@ export default function CameraLivePreview({
         }}
       />
       <span className="camera-preview-watermark">
-        {phase === "first_frame" ? "FRAME RECEIVED · SUPERVISED" : "WAITING FOR FIRST FRAME"}
+        {phase === "first_frame" ? "BROWSER FRAME RECEIVED · SUPERVISED"
+          : edgeFirstJpeg ? "EDGE JPEG VERIFIED · WAITING FOR BROWSER"
+            : "WAITING FOR FIRST FRAME"}
       </span>
     </div> : <div className="integration-dark-preview">
       <div aria-hidden="true" className="integration-crosshair">◎</div>

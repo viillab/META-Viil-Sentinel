@@ -134,6 +134,89 @@ def test_preview_requires_signed_scope_and_verified_session(tmp_path, monkeypatc
 
 
 
+def test_transport_status_never_claims_browser_render_or_exposes_camera_secret(
+    tmp_path, monkeypatch,
+):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    second_requested = Event()
+    release = Event()
+    frame = (
+        b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: 8"
+        b"\r\n\r\n\xff\xd8FAKE\xff\xd9\r\n"
+    )
+
+    def staged_frames(_cv2, **kwargs):
+        assert kwargs["viewer_check"]()
+        yield frame
+        second_requested.set()
+        assert release.wait(timeout=6), "synthetic stream was not released"
+        if kwargs["viewer_check"]():
+            yield frame
+
+    client, calls, policy = setup(tmp_path, monkeypatch, fake=staged_frames)
+    with client:
+        assert client.get(f"{POST_PATH}/Xx9_abcDefGhIjKlMnOpQr/status").status_code == 401
+        assert login(client).status_code == 200
+        sid = start(client).json()["session_id"]
+        status_path = f"{POST_PATH}/{sid}/status"
+        pending = client.get(status_path)
+        assert pending.status_code == 200
+        assert pending.json() == {
+            "schema_version": "viil.local.preview_transport_status.v1",
+            "camera_id": CAMERA, "session_id": sid,
+            "edge_first_jpeg_verified": False,
+            "edge_preflight_started": False,
+            "browser_image_display_verified": False,
+        }
+        assert "rtsp://" not in pending.text and SECRET not in pending.text
+        assert client.get(
+            f"/api/v1/cameras/foreign/preview-sessions/{sid}/status"
+        ).status_code == 403
+        assert client.get(f"{POST_PATH}/Xx9_abcDefGhIjKlMnOpQr/status").status_code == 403
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(client.get, f"{POST_PATH}/{sid}/mjpeg")
+            try:
+                assert second_requested.wait(timeout=4), "first JPEG not handed to ASGI"
+                active = client.get(status_path)
+                assert active.status_code == 200
+                assert active.json()["edge_first_jpeg_verified"] is True
+                assert active.json()["edge_preflight_started"] is True
+                assert active.json()["browser_image_display_verified"] is False
+                assert SECRET not in active.text and "rtsp://" not in active.text
+                assert start(client).status_code == 409
+                # The owner may revoke without exposing image or metadata.
+                assert client.delete(
+                    f"{POST_PATH}/{sid}", headers={"Origin": ORIGIN}
+                ).status_code == 204
+                assert client.get(status_path).status_code == 403
+                assert start(client).status_code == 409
+            finally:
+                release.set()
+            completed = future.result(timeout=8)
+            assert completed.status_code == 200
+        assert start(client).status_code == 201
+        # A missing/invalid signed approval revokes status immediately.
+        policy.unlink()
+        assert client.get(status_path).status_code == 403
+    assert len(calls) == 0  # custom fake source was used, never a camera
+
+
+def test_preview_status_requires_current_owner_session(tmp_path, monkeypatch):
+    client, calls, _ = setup(tmp_path, monkeypatch)
+    with client:
+        assert login(client).status_code == 200
+        sid = start(client).json()["session_id"]
+        endpoint = f"{POST_PATH}/{sid}/status"
+        assert client.get(endpoint).status_code == 200
+        assert login(client).status_code == 200  # new cookie, not the old owner
+        assert client.get(endpoint).status_code == 403
+        assert client.get(endpoint, headers={"Sec-Fetch-Site": "cross-site"}).status_code == 403
+    assert not calls
+
+
 def test_completed_camera_stream_releases_global_session_slot(tmp_path, monkeypatch):
     """A finished stream must permit a new session, without manual DELETE."""
     client, calls, _ = setup(tmp_path, monkeypatch)
