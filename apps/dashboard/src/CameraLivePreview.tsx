@@ -4,6 +4,7 @@ import {
   closeCameraPreview, openCameraPreview, previewImagePath,
 } from "./cameraPreview";
 import type { CameraPreviewSession } from "./cameraPreview";
+import { firstImageEventWaitMs, isActivePreviewId } from "./previewTiming";
 
 type PreviewPhase = "idle" | "connecting" | "waiting_frame" | "first_frame" | "error";
 
@@ -21,12 +22,15 @@ export default function CameraLivePreview({
   const currentSession = useRef<CameraPreviewSession | null>(null);
   const pending = useRef<AbortController | null>(null);
   const expiryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const firstImageTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const stop = useCallback(() => {
     pending.current?.abort();
     pending.current = null;
     if (expiryTimer.current !== null) clearTimeout(expiryTimer.current);
     expiryTimer.current = null;
+    if (firstImageTimer.current !== null) clearTimeout(firstImageTimer.current);
+    firstImageTimer.current = null;
     const active = currentSession.current;
     currentSession.current = null;
     setSession(null); // detach live <img> immediately on revoke/stop
@@ -74,6 +78,19 @@ export default function CameraLivePreview({
         return;
       }
       expiryTimer.current = setTimeout(stop, milliseconds);
+      const imageWait = firstImageEventWaitMs(issued.expires_at);
+      if (imageWait === 0) {
+        stop();
+        return;
+      }
+      firstImageTimer.current = setTimeout(() => {
+        if (!isActivePreviewId(issued.session_id, currentSession.current?.session_id)) {
+          return;
+        }
+        stop();
+        setPhase("error");
+        setMessage("Browser did not confirm the first image before the preview deadline");
+      }, imageWait);
     } catch (e) {
       if (pending.current !== controller) return;
       pending.current = null;
@@ -95,11 +112,18 @@ export default function CameraLivePreview({
         alt="Operator-authorized live camera preview"
         referrerPolicy="no-referrer"
         onLoad={() => {
-          if (currentSession.current?.session_id === session.session_id) {
+          if (isActivePreviewId(session.session_id, currentSession.current?.session_id)) {
+            if (firstImageTimer.current !== null) clearTimeout(firstImageTimer.current);
+            firstImageTimer.current = null;
             setPhase("first_frame");
           }
         }}
         onError={() => {
+          // Browser events from a removed/older <img> must not turn a
+          // deliberate Stop or permission revocation into a false error.
+          if (!isActivePreviewId(session.session_id, currentSession.current?.session_id)) {
+            return;
+          }
           stop();
           setPhase("error");
           setMessage("Protected media failed or was revoked");
