@@ -4,6 +4,7 @@ import {
 } from "./integrationOverview";
 import type { IntegrationOverview, CameraSummary } from "./integrationOverview";
 import CameraLivePreview from "./CameraLivePreview";
+import { loginLocalOperator, logoutLocalOperator } from "./localOperatorSession";
 
 const SAMPLE: IntegrationOverview = {
   schema_version: INTEGRATION_SCHEMA,
@@ -53,6 +54,30 @@ export default function IntegrationCenter() {
   // Use the actual browser clock, not the timestamp of the last successful poll.
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [refreshToken, setRefreshToken] = useState(0);
+  const [operatorPassword, setOperatorPassword] = useState("");
+  const [loginState, setLoginState] = useState<"idle" | "pending" | "denied">("idle");
+
+  async function signIn() {
+    if (!operatorPassword || loginState === "pending") return;
+    const secret = operatorPassword;
+    setOperatorPassword("");
+    setLoginState("pending");
+    try {
+      await loginLocalOperator(secret);
+      setLoginState("idle");
+      setRefreshToken(n => n + 1);
+    } catch {
+      setLoginState("denied");
+    }
+  }
+
+  async function signOut() {
+    setSnapshot(null);
+    setFeedState("unauthorized");
+    setOperatorPassword("");
+    await logoutLocalOperator();
+    setRefreshToken(n => n + 1);
+  }
 
   useEffect(() => {
     if (preview) return;
@@ -136,6 +161,8 @@ export default function IntegrationCenter() {
         }}>{preview ? "Return to backend status" : "Preview sample layout"}</button>
         <button type="button" className="lab-button-primary" disabled={preview}
           onClick={() => setRefreshToken(n => n + 1)}>Refresh connections</button>
+        {isLive && !preview && <button type="button" className="lab-button"
+          onClick={() => void signOut()}>Sign out local operator</button>}
       </div>
     </div>
     <div role="status" aria-live="polite" className={"integration-notice" + (preview ? " sample" : "")}>
@@ -150,6 +177,25 @@ export default function IntegrationCenter() {
         : "Camera preview requires an explicit click and an authenticated backend media session. No direct RTSP or camera passwords in browser."}</span>
     </div>
 
+    {!preview && feedState === "unauthorized" && <form
+      className="integration-operator-login"
+      onSubmit={e => { e.preventDefault(); void signIn(); }}>
+      <div><strong>Local operator sign-in</strong>
+        <p>For the optional loopback Edge Bridge only. Use a separate operator
+          password — never enter your Hikvision camera password here.</p></div>
+      <label htmlFor="viil-local-operator-secret">Operator password</label>
+      <input id="viil-local-operator-secret" type="password"
+        autoComplete="off" value={operatorPassword}
+        onChange={e => setOperatorPassword(e.target.value)}
+        maxLength={256} required />
+      <button className="lab-button-primary" type="submit"
+        disabled={loginState === "pending" || !operatorPassword}>
+        {loginState === "pending" ? "Checking…" : "Sign in"}
+      </button>
+      {loginState === "denied" && <small role="alert">Sign-in unavailable or denied.
+        Check the local bridge and operator password.</small>}
+    </form>}
+
     <section className="integration-kpis" aria-label="Connection summary">
       <div className="integration-kpi"><small>REGISTERED SOURCES</small><strong>{data ? cameras.length : "—"}</strong><span>{preview ? "Sample devices" : isLive ? "Backend-reported only" : "Waiting for Member 2 API"}</span></div>
       <div className="integration-kpi"><small>APPROVED + REPORTED ONLINE</small><strong>{preview ? "1*" : isLive ? readyCameras : "—"}</strong><span>{preview ? "* Fictional example" : "Never inferred from model events"}</span></div>
@@ -161,7 +207,7 @@ export default function IntegrationCenter() {
     {cameras.length
       ? <div className="integration-camera-grid">{cameras.map(c =>
         <CameraTile key={c.camera_id} camera={c} demo={preview}
-          permitted={isLive && c.health === "online" && c.privacy === "approved"} />)}</div>
+          permitted={isLive && c.health !== "offline" && c.privacy === "approved"} />)}</div>
       : <div className="integration-empty">
         <span className="integration-empty-mark" aria-hidden="true">▣</span>
         <div><strong>No authorized camera metadata available</strong>
