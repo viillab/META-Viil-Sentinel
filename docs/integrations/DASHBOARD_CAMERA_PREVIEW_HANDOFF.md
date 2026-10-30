@@ -247,6 +247,33 @@ another camera decoder until the first worker has finished unwinding;
 the session slot is then reusable. These tests exercise synthetic
 captures, not actual Hikvision or browser networking.
 
+### Authenticated first-frame transport diagnostics (30 Oct 2026)
+
+Member 1's local bridge exposes an additional **optional, read-only** route
+`GET /api/v1/cameras/{camera_id}/preview-sessions/{session_id}/status`
+only to the owner of a fresh, approved preview session. No additional
+camera open/RTSP request is made by this status call. The bounded JSON
+contains the pseudonymous camera and session IDs, `edge_preflight_started`,
+`edge_first_jpeg_verified`, and
+`browser_image_display_verified: false`. The Edge JPEG flag becomes true
+**only after** 12 decoded BGR preflight frames and one size-validated JPEG
+from the existing secure Edge producer. RTSP OPTIONS, a session POST or
+the presence of PyAV never sets this flag.
+
+The Dashboard polls this *local optional* route only while a preview is
+active and shows `EDGE JPEG VERIFIED · WAITING FOR BROWSER` when that
+flag is true but the browser has not confirmed an image event. The
+`BROWSER FRAME RECEIVED · SUPERVISED` label only appears after the
+browser's own `onLoad` event. Both are session-scoped, short-lived,
+and are removed on Stop, logout, expiry, policy revocation or failed
+requests. A status 403/404 never produces a positive frame claim; Member 2
+production backend does **not** need this optional local route.
+
+Neither local status flag alone proves real-world reliability or a
+working physical Hikvision feed. The status returns **no** frames, camera
+IP/RTSP URL, password, HMAC key, source configuration or native errors.
+Tests use synthetic JPEGs and mock decoders only.
+
 ### Local camera readiness diagnostics (30 Oct 2026)
 
 After signing into the opt-in loopback operator bridge, Dashboard Integration
