@@ -280,6 +280,25 @@ were not tested and real decoded frames remain at zero. The new API tests use
 synthetic JPEG bytes only. Member 2's proper authenticated multi-user Backend
 Media Session remains a separate integration workstream.
 
+### 30 Oct: HTTP disconnect-safe decoder lifecycle
+
+The loopback `GET .../mjpeg` now wraps the authorized Edge generator in
+`RevocableMediaResponse`. Starlette runs synchronous MJPEG reads in a
+worker thread; when a browser disconnects or the HTTP send fails, the
+response must **revoke the viewer session and close the native generator**.
+The new response uses a cancellation-shielded `finally` block, coordinates
+`next()` and `close()` with one lock, and frees the camera-wide slot only
+**after** the generator has closed. A connection that never starts delivering
+its first part must also release its pending global slot.
+
+The backend's signed privacy verification, per-frame viewer authorization,
+25-second session TTL, 12/12 decode preflight and no-secret/no-storage
+policies remain unchanged. Synthetic tests cover browser disconnect before
+headers or during frame delivery, normal EOF, simultaneous decoder read and
+generator close, idempotent close and opening another stream after normal
+completion. A failed/disconnected or revoked stream must not leave the
+camera slot occupied. **These tests do not show real Hikvision frames.**
+
 Security warning: Only use this optional gateway on a controlled Windows
 desktop. Cookie `Secure=false` intentionally supports HTTP loopback only;
 do not run Vite with public `--host`, port-forward the gateway, or expose

@@ -133,6 +133,23 @@ def test_preview_requires_signed_scope_and_verified_session(tmp_path, monkeypatc
     assert len(calls) == 1
 
 
+
+def test_completed_camera_stream_releases_global_session_slot(tmp_path, monkeypatch):
+    """A finished stream must permit a new session, without manual DELETE."""
+    client, calls, _ = setup(tmp_path, monkeypatch)
+    with client:
+        assert login(client).status_code == 200
+        first = start(client)
+        assert first.status_code == 201
+        first_sid = first.json()["session_id"]
+        assert client.get(f"{POST_PATH}/{first_sid}/mjpeg").status_code == 200
+        assert client.get(f"{POST_PATH}/{first_sid}/mjpeg").status_code == 403
+        second = start(client)
+        assert second.status_code == 201
+        assert second.json()["session_id"] != first_sid
+        assert client.get(f"{POST_PATH}/{second.json()['session_id']}/mjpeg").status_code == 200
+    assert len(calls) == 2
+
 def test_logout_and_delete_revoke_camera_sessions(tmp_path, monkeypatch):
     client, calls, _ = setup(tmp_path, monkeypatch)
     with client:
