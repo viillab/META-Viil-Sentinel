@@ -25,6 +25,17 @@ and privacy team BEFORE real collection.** If in doubt, block deployment.
   outage. This is bounded polling, NOT immediate distributed revocation;
   a blocked native decoder or model call may delay the check. Local
   prerecorded file replays keep their existing research/privacy rules.
+- **Live candidate export boundary (30 Oct 2026):** after a potentially
+  blocking pose callback or candidate detector, after an `on_event` callback,
+  and after versioned event-envelope encoding, the Edge runner rechecks
+  current signed permission and any session duration deadline **before
+  writing a candidate JSONL event**. A revoked/expired session must not
+  serialize stale candidate metadata even if the callback started while
+  authorization was valid. Synthetic fake-clock tests cover each boundary.
+  An `on_event` callback can already perform an external action before its
+  post-callback check; this guard cannot reverse that effect. For production,
+  the Member 2 backend must independently reauthorize, validate expiry,
+  enforce idempotency and fail closed on all received candidate events.
 - RTSP camera preflight (`sentinel_edge.camera_health`) and the
   `sentinel_edge.camera_fleet` launcher also require a signed approval.
 - The approval is bound to specific pseudonymous camera IDs, jurisdictions,

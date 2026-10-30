@@ -321,16 +321,37 @@ def process_capture(
             trace_file.write(frame_to_trace_record(frame) + "\n")
         if on_frame is not None:
             on_frame(frame)
-        event = detector.process(frame)
-        if event is not None:
-            # Recheck the short-lived approval gate before exporting candidate
-            # metadata, even if inference itself took substantial time.
+            # User-provided callbacks may block or revoke an approval.
+            # Never advance detector state after a revoked/expired callback.
             if privacy_check is not None:
                 privacy_check()
+            if max_duration_seconds and clock() - started >= max_duration_seconds:
+                break
+        event = detector.process(frame)
+        if event is not None:
+            # Even after successful MediaPipe inference, detector processing
+            # may outlast the live authorization/epoch. Never send stale
+            # candidates to downstream callbacks or JSONL.
+            if privacy_check is not None:
+                privacy_check()
+            if max_duration_seconds and clock() - started >= max_duration_seconds:
+                break
+            # on_event may deliver to another process; check immediately
+            # before dispatch and again after any blocking callback.
             if on_event is not None:
                 on_event(event)
+                if privacy_check is not None:
+                    privacy_check()
+                if max_duration_seconds and clock() - started >= max_duration_seconds:
+                    break
             encoded = (event_encoder(event) if event_encoder is not None
                        else {"type": "FALL_CANDIDATE", **asdict(event)})
+            # Encoding a handoff envelope can outlive the authorization.
+            # Drop any result whose session ended before JSONL export.
+            if privacy_check is not None:
+                privacy_check()
+            if max_duration_seconds and clock() - started >= max_duration_seconds:
+                break
             print(json.dumps(encoded, allow_nan=False), file=output)
             output.flush()
             candidate_count += 1
