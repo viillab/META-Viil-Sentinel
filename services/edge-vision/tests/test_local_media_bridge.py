@@ -387,6 +387,74 @@ def test_revoked_policy_blocks_queued_stream_without_decoder(tmp_path, monkeypat
         assert client.get(f"{POST_PATH}/{sid}/mjpeg").status_code == 403
     assert not calls
 
+def test_slow_authorized_edge_preflight_returns_503_and_reopens_slot(
+    tmp_path, monkeypatch,
+):
+    """FastAPI uses actual MJPEG Edge preflight with a controlled monotonic clock."""
+    from types import SimpleNamespace as NS
+
+    from sentinel_edge.edge_mjpeg import iter_authorized_mjpeg_parts
+
+    class SlowFakeClock:
+        value = 0.0
+
+        def now(self):
+            return self.value
+
+        def sleep(self, seconds):
+            self.value += seconds
+
+    timer = SlowFakeClock()
+
+    class SlowCamera:
+        reads = 0
+        released = False
+
+        def isOpened(self):
+            return True
+
+        def read(self):
+            self.reads += 1
+            timer.value += 1.5
+            return True, NS(shape=(432, 768, 3), size=432 * 768 * 3, dtype="uint8")
+
+        def release(self):
+            self.released = True
+
+    class FakeCV2:
+        IMWRITE_JPEG_QUALITY = 1
+
+        def imencode(self, *_args, **_kwargs):
+            raise AssertionError("Preflight over budget must never encode a JPEG")
+
+    camera = SlowCamera()
+
+    def slow_media(cv2, **kwargs):
+        yield from iter_authorized_mjpeg_parts(
+            cv2, **kwargs, open_capture=lambda _cv2, _url: camera,
+            clock=timer.now, sleeper=timer.sleep,
+        )
+
+    _, _, policy = setup(tmp_path, monkeypatch)
+    app = create_bridge_app(
+        BridgeConfig(enabled=True, camera_id=CAMERA,
+                     source_env="VIIL_CAMERA_RTSP", approval_path=policy,
+                     operator_password=SECRET),
+        media_factory=slow_media, cv2_loader=FakeCV2,
+    )
+    with TestClient(app, base_url="http://127.0.0.1:8001",
+                    client=("127.0.0.1", 33912)) as api:
+        assert login(api).status_code == 200
+        sid = start(api).json()["session_id"]
+        response = api.get(f"{POST_PATH}/{sid}/mjpeg")
+        assert response.status_code == 503
+        assert "no-store" in response.headers["cache-control"]
+        assert PRIVATE_CAMERA_URL not in response.text
+        assert camera.released and camera.reads < 12
+        # An expired preflight must not leak a camera-wide decoder slot.
+        assert start(api).status_code == 201
+
+
 @pytest.mark.parametrize("available_frames, expected_status", [(11, 503), (13, 200)])
 def test_real_edge_producer_is_connected_to_http_preflight(
     tmp_path, monkeypatch, available_frames, expected_status,

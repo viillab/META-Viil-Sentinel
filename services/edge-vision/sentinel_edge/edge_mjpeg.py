@@ -32,6 +32,9 @@ MAX_MJPEG_PART_BYTES = 256 * 1024
 MAX_MJPEG_WIDTH = 768
 MAX_MJPEG_HEIGHT = 432
 PREFLIGHT_DECODE_FRAMES = 12
+# First validated JPEG should be ready quickly enough for a human operator.
+# This is an elapsed-time checkpoint, not a hard timeout for native codecs.
+MAX_PREFLIGHT_SECONDS = 10.0
 MJPEG_CONTENT_TYPE = "multipart/x-mixed-replace; boundary=frame"
 
 
@@ -82,6 +85,13 @@ def iter_authorized_mjpeg_parts(
             raise EdgeMediaDenied("Protected media session not authorized") from None
 
     started = clock()
+
+    def require_first_frame_budget() -> None:
+        # This rejects a delayed connection/read/encode *after* the native
+        # operation returns. Native I/O timeouts are handled by the decoder.
+        if clock() - started >= min(MAX_PREFLIGHT_SECONDS, duration_seconds):
+            raise EdgeMediaUnavailable("Protected first-frame preflight timed out")
+
     authorized()  # no RTSP configuration or decoder is accessed before approval
     try:
         url = validate_rtsp_env(source_env, environment)
@@ -106,21 +116,23 @@ def iter_authorized_mjpeg_parts(
         except Exception:
             raise EdgeMediaUnavailable("Protected source unavailable") from None
         authorized()
+        require_first_frame_budget()
 
         # A connection-only OPTIONS response or even one decoded frame is NOT
         # sufficient to declare the camera media ready for a browser client.
         for _ in range(PREFLIGHT_DECODE_FRAMES):
-            if clock() - started >= duration_seconds:
-                raise EdgeMediaUnavailable("Protected source preflight timed out")
+            require_first_frame_budget()
             authorized()
             try:
                 ok, frame = cap.read()
             except Exception:
                 raise EdgeMediaUnavailable("Protected source preflight failed") from None
             authorized()
+            require_first_frame_budget()
             if not ok or not _valid_decoded_bgr_frame(frame):
                 raise EdgeMediaUnavailable("Protected source preflight failed")
 
+        require_first_frame_budget()
         last_emit = None
         for _ in range(max_frames):
             if clock() - started >= duration_seconds:
@@ -135,12 +147,16 @@ def iter_authorized_mjpeg_parts(
                         raise EdgeMediaUnavailable("Protected frame pacing interrupted") from None
             if clock() - started >= duration_seconds:
                 break
+            if last_emit is None:
+                require_first_frame_budget()
             authorized()
             try:
                 ok, frame = cap.read()
             except Exception:
                 raise EdgeMediaUnavailable("Protected frame decode interrupted") from None
             authorized()
+            if last_emit is None:
+                require_first_frame_budget()
             if not ok or not _valid_decoded_bgr_frame(frame):
                 raise EdgeMediaUnavailable("Protected frame decode interrupted")
             height, width, _ = frame.shape
@@ -164,6 +180,8 @@ def iter_authorized_mjpeg_parts(
             if (not data or len(data) > MAX_MJPEG_PART_BYTES
                     or not data.startswith(b"\xff\xd8") or not data.endswith(b"\xff\xd9")):
                 raise EdgeMediaUnavailable("Protected frame JPEG invalid or too large")
+            if last_emit is None:
+                require_first_frame_budget()
             if clock() - started >= duration_seconds:
                 break
             authorized()  # no result leaves Edge if privacy/viewer access was revoked

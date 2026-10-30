@@ -7,6 +7,12 @@ headers, video, URLs, or native decoder exceptions are logged.
 from typing import Any
 
 
+# FFmpeg applies these to individual network operations; NOT a hard
+# whole-decoder/thread deadline. Keep well under the 25s local preview TTL.
+PYAV_OPEN_TIMEOUT_SECONDS = 4.0
+PYAV_READ_TIMEOUT_SECONDS = 2.0
+
+
 class PyAVCapture:
     def __init__(self, url: str):
         # Caller must already have validated a private RTSP URL and signed
@@ -16,8 +22,11 @@ class PyAVCapture:
             import av
             container = av.open(
                 url, mode="r", format="rtsp",
-                options={"rtsp_transport": "tcp", "rw_timeout": "4000000"},
-                timeout=(8.0, 4.0),
+                options={
+                    "rtsp_transport": "tcp",
+                    "rw_timeout": str(int(PYAV_READ_TIMEOUT_SECONDS * 1_000_000)),
+                },
+                timeout=(PYAV_OPEN_TIMEOUT_SECONDS, PYAV_READ_TIMEOUT_SECONDS),
             )
             video = next((s for s in container.streams if s.type == "video"), None)
             if video is None:

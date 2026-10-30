@@ -247,6 +247,28 @@ another camera decoder until the first worker has finished unwinding;
 the session slot is then reusable. These tests exercise synthetic
 captures, not actual Hikvision or browser networking.
 
+### Fast-fail RTSP and first-frame budget (30 Oct 2026)
+
+The Member 1 local PyAV RTSP adapter now requests a **4-second connection/
+header timeout and 2-second per-read timeout** (FFmpeg `rw_timeout`:
+2,000,000 microseconds). The existing Edge MJPEG producer additionally
+requires its **first validated JPEG** within an elapsed-time budget of
+10 seconds (or shorter if the caller's session duration is shorter).
+It checks that budget after the native open, after each of the 12 decoded
+preflight reads, after the next frame read and after JPEG encoding. A
+too-slow attempt fails closed: no multipart HTTP 200, no image emitted;
+the native capture is released and the session slot becomes reusable.
+
+These controls improve typical fail-fast behavior, **not** a hard 10-second
+OS-level termination guarantee. PyAV/FFmpeg timeouts apply to individual
+network operations; a native codec, file conversion, OS driver or socket
+may exceed the aggregate budget before control returns to Python.
+Do not claim a guaranteed RTSP timeout or live camera reliability without
+a genuinely approved hardware test. Operator review of private camera
+and site policy is still mandatory before any real decoding.
+
+See PyAV timeout API: https://pyav.basswood.io/docs/13.1/api/_globals.html
+
 ### Authenticated first-frame transport diagnostics (30 Oct 2026)
 
 Member 1's local bridge exposes an additional **optional, read-only** route
