@@ -171,6 +171,85 @@ def test_manual_stream_close_releases_native_decoder(tmp_path, monkeypatch):
     assert cap.released
 
 
+def test_slow_native_open_rejected_before_any_decode(tmp_path, monkeypatch):
+    from sentinel_edge.edge_mjpeg import MAX_PREFLIGHT_SECONDS
+
+    clock = FakeClock()
+    cv2, values, cap, _, _ = inputs(tmp_path, monkeypatch, clock=clock)
+
+    def slow_open(_cv2, _url):
+        clock.value += MAX_PREFLIGHT_SECONDS + 0.5
+        return cap
+
+    values["open_capture"] = slow_open
+    with pytest.raises(EdgeMediaUnavailable, match="first-frame preflight"):
+        list(iter_authorized_mjpeg_parts(cv2, **values))
+    assert cap.released and cap.calls == 0 and cv2.encoded == 0
+
+
+def test_slow_twelve_frame_preflight_rejects_and_releases(tmp_path, monkeypatch):
+    clock = FakeClock()
+    cv2, values, cap, _, _ = inputs(tmp_path, monkeypatch, clock=clock)
+    original = cap.read
+
+    def slow_read():
+        clock.value += 1.5
+        return original()
+
+    cap.read = slow_read
+    with pytest.raises(EdgeMediaUnavailable, match="first-frame preflight"):
+        list(iter_authorized_mjpeg_parts(cv2, **values))
+    assert cap.released and cap.calls < PREFLIGHT_DECODE_FRAMES
+    assert cv2.encoded == 0
+
+
+def test_slow_thirteenth_frame_does_not_emit_stale_first_jpeg(tmp_path, monkeypatch):
+    clock = FakeClock()
+    cv2, values, cap, _, _ = inputs(tmp_path, monkeypatch, clock=clock)
+    original = cap.read
+
+    def slow_first_jpeg_frame():
+        clock.value += 8.0 if cap.calls == PREFLIGHT_DECODE_FRAMES else 0.3
+        return original()
+
+    cap.read = slow_first_jpeg_frame
+    with pytest.raises(EdgeMediaUnavailable, match="first-frame preflight"):
+        list(iter_authorized_mjpeg_parts(cv2, **values))
+    assert cap.released and cap.calls == PREFLIGHT_DECODE_FRAMES + 1
+    assert cv2.encoded == 0
+
+
+def test_slow_jpeg_encoder_does_not_emit_expired_frame(tmp_path, monkeypatch):
+    clock = FakeClock()
+    cv2, values, cap, _, _ = inputs(tmp_path, monkeypatch, clock=clock)
+    old = cv2.imencode
+
+    def slow_encoding(*args, **kwargs):
+        clock.value += 10.5
+        return old(*args, **kwargs)
+
+    cv2.imencode = slow_encoding
+    with pytest.raises(EdgeMediaUnavailable, match="first-frame preflight"):
+        list(iter_authorized_mjpeg_parts(cv2, **values))
+    assert cap.released and cap.calls == PREFLIGHT_DECODE_FRAMES + 1
+    assert cv2.encoded == 1  # encoded locally, but never yielded to browser
+
+
+def test_timely_twelve_frame_preflight_and_first_jpeg_still_work(tmp_path, monkeypatch):
+    clock = FakeClock()
+    cv2, values, cap, _, _ = inputs(tmp_path, monkeypatch, clock=clock)
+    original = cap.read
+
+    def timely_read():
+        clock.value += 0.25
+        return original()
+
+    cap.read = timely_read
+    parts = list(iter_authorized_mjpeg_parts(cv2, **values))
+    assert len(parts) == 2 and all(b"synthetic" in part for part in parts)
+    assert cap.released
+
+
 def test_decode_preflight_cannot_promote_only_eleven_frames(tmp_path, monkeypatch):
     cv2, values, cap, _, _ = inputs(tmp_path, monkeypatch,
                                       cap=FakeCapture(invalid_at=12))

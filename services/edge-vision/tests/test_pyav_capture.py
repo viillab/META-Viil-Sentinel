@@ -54,8 +54,8 @@ def test_pyav_capture_reads_bgr24_without_file_output(monkeypatch):
     cap = open_pyav_capture(None, "rtsp://example-hidden")
     assert created[0][1] == {
         "mode": "r", "format": "rtsp",
-        "options": {"rtsp_transport": "tcp", "rw_timeout": "4000000"},
-        "timeout": (8.0, 4.0),
+        "options": {"rtsp_transport": "tcp", "rw_timeout": "2000000"},
+        "timeout": (4.0, 2.0),
     }
     assert cap.isOpened() and cap.get(5) == 15.0
     ok, first = cap.read()
