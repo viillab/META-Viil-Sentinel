@@ -16,8 +16,9 @@ import re
 import secrets
 from threading import Lock
 from time import monotonic
-from typing import Callable
+from typing import Callable, Iterator
 
+import anyio
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ConfigDict
@@ -45,6 +46,57 @@ HEADERS = {
     "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
     "Referrer-Policy": "no-referrer",
 }
+
+
+class SynchronizedMediaParts:
+    """Coordinate a native generator's next/close across worker threads.
+
+    Starlette iterates sync generators in an AnyIO worker. A disconnect can
+    race with its blocking decoder read, so closing without a lock would
+    raise 'generator already executing' and leave a camera handle open.
+    """
+
+    def __init__(self, source: Iterator[bytes]):
+        self._source = source
+        self._lock = Lock()
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        with self._lock:
+            return next(self._source)
+
+    def close(self) -> None:
+        with self._lock:
+            self._source.close()
+
+
+class RevocableMediaResponse(StreamingResponse):
+    """Always revoke and close the native decoder on HTTP disconnect/error.
+
+    The owner callback revokes the viewer before closing; the release
+    callback frees the global camera slot only *after* generator cleanup.
+    """
+
+    def __init__(self, source: Iterator[bytes], *, revoke: Callable[[], None],
+                 released: Callable[[], None]):
+        self._managed_parts = SynchronizedMediaParts(source)
+        self._revoke = revoke
+        self._released = released
+        super().__init__(self._managed_parts, media_type=MJPEG_CONTENT_TYPE,
+                         headers=HEADERS)
+
+    async def __call__(self, scope, receive, send):
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            self._revoke()
+            # A disconnect cancels the response task. Shield native release
+            # and wait for any in-flight worker-thread read before closing.
+            with anyio.CancelScope(shield=True):
+                await anyio.to_thread.run_sync(self._managed_parts.close)
+                self._released()
 
 
 def valid_first_mjpeg_part(part: object) -> bool:
@@ -381,9 +433,16 @@ def create_bridge_app(
             finally:
                 iterator.close()
 
-        return StreamingResponse(
-            ready_parts(), media_type=MJPEG_CONTENT_TYPE,
-            headers=HEADERS,
+        def revoke():
+            with guard:
+                previews.pop(sid, None)
+
+        def released():
+            with guard:
+                streaming.discard(sid)
+
+        return RevocableMediaResponse(
+            ready_parts(), revoke=revoke, released=released,
         )
 
     @app.delete("/api/v1/cameras/{camera_id}/preview-sessions/{sid}",
