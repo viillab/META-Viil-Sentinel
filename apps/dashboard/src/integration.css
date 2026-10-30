@@ -60,6 +60,14 @@
 .integration-handoff code{color:#cee0fb;overflow-wrap:anywhere}
 .integration-handoff-status{font-size:10px;color:#accbf6;background:#243d5e;padding:11px;border-radius:8px;white-space:nowrap;font-weight:800}
 .integration-page button:focus-visible{outline:3px solid #3b82f6;outline-offset:2px}
+.integration-operator-login{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:18px;margin-top:16px;background:#fff;border:1px solid #d4e5fa;border-radius:13px}
+.integration-operator-login>div{flex:1 1 280px}
+.integration-operator-login strong{font-size:13px;color:#1b416d}
+.integration-operator-login p{font-size:11px;color:#6783a1;line-height:1.5;margin:5px 0}
+.integration-operator-login label{font-size:11px;color:#345775}
+.integration-operator-login input{min-width:150px;flex:1 1 150px;border:1px solid #b7cde5;padding:10px 11px;border-radius:8px;font-size:13px}
+.integration-operator-login button{padding:10px}
+.integration-operator-login small[role=alert]{flex-basis:100%;color:#bb4a4a;font-size:11px}
 .camera-preview-panel{margin:17px 0 13px}
 .camera-preview-panel .integration-dark-preview{margin:0 0 8px}
 .camera-preview-frame{position:relative;aspect-ratio:16/9;border-radius:10px;overflow:hidden;background:#081322;display:flex;align-items:center}

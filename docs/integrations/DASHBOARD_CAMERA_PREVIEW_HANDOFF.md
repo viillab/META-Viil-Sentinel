@@ -142,3 +142,86 @@ operator must complete the genuine review and supervised 12-frame trial.
 
 The legacy `scripts/start-hikvision-owner-preview.ps1` remains a
 **local Windows OpenCV** tool and must not be described as Dashboard streaming.
+
+## 30 Oct 2026 — opt-in Member 1 loopback bridge (local operator demo)
+
+**New:** `services/edge-vision/sentinel_edge/local_media_bridge.py`.
+This is a separate, isolated **Member 1 local research-only** adapter, **not**
+Member 2's production API, not internet streaming, and not an authenticated
+remote-caregiver service. It is disabled unless all operator settings below
+are provided. It must not be enabled without site owner and affected-person
+privacy review and a genuine, current HMAC-signed camera approval.
+
+The bridge serves only `127.0.0.1:8001`, has no alternate bind argument,
+refuses non-loopback clients, and authenticates an operator with a **different
+random secret** from the Hikvision viewer password. It sets a SameSite=Strict,
+HttpOnly session cookie, checks the browser Origin for all state-changing
+requests, limits login retries and grants at most one 25-second, camera-scoped
+stream per operator. Deletion, logout and timeout invalidate the in-memory
+session. It invokes the existing Member 1 Edge JPEG producer with
+per-frame signed privacy and session checks.
+
+**Genuine review and private configuration required:** a verified camera-
+specific signed approval file, matching HMAC signing key held in the
+**local process** environment, operator-chosen high-entropy 16+ character
+password, and a **dedicated read-only** Hikvision account used only inside a
+private RTSP URL environment variable. Never enter camera passwords in the
+Dashboard or chat, Git, a shared .env file, process args or screenshots.
+PowerShell's process environment contains secrets for the process lifetime;
+close the terminal after use and protect it as an interactive operator session.
+
+Install optional tooling (on the same Windows machine where the Edge worker
+and camera Tailscale route exist):
+
+```powershell
+cd D:\VIIL-Sentinel\services\edge-vision
+.\.venv\Scripts\python.exe -m pip install -e ".[dev,media,pyav]"
+```
+
+After the owner has *truthfully completed and reviewed* the private unsigned
+policy, sign it with `sentinel_edge.privacy_approval_operator` per
+`docs/security/SIGNED_CAMERA_APPROVAL_OPERATOR_WORKFLOW.md`. Do not make up
+notice/impact/rights review references. Prepare the following settings in an
+interactive **private** PowerShell process (the placeholders MUST be supplied
+securely; these are **environment variable names**, not values):
+
+```powershell
+$env:VIIL_BRIDGE_ENABLED = '1'
+$env:VIIL_BRIDGE_CAMERA_ID = 'staged-camera-01'
+$env:VIIL_BRIDGE_RTSP_ENV = 'VIIL_CAMERA_RTSP'
+$env:VIIL_BRIDGE_APPROVAL_PATH = "$env:USERPROFILE\VIIL-Private\approved-privacy.json"
+# Set VIIL_PRIVACY_APPROVAL_KEY to the secret used to sign the real file.
+# Set VIIL_BRIDGE_OPERATOR_PASSWORD to a NEW strong operator-only password.
+# Set VIIL_CAMERA_RTSP to the dedicated camera read-only viewer RTSP URL.
+# Set these three secrets securely in the interactive process, not in Git.
+.\.venv\Scripts\python.exe -m sentinel_edge.local_media_bridge
+```
+
+Separately, start the dashboard in another local PowerShell terminal:
+
+```powershell
+cd D:\VIIL-Sentinel\apps\dashboard
+$env:VIIL_LOCAL_CAMERA_BRIDGE = '1'
+npm run dev
+```
+
+Visit `http://127.0.0.1:5173` and open **Integration Center**.
+Select local operator sign-in, enter the **operator password, not the
+Hikvision camera password**, and refresh. Only a genuinely signed approved
+camera appears with `privacy: approved` and `health: unknown`.
+`UNKNOWN` deliberately does not claim decoded frames. The owner may click
+**Open live preview** to try the supervised stream. Actual media can only be
+shown after the 12-frame Edge preflight. The browser never receives an
+RTSP URL. A missing policy reports unverified and cannot open.
+
+**This is NOT verified Hikvision playback:** the local operator's private
+`approved-privacy.json` was absent at the last inspection, camera credentials
+were not tested and real decoded frames remain at zero. The new API tests use
+synthetic JPEG bytes only. Member 2's proper authenticated multi-user Backend
+Media Session remains a separate integration workstream.
+
+Security warning: Only use this optional gateway on a controlled Windows
+desktop. Cookie `Secure=false` intentionally supports HTTP loopback only;
+do not run Vite with public `--host`, port-forward the gateway, or expose
+either port to the internet. For production, Member 2 must implement TLS,
+auth/RBAC, audited policy and session management, and its own deployment review.
