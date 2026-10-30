@@ -7,6 +7,7 @@ operator password are mandatory. No camera password reaches the browser.
 """
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from importlib.util import find_spec
 import hmac
 import ipaddress
 import os
@@ -32,6 +33,7 @@ PREVIEW_SECONDS = 25
 COOKIE_NAME = "viil_local_operator"
 MEDIA_SCHEMA = "viil.backend.camera_preview_session.v1"
 OVERVIEW_SCHEMA = "viil.backend.integration_overview.v1"
+READINESS_SCHEMA = "viil.local.camera_readiness.v1"
 SESSION_ID_RE = re.compile(r"^[A-Za-z0-9_-]{16,80}$", re.ASCII)
 LOOPBACK_ORIGINS = frozenset({
     "http://127.0.0.1:5173", "http://localhost:5173",
@@ -256,6 +258,36 @@ def create_bridge_app(
             "meta": {"provider": "mock", "state": "not_configured",
                      "evidence_pipeline": "not_configured", "last_verified_call_at": None},
             "notification": {"state": "not_configured"},
+        }
+
+    @app.get("/api/v1/operator/camera-readiness")
+    def camera_readiness(request: Request):
+        """Metadata-only prerequisites: never connects to or probes a camera.
+
+        Even if everything here is true, zero live frames have been verified
+        by this check. Only an actual supervised, signed Edge decode may
+        establish whether video is available.
+        """
+        active_operator(request)
+        policy_ok = verify_policy(cfg)
+        try:
+            validate_rtsp_env(cfg.source_env)
+            rtsp_ok = True
+        except (ValueError, TypeError, OSError):
+            rtsp_ok = False
+        pyav_ok = find_spec("av") is not None
+        cv2_ok = find_spec("cv2") is not None
+        return {
+            "schema_version": READINESS_SCHEMA,
+            "camera_id": cfg.camera_id,
+            "signed_privacy_approval_verified": policy_ok,
+            "private_rtsp_configured": rtsp_ok,
+            "pyav_decoder_installed": pyav_ok,
+            "opencv_jpeg_encoder_installed": cv2_ok,
+            "eligible_for_supervised_trial": (
+                policy_ok and rtsp_ok and pyav_ok and cv2_ok
+            ),
+            "real_camera_frame_verified": False,
         }
 
     @app.post("/api/v1/cameras/{camera_id}/preview-sessions", status_code=201)

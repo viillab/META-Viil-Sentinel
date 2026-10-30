@@ -343,3 +343,70 @@ def test_real_edge_producer_is_connected_to_http_preflight(
         else:
             assert b"MOCK" not in response.content
             assert camera.reads == 12
+
+
+def test_camera_readiness_requires_operator_and_is_metadata_only(tmp_path, monkeypatch):
+    import sentinel_edge.local_media_bridge as local_bridge
+    # CI need not install optional camera/video dependencies.
+    monkeypatch.setattr(local_bridge, "find_spec", lambda _name: object())
+    client, calls, _ = setup(tmp_path, monkeypatch)
+    with client:
+        assert client.get("/api/v1/operator/camera-readiness").status_code == 401
+        assert login(client).status_code == 200
+        response = client.get("/api/v1/operator/camera-readiness")
+        assert response.status_code == 200
+        result = response.json()
+        assert result == {
+            "schema_version": "viil.local.camera_readiness.v1",
+            "camera_id": CAMERA,
+            "signed_privacy_approval_verified": True,
+            "private_rtsp_configured": True,
+            "pyav_decoder_installed": True,
+            "opencv_jpeg_encoder_installed": True,
+            "eligible_for_supervised_trial": True,
+            "real_camera_frame_verified": False,
+        }
+        assert "rtsp://" not in response.text
+        assert SECRET not in response.text
+    assert calls == []  # GET cannot try any camera or decode
+
+
+def test_camera_readiness_missing_policy_or_private_rtsp_reports_not_ready(tmp_path, monkeypatch):
+    client, calls, _ = setup(tmp_path, monkeypatch, valid=False)
+    with client:
+        assert login(client).status_code == 200
+        result = client.get("/api/v1/operator/camera-readiness").json()
+        assert result["signed_privacy_approval_verified"] is False
+        assert result["eligible_for_supervised_trial"] is False
+        monkeypatch.setenv("VIIL_CAMERA_RTSP", "rtsp://public.example/live")
+        result = client.get("/api/v1/operator/camera-readiness").json()
+        assert result["private_rtsp_configured"] is False
+        assert result["eligible_for_supervised_trial"] is False
+    assert not calls
+
+
+def test_readiness_missing_optional_decoder_does_not_claim_video(tmp_path, monkeypatch):
+    import sentinel_edge.local_media_bridge as local_bridge
+
+    installed = local_bridge.find_spec
+    monkeypatch.setattr(
+        local_bridge, "find_spec",
+        lambda name: None if name == "av" else installed(name),
+    )
+    client, calls, _ = setup(tmp_path, monkeypatch)
+    with client:
+        assert login(client).status_code == 200
+        result = client.get("/api/v1/operator/camera-readiness").json()
+        assert result["pyav_decoder_installed"] is False
+        assert result["eligible_for_supervised_trial"] is False
+        assert result["real_camera_frame_verified"] is False
+    assert not calls
+
+
+def test_readiness_denies_cross_site_request(tmp_path, monkeypatch):
+    client, calls, _ = setup(tmp_path, monkeypatch)
+    with client:
+        assert login(client).status_code == 200
+        assert client.get("/api/v1/operator/camera-readiness",
+                          headers={"Sec-Fetch-Site": "cross-site"}).status_code == 403
+    assert not calls

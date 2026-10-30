@@ -4,6 +4,8 @@ import {
 } from "./integrationOverview";
 import type { IntegrationOverview, CameraSummary } from "./integrationOverview";
 import CameraLivePreview from "./CameraLivePreview";
+import { fetchCameraReadiness } from "./cameraReadiness";
+import type { CameraReadiness } from "./cameraReadiness";
 import { loginLocalOperator, logoutLocalOperator } from "./localOperatorSession";
 
 const SAMPLE: IntegrationOverview = {
@@ -54,6 +56,7 @@ export default function IntegrationCenter() {
   // Use the actual browser clock, not the timestamp of the last successful poll.
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [refreshToken, setRefreshToken] = useState(0);
+  const [readiness, setReadiness] = useState<{ value: CameraReadiness; at: number } | null>(null);
   const [operatorPassword, setOperatorPassword] = useState("");
   const [loginState, setLoginState] = useState<"idle" | "pending" | "denied">("idle");
 
@@ -138,6 +141,30 @@ export default function IntegrationCenter() {
 
   const isLive = !preview && feedState === "connected" && !!snapshot
     && snapshotIsFresh(snapshot, nowMs);
+
+  useEffect(() => {
+    if (!isLive || preview) {
+      setReadiness(null);
+      return;
+    }
+    let active = true;
+    const controller = new AbortController();
+    async function check() {
+      try {
+        const result = await fetchCameraReadiness(controller.signal);
+        if (active) setReadiness({ value: result, at: Date.now() });
+      } catch {
+        if (active) setReadiness(null); // 404 / no bridge / auth error => no claims
+      }
+    }
+    void check();
+    const interval = window.setInterval(() => void check(), 10_000);
+    return () => {
+      active = false;
+      controller.abort();
+      window.clearInterval(interval);
+    };
+  }, [isLive, preview, refreshToken]);
   const data = preview ? SAMPLE : isLive ? snapshot : null;
   const cameras = data?.cameras ?? [];
   const readyCameras = isLive ? cameras.filter(c => c.health === "online" && c.privacy === "approved").length : 0;
@@ -176,6 +203,24 @@ export default function IntegrationCenter() {
         ? "Illustrative devices are in-memory examples only. No camera or Meta call is made."
         : "Camera preview requires an explicit click and an authenticated backend media session. No direct RTSP or camera passwords in browser."}</span>
     </div>
+
+    {isLive && readiness && nowMs - readiness.at <= 30_000
+      && <section className="integration-readiness" aria-label="Local camera prerequisites">
+        <strong>Local Edge camera prerequisites · metadata only</strong>
+        <p>This check does not connect to the camera or verify any live video frames.</p>
+        <div className="integration-readiness-items">
+          {([
+            ["Signed privacy approval", readiness.value.signed_privacy_approval_verified],
+            ["Private RTSP configuration", readiness.value.private_rtsp_configured],
+            ["PyAV decoder installed", readiness.value.pyav_decoder_installed],
+            ["OpenCV JPEG encoder installed", readiness.value.opencv_jpeg_encoder_installed],
+          ] as const).map(([name, ready]) =>
+            <span key={name}>{ready ? "✓" : "○"} {name}: {ready ? "READY" : "MISSING"}</span>)}
+        </div>
+        <small>{readiness.value.eligible_for_supervised_trial
+          ? "Configuration eligible for a supervised trial. Real camera frames NOT verified."
+          : "Complete missing prerequisites before a supervised camera trial."}</small>
+      </section>}
 
     {!preview && feedState === "unauthorized" && <form
       className="integration-operator-login"

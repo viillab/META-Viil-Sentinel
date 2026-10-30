@@ -60,6 +60,12 @@
 .integration-handoff code{color:#cee0fb;overflow-wrap:anywhere}
 .integration-handoff-status{font-size:10px;color:#accbf6;background:#243d5e;padding:11px;border-radius:8px;white-space:nowrap;font-weight:800}
 .integration-page button:focus-visible{outline:3px solid #3b82f6;outline-offset:2px}
+.integration-readiness{padding:15px 17px;margin:14px 0;background:#f6faff;border:1px solid #cadcf2;border-radius:12px}
+.integration-readiness strong{font-size:12px;color:#19446f}
+.integration-readiness p,.integration-readiness small{font-size:11px;color:#587896}
+.integration-readiness p{margin:5px 0 10px}
+.integration-readiness-items{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin-bottom:10px}
+.integration-readiness-items span{font-size:10px;color:#2d5379;font-weight:700}
 .integration-operator-login{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:18px;margin-top:16px;background:#fff;border:1px solid #d4e5fa;border-radius:13px}
 .integration-operator-login>div{flex:1 1 280px}
 .integration-operator-login strong{font-size:13px;color:#1b416d}
