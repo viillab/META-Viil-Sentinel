@@ -280,6 +280,31 @@ were not tested and real decoded frames remain at zero. The new API tests use
 synthetic JPEG bytes only. Member 2's proper authenticated multi-user Backend
 Media Session remains a separate integration workstream.
 
+### Private unsigned approval checklist in Dashboard
+
+Set `VIIL_BRIDGE_UNSIGNED_DRAFT_PATH` in the private Windows process
+environment to the **absolute path** of the existing unsigned draft
+(e.g. `$env:USERPROFILE\\VIIL-Private\\unsigned-privacy.json`).
+This is optional and does not enable a camera or require a signing key.
+The separately authenticated, loopback-only
+`GET /api/v1/operator/approval-checklist` reads the draft with the
+existing offline reviewer. It sends **only allowlisted missing field names**
+to the browser, never the draft's contents, document references, legal
+basis values, camera IP, file path or secret. If missing/invalid, the
+dashboard shows the draft as unavailable instead of leaking exception
+details. If structurally complete, it still displays an explicit notice
+that actual human site authorization, privacy review and genuine signed
+approval are outstanding. It never signs, changes an approval flag,
+connects to a camera, certifies compliance or grants access.
+
+This operator-only panel appears next to the camera readiness diagnostics
+and disappears if its backend is unavailable, authentication is revoked,
+or the report is stale. The only way to resolve a flagged issue is for
+the responsible human reviewer to complete and document that requirement
+**truthfully** outside the repository. Do not set approval flags to true
+just to make the UI green. Review the offline instructions at
+`docs/security/SIGNED_CAMERA_APPROVAL_OPERATOR_WORKFLOW.md`.
+
 ### 30 Oct: HTTP disconnect-safe decoder lifecycle
 
 The loopback `GET .../mjpeg` now wraps the authorized Edge generator in

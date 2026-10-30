@@ -411,6 +411,87 @@ def test_revoke_while_decoder_preflight_busy_releases_global_slot(
             assert start(client).status_code == 201
 
 
+def test_approval_checklist_requires_authenticated_local_operator(tmp_path, monkeypatch):
+    client, calls, _ = setup(tmp_path, monkeypatch)
+    with client:
+        assert client.get("/api/v1/operator/approval-checklist").status_code == 401
+        assert login(client).status_code == 200
+        assert client.get("/api/v1/operator/approval-checklist",
+                          headers={"Sec-Fetch-Site": "cross-site"}).status_code == 403
+        result = client.get("/api/v1/operator/approval-checklist")
+        assert result.status_code == 200
+        assert result.json() == {
+            "schema_version": "viil.local.unsigned_approval_checklist.v1",
+            "draft_available": False,
+            "draft_fields_structurally_complete": False,
+            "issues": [],
+            "genuine_site_permission_confirmed_by_tool": False,
+            "signed_policy_verified": False,
+            "camera_access_granted": False,
+        }
+    assert not calls
+
+
+def test_approval_checklist_only_reports_safe_field_names(tmp_path, monkeypatch):
+    import json
+
+    from sentinel_edge.local_media_bridge import BridgeConfig, create_bridge_app
+    from sentinel_edge.privacy_approval_operator import unsigned_template
+
+    _, _, policy = setup(tmp_path, monkeypatch)
+    draft = tmp_path / "operator-unsigned-draft.json"
+    specimen = unsigned_template(CAMERA)
+    specimen["notice_ref"] = "PRIVATE_OWNER_NOTICE_REFERENCE_DO_NOT_EXPOSE"
+    draft.write_text(json.dumps(specimen), encoding="utf-8")
+    app = create_bridge_app(
+        BridgeConfig(enabled=True, camera_id=CAMERA,
+                     source_env="VIIL_CAMERA_RTSP", approval_path=policy,
+                     unsigned_draft_path=draft, operator_password=SECRET),
+        cv2_loader=lambda: (_ for _ in ()).throw(
+            AssertionError("Read-only checklist must not open camera")
+        ),
+    )
+    with TestClient(app, base_url="http://127.0.0.1:8001",
+                    client=("127.0.0.1", 32112)) as client:
+        assert login(client).status_code == 200
+        result = client.get("/api/v1/operator/approval-checklist")
+        assert result.status_code == 200
+        payload = result.json()
+        assert payload["draft_available"] is True
+        assert payload["draft_fields_structurally_complete"] is False
+        assert "approval_ref" in payload["issues"]
+        assert "validity_window" in payload["issues"]
+        assert "site_authorization_confirmed" in payload["issues"]
+        assert "notices_confirmed" in payload["issues"]
+        assert payload["signed_policy_verified"] is False
+        assert payload["genuine_site_permission_confirmed_by_tool"] is False
+        assert payload["camera_access_granted"] is False
+        assert "PRIVATE_OWNER_NOTICE_REFERENCE" not in result.text
+        assert str(draft) not in result.text
+        assert SECRET not in result.text
+        assert "rtsp://" not in result.text
+
+
+def test_approval_checklist_malformed_draft_fails_closed(tmp_path, monkeypatch):
+    from sentinel_edge.local_media_bridge import BridgeConfig, create_bridge_app
+
+    _, _, policy = setup(tmp_path, monkeypatch)
+    draft = tmp_path / "broken-private-policy.json"
+    draft.write_text('{"notice_ref":"DO_NOT_EXPOSE","notice_ref":"duplicate"}',
+                     encoding="utf-8")
+    config = BridgeConfig(enabled=True, camera_id=CAMERA,
+                          source_env="VIIL_CAMERA_RTSP", approval_path=policy,
+                          operator_password=SECRET, unsigned_draft_path=draft)
+    with TestClient(create_bridge_app(config), base_url="http://127.0.0.1:8001",
+                    client=("127.0.0.1", 32112)) as client:
+        assert login(client).status_code == 200
+        response = client.get("/api/v1/operator/approval-checklist")
+        assert response.status_code == 200
+        assert response.json()["draft_available"] is False
+        assert response.json()["issues"] == []
+        assert "DO_NOT_EXPOSE" not in response.text
+
+
 def test_camera_readiness_requires_operator_and_is_metadata_only(tmp_path, monkeypatch):
     import sentinel_edge.local_media_bridge as local_bridge
     # CI need not install optional camera/video dependencies.
