@@ -182,11 +182,85 @@ async function main() {
     assert.ok((await evaluate("window.__viilFakeTrace.filter(e=>e==='track-stop-call').length")) >= 1,
       "Local StreamTrack.stop() must be called during manual shutdown");
     await evaluate("clearInterval(window.__viilFakeRenderTimer)");
+
+    // A second capture in the same mounted React component checks restart
+    // after Stop, and verifies browser visibility revocation fails closed.
+    assert.equal(await clickButton("Start laptop webcam demo"), true);
+    await until(() => evaluate("(() => { const v=document.querySelector(" +
+      "'[aria-label=\"Laptop webcam demo\"] video');" +
+      "return v?.srcObject?.getVideoTracks()?.[0]?.readyState === 'live'" +
+      " && document.querySelector('.laptop-webcam-status')?.innerText" +
+      ".includes('FRESH FRAMES OBSERVED'); })()"), "restarted fake camera");
+    await evaluate("(() => {" +
+      "Object.defineProperty(document,'visibilityState'," +
+      "{configurable:true,get:()=> 'hidden'});" +
+      "document.dispatchEvent(new Event('visibilitychange'));" +
+      "delete document.visibilityState;return true;})()");
+    const hidden = await until(() => evaluate("(() => {" +
+      "const v=document.querySelector('[aria-label=\"Laptop webcam demo\"] video');" +
+      "const report=document.querySelector('[aria-label=\"Local webcam technical smoke report\"]');" +
+      "return v?.srcObject===null && window.__viilFakeTrack?.readyState==='ended'" +
+      " && report?.innerText.includes('hidden');})()"), "visibility cleanup");
+    assert.equal(hidden, true);
+    await evaluate("clearInterval(window.__viilFakeRenderTimer)");
+
+    // Stop drawing but keep the synthetic MediaStream track live. The
+    // existing watchdog must halt a frozen preview without human action.
+    assert.equal(await clickButton("Start laptop webcam demo"), true);
+    await until(() => evaluate("(() => {const v=document.querySelector(" +
+      "'[aria-label=\"Laptop webcam demo\"] video');" +
+      "return v?.srcObject?.getVideoTracks()?.[0]?.readyState==='live'" +
+      " && document.querySelector('.laptop-webcam-status')?.innerText" +
+      ".includes('FRESH FRAMES OBSERVED');})()"), "third synthetic session");
+    await evaluate("clearInterval(window.__viilFakeRenderTimer)");
+    const stall = await until(() => evaluate("(() => {" +
+      "const v=document.querySelector('[aria-label=\"Laptop webcam demo\"] video');" +
+      "const report=document.querySelector('[aria-label=\"Local webcam technical smoke report\"]');" +
+      "return v?.srcObject===null && window.__viilFakeTrack?.readyState==='ended'" +
+      " && report?.innerText.includes('frame stalled');})()"),
+      "frozen synthetic frame fail-closed", 11_000);
+    assert.equal(stall, true);
+
+    // A permission prompt resolving after the user clicks Stop must never
+    // reopen a preview or leak the late synthetic MediaStream.
+    await evaluate("(() => {" +
+      "const original=navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);" +
+      "window.__viilPermissionResolve=null;" +
+      "navigator.mediaDevices.getUserMedia=()=> new Promise(resolve=>{" +
+      "window.__viilPermissionResolve=()=>resolve(original({audio:false}));" +
+      "});return true;})()");
+    assert.equal(await clickButton("Start laptop webcam demo"), true);
+    await until(() => evaluate("typeof window.__viilPermissionResolve==='function'"),
+      "pending synthetic permission");
+    assert.equal(await clickButton("Stop webcam"), true);
+    assert.equal(await evaluate("window.__viilPermissionResolve();true"), true);
+    const late = await until(() => evaluate("(() => {" +
+      "const v=document.querySelector('[aria-label=\"Laptop webcam demo\"] video');" +
+      "return window.__viilFakeTrack?.readyState==='ended' && v?.srcObject===null;})()"),
+      "late camera permission cleanup");
+    assert.equal(late, true);
+    await evaluate("clearInterval(window.__viilFakeRenderTimer)");
+
+    // Browser permission denial must show a redacted status, never native
+    // error details (paths, camera labels) or any kind of retry.
+    await evaluate("(() => {" +
+      "navigator.mediaDevices.getUserMedia=async ()=> {" +
+      "throw new DOMException('private device information', 'NotAllowedError');" +
+      "};return true;})()");
+    assert.equal(await clickButton("Start laptop webcam demo"), true);
+    const denied = await until(() => evaluate("(() => {" +
+      "const root=document.querySelector('[aria-label=\"Laptop webcam demo\"]');" +
+      "return root.querySelector('[role=\"alert\"]')?.innerText || '';})()"),
+      "denied synthetic permission");
+    assert.match(denied, /permission denied/i);
+    assert.doesNotMatch(denied, /private device information/i);
+
     assert.equal(cdp.networkMethods.filter(m => !["GET", "OPTIONS"].includes(m)).length,
       0, "Browser must not upload frames or POST demo incidents");
     console.log("FAKE WEBCAM BROWSER PASS: rendered=" + snapshot.count +
-      "; stop=released; local report=shown; inference=none; POST=0; " +
-      "real hardware=NOT tested");
+      "; manual/hidden/stall/late-permission cleanup=verified; " +
+      "permission-denied=redacted; local report=shown; " +
+      "inference=none; POST=0; real hardware=NOT tested");
   } finally {
     cdp?.close();
     chrome?.kill();
