@@ -48,9 +48,10 @@ verified by this offline test.
 The Dashboard also has a same-origin `connect-src` CSP that blocks
 off-device MediaPipe SDK logging attempts. A dedicated **local-only**
 test can load the existing private task model, run the actual MediaPipe
-CPU inference over a synthetic Canvas stream, verify local latency
-measurement and track/model release, and check that external requests
-are CSP-blocked:
+CPU inference over a synthetic Canvas stream (at least 16 analyzed
+frames), print locally measured processed FPS and inference p50/p95,
+exercise model reload, frozen-frame and hidden-tab teardown, and check
+that all external SDK requests are blocked by CSP:
 
 ```powershell
 cd D:\VIIL-Sentinel\apps\dashboard

@@ -185,9 +185,11 @@ async function main() {
       "document.querySelector('meta[http-equiv=Content-Security-Policy]')?.content");
     assert.match(policy, /connect-src 'self'/);
     assert.doesNotMatch(policy, /https:\/\//);
-    if (poseModel) {
-      // CDP injects a real local File through the browser's file input.
-      // No model bytes go through the test script, logs, app API or network.
+    async function loadPrivatePoseModel() {
+      // A CDP file-input selection is local to this isolated browser.
+      // Repeating it after Stop confirms that the old WebAssembly engine
+      // closed and the same private task can load cleanly for a new session.
+      assert.ok(poseModel, "model smoke requires a private local task");
       const documentNode = await cdp.send("DOM.getDocument");
       const input = await cdp.send("DOM.querySelector", {
         nodeId: documentNode.root.nodeId, selector: "#viil-local-pose-model",
@@ -200,6 +202,7 @@ async function main() {
         "document.body.innerText.includes('Pose model loaded into browser memory')",
       ), "actual MediaPipe PoseLandmarker load", 35_000);
     }
+    if (poseModel) await loadPrivatePoseModel();
     // Replace only this isolated test page's getUserMedia with a moving
     // synthetic canvas stream. The real camera permission is never requested.
     await evaluate("(() => { window.__viilFakeTrace=[];" +
@@ -226,11 +229,21 @@ async function main() {
           "const match=label.match(/Frames analyzed locally:\\s*(\\d+)/);" +
           "const status=root?.querySelector('.laptop-webcam-status')?.innerText || '';" +
           "return { analyzed:Number(match?.[1]||0), label, status };})()");
-        return data?.analyzed >= 4 && data?.status.includes("LOCAL HEURISTIC")
+        return data?.analyzed >= 16 && data?.status.includes("LOCAL HEURISTIC")
           ? data : null;
       }, "real MediaPipe local inference on synthetic video", 30_000);
-      assert.match(stats.label, /Inference p50\/p95:\s*\d+(?:\.\d+)?\/\d+(?:\.\d+)? ms/);
+      const latency = stats.label.match(/Inference p50\/p95:\s*(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?) ms/);
+      assert.ok(latency, "Latency p50 and p95 must be visible numeric measurements");
+      const p50Ms = Number(latency[1]);
+      const p95Ms = Number(latency[2]);
+      assert.ok(Number.isFinite(p50Ms) && p50Ms >= 0);
+      assert.ok(Number.isFinite(p95Ms) && p95Ms >= p50Ms);
+      const rate = stats.label.match(/Local measured rate \(rolling 4s\):\s*(\d+(?:\.\d+)?) processed FPS/);
+      assert.ok(rate, "A measured processed FPS value is required");
+      const fps = Number(rate[1]);
+      assert.ok(Number.isFinite(fps) && fps > 0 && fps <= 5.5);
       assert.match(stats.label, /Session-only candidate count: 0/);
+      assert.match(stats.label, /Reliable single-person pose: 0%/);
       assert.equal(await clickButton("Stop webcam"), true);
       const closed = await until(() => evaluate("(() => {" +
         "const v=document.querySelector('[aria-label=\\\"Laptop webcam demo\\\"] video');" +
@@ -243,7 +256,52 @@ async function main() {
       "MediaPipe and synthetic stream release");
       assert.match(closed.report, /OPERATOR REVIEW REQUIRED/);
       assert.match(closed.report, /Unconfirmed candidates:\s*0/);
+      assert.match(closed.report, /Last rolling 4s inference p95:\s*\d+(?:\.\d+)? ms/);
       assert.match(closed.status, /Pose AI: NOT LOADED/);
+
+      // Real MediaPipe engine reload + frozen decoded-frame watchdog.
+      // Stop drawing but keep a live canvas track: no new video frame may
+      // be analyzed, and after 3.5s the engine and stream must be closed.
+      await evaluate("clearInterval(window.__viilFakeRenderTimer)");
+      await loadPrivatePoseModel();
+      assert.equal(await clickButton("Start laptop webcam demo"), true);
+      await until(() => evaluate("(() => {" +
+        "const text=document.querySelector('.laptop-pose-feedback')?.innerText||'';" +
+        "return /Frames analyzed locally:\\s*[2-9]/.test(text);})()"),
+        "reloaded real MediaPipe model inference", 25_000);
+      await evaluate("clearInterval(window.__viilFakeRenderTimer)");
+      const stalled = await until(() => evaluate("(() => {" +
+        "const v=document.querySelector('[aria-label=\\\"Laptop webcam demo\\\"] video');" +
+        "const r=document.querySelector('[aria-label=\\\"Local webcam technical smoke report\\\"]')?.innerText||'';" +
+        "const status=document.querySelector('.laptop-webcam-status')?.innerText||'';" +
+        "return v?.srcObject===null && window.__viilFakeTrack?.readyState==='ended' " +
+        "&& r.includes('frame stalled') && status.includes('Pose AI: NOT LOADED');})()"),
+        "real model frozen-frame engine and track shutdown", 12_000);
+      assert.equal(stalled, true);
+
+      // Reload a third CPU engine. Hiding the page must release both model
+      // and stream, never leaving a background inference loop running.
+      await loadPrivatePoseModel();
+      assert.equal(await clickButton("Start laptop webcam demo"), true);
+      await until(() => evaluate("(() => {" +
+        "const text=document.querySelector('.laptop-pose-feedback')?.innerText||'';" +
+        "return /Frames analyzed locally:\\s*[1-9]/.test(text);})()"),
+        "restarted pose inference before visibility revoke", 25_000);
+      await evaluate("(() => {" +
+        "Object.defineProperty(document,'visibilityState'," +
+        "{configurable:true,get:()=> 'hidden'});" +
+        "document.dispatchEvent(new Event('visibilitychange'));" +
+        "delete document.visibilityState;return true;})()");
+      const hidden = await until(() => evaluate("(() => {" +
+        "const v=document.querySelector('[aria-label=\\\"Laptop webcam demo\\\"] video');" +
+        "const r=document.querySelector('[aria-label=\\\"Local webcam technical smoke report\\\"]')?.innerText||'';" +
+        "const status=document.querySelector('.laptop-webcam-status')?.innerText||'';" +
+        "return v?.srcObject===null && window.__viilFakeTrack?.readyState==='ended' " +
+        "&& r.includes('hidden') && status.includes('Pose AI: NOT LOADED');})()"),
+        "real model hidden-tab engine and track shutdown", 12_000);
+      assert.equal(hidden, true);
+      await evaluate("clearInterval(window.__viilFakeRenderTimer)");
+
       // MediaPipe SDK may TRY to POST usage telemetry to Google ODML.
       // The Dashboard's connect-src CSP must block that attempt before
       // any response; no external request is permitted to complete.
@@ -262,10 +320,13 @@ async function main() {
         "document.querySelector('meta[http-equiv=Content-Security-Policy]')?.content"),
         /connect-src 'self'/);
       await evaluate("clearInterval(window.__viilFakeRenderTimer)");
-      console.log("LOCAL MEDIAPIPE BROWSER PASS: actual model loaded; " +
-        "synthetic frames analyzed=" + stats.analyzed +
-        "; reported latency=yes; candidates=0; stopped/released=yes; " +
-        "external-completed=0; synthetic camera; fall accuracy=NOT tested");
+      console.log("LOCAL MEDIAPIPE BROWSER PASS: real CPU model; synthetic " +
+        "frames analyzed=" + stats.analyzed +
+        "; processed_fps=" + fps.toFixed(1) +
+        "; inference_p50_ms=" + p50Ms.toFixed(1) +
+        "; inference_p95_ms=" + p95Ms.toFixed(1) +
+        "; manual/frozen/hidden model teardown=verified; candidates=0; " +
+        "external-completed=0; real camera/fall accuracy=NOT tested");
       return;
     }
     let lastSnapshot = null;
