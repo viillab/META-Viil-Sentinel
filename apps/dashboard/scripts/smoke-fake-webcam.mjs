@@ -219,7 +219,8 @@ async function main() {
       "for(const t of s.getTracks()) {const original=t.stop.bind(t);" +
       "t.stop=()=>{window.__viilFakeTrace.push('track-stop-call');return original();};" +
       "t.addEventListener('ended',()=>window.__viilFakeTrace.push('track-ended'));}" +
-      "return s;};return true;})()");
+      "return s;};window.__viilFakeCameraGetter=navigator.mediaDevices.getUserMedia;" +
+      "return true;})()");
     assert.equal(await clickButton("Start laptop webcam demo"), true);
     if (poseModel) {
       const stats = await until(async () => {
@@ -437,6 +438,53 @@ async function main() {
     assert.match(denied, /permission denied/i);
     assert.doesNotMatch(denied, /private device information/i);
 
+    // Privacy regression: a browser can grant a stream while video.play()
+    // never settles. Capture the 60-second timeout registered by React
+    // BEFORE the unresolved play call, trigger that deadline early, and
+    // verify the stream stops with an operator-review report. No camera
+    // permission or 60-second wall-clock wait is required.
+    await evaluate("(() => {" +
+      "navigator.mediaDevices.getUserMedia=window.__viilFakeCameraGetter;" +
+      "const originalTimeout=window.setTimeout.bind(window);" +
+      "window.__viilDeadlineCount=0;window.__viilDeadlineCallback=null;" +
+      "window.setTimeout=(callback,delay,...args)=>{" +
+      "if(delay===60000){window.__viilDeadlineCount++;" +
+      "window.__viilDeadlineCallback=()=>callback(...args);}" +
+      "return originalTimeout(callback,delay,...args);};" +
+      "window.__viilPlayEntered=false;window.__viilDeadlineBeforePlay=false;" +
+      "const originalPlay=HTMLMediaElement.prototype.play;" +
+      "window.__viilOriginalPlay=originalPlay;" +
+      "HTMLMediaElement.prototype.play=function(){" +
+      "window.__viilPlayEntered=true;" +
+      "window.__viilDeadlineBeforePlay=Boolean(window.__viilDeadlineCallback);" +
+      "return new Promise(()=>{});};return true;})()");
+    assert.equal(await clickButton("Start laptop webcam demo"), true);
+    await until(() => evaluate("window.__viilPlayEntered===true"),
+      "synthetic video.play pending");
+    assert.equal(await evaluate("window.__viilDeadlineBeforePlay"), true,
+      "60-second privacy cap must be armed before video.play starts");
+    assert.equal(await evaluate("window.__viilDeadlineCount"), 1);
+    assert.equal(await evaluate("window.__viilDeadlineCallback();true"), true);
+    let lastDeadlineState = null;
+    const deadline = await until(async () => {
+      const state = await evaluate("(() => {" +
+        "const video=document.querySelector('[aria-label=\\\"Laptop webcam demo\\\"] video');" +
+        "const report=document.querySelector('[aria-label=\\\"Local webcam technical smoke report\\\"]')?.innerText||'';" +
+        "const status=document.querySelector('.laptop-webcam-status')?.innerText||'';" +
+        "return {released:video?.srcObject===null," +
+        "track:window.__viilFakeTrack?.readyState,report,status};})()");
+      lastDeadlineState = state;
+      return state?.released && state?.track === "ended"
+        && /Stop reason:\s*timeout/i.test(state.report)
+        && /Video:\s*OFF/.test(state.status) ? state : null;
+    }, "absolute camera deadline while playback unresolved").catch(error => {
+      throw new Error(error.message + " | synthetic state: " +
+        JSON.stringify(lastDeadlineState));
+    });
+    assert.equal(deadline.track, "ended");
+    await evaluate("clearInterval(window.__viilFakeRenderTimer);" +
+      "HTMLMediaElement.prototype.play=window.__viilOriginalPlay;true");
+
     // Same headless browser now exercises the actual Lab's production
     // browser heuristic, entirely separately from Python Edge and MediaPipe.
     // No camera permission, backend, Meta or alert may be invoked here.
@@ -469,6 +517,7 @@ async function main() {
       0, "Browser must not upload frames or POST demo incidents");
     console.log("FAKE WEBCAM + SYNTHETIC HEURISTIC BROWSER PASS: rendered=" + snapshot.count +
       "; manual/hidden/stall/late-permission cleanup=verified; " +
+      "absolute-startup-timeout=verified; " +
       "permission-denied=redacted; local report=shown; " +
       "inference=none; POST=0; real hardware=NOT tested");
   } finally {

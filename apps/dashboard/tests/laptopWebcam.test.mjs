@@ -101,6 +101,19 @@ test("webcam demo UI has no transport or recording implementation", () => {
   assert.match(source, /Camera playback timed out after 8 seconds/);
   assert.match(source, /stop\("playback_error"\)/);
   assert.match(source, /LAPTOP_WEBCAM_DEMO_MAX_MS/);
+  // The 60-second privacy deadline begins at stream acceptance, before
+  // any potentially unresolved browser video.play() promise.
+  const assignedStream = source.indexOf("streamRef.current = stream;");
+  const acceptedAt = source.indexOf("const streamAcceptedAt = Date.now();");
+  const armedDeadline = source.indexOf("stopTimer.current = window.setTimeout(");
+  const playback = source.indexOf("waitForLocalWebcamPlayback(video.play())");
+  assert.ok(assignedStream >= 0 && acceptedAt > assignedStream
+    && armedDeadline > acceptedAt && playback > armedDeadline);
+  assert.equal(source.indexOf("stopTimer.current = window.setTimeout(", armedDeadline + 1), -1);
+  assert.match(source, /setStartedAt\(streamAcceptedAt\)/);
+  assert.match(source, /sessionStartedMonoMs\.current = performance\.now\(\)/);
+  assert.match(source, /if \(generation\.current !== requestId\) return;/);
+  assert.match(source, /stop\("timeout"\)/);
   assert.match(source, /LOCAL HEURISTIC/);
   assert.match(source, /poseFrames > 0/);
   assert.match(source, /poseStreamStalled/);
