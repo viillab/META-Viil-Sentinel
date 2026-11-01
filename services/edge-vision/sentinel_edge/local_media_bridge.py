@@ -75,6 +75,41 @@ class SynchronizedMediaParts:
             self._source.close()
 
 
+class PreflightMediaParts:
+    """Own an already-started native generator even before ASGI body iteration.
+
+    Closing an *unstarted generator wrapper* cannot execute its finally block.
+    After the first JPEG has been decoded, ownership must live in a concrete
+    object whose close() always reaches the original decoder.
+    """
+
+    def __init__(self, first: bytes, source: Iterator[bytes], *,
+                 authorized: Callable[[], bool]):
+        self._first = first
+        self._source = source
+        self._authorized = authorized
+        self._first_sent = False
+        self._closed = False
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self._closed:
+            raise StopIteration
+        if not self._first_sent:
+            self._first_sent = True
+            if self._authorized() is not True:
+                raise StopIteration
+            return self._first
+        return next(self._source)
+
+    def close(self) -> None:
+        if not self._closed:
+            self._closed = True
+            self._source.close()
+
+
 class RevocableMediaResponse(StreamingResponse):
     """Always revoke and close the native decoder on HTTP disconnect/error.
 
@@ -98,7 +133,15 @@ class RevocableMediaResponse(StreamingResponse):
             # A disconnect cancels the response task. Shield native release
             # and wait for any in-flight worker-thread read before closing.
             with anyio.CancelScope(shield=True):
-                await anyio.to_thread.run_sync(self._managed_parts.close)
+                try:
+                    await anyio.to_thread.run_sync(self._managed_parts.close)
+                except Exception:
+                    # A native decoder close exception can contain a
+                    # credentialed RTSP URL. Keep the global slot reserved
+                    # rather than claiming its native handle was released.
+                    raise RuntimeError(
+                        "Protected media cleanup unavailable (redacted)"
+                    ) from None
                 self._released()
 
 
@@ -471,6 +514,7 @@ def create_bridge_app(
             streaming.add(sid)
 
         def parts():
+            source = None
             try:
                 # cv2 is optional until a genuinely authorized camera
                 # request has reached this route.
@@ -478,21 +522,37 @@ def create_bridge_app(
                     cv2 = cv2_loader()
                 else:
                     import cv2
-                yield from media_factory(
+                source = iter(media_factory(
                     cv2, source_env=cfg.source_env, source_id=camera_id,
                     privacy_approval=cfg.approval_path,
                     viewer_check=lambda: preview_authorized(sid, token, camera_id),
                     duration_seconds=PREVIEW_SECONDS,
-                )
+                ))
+                while True:
+                    try:
+                        part = next(source)
+                    except StopIteration:
+                        return
+                    except Exception:
+                        # A native read error can include RTSP credentials.
+                        return
+                    yield part
             except Exception:
-                # Native exceptions can embed camera credentials/RTSP URLs.
-                # Fail with no response body, never echo them to a browser.
+                # Import/opener errors may include private camera details.
                 return
             finally:
-                with guard:
-                    previews.pop(sid, None)
-                    edge_first_jpeg_verified.discard(sid)
-                    streaming.discard(sid)
+                try:
+                    if source is not None:
+                        # Close after even a failed preflight, cancelled ASGI
+                        # send or generator return. Do NOT suppress failures
+                        # here: unresolved cleanup must retain camera capacity.
+                        source.close()
+                finally:
+                    with guard:
+                        previews.pop(sid, None)
+                        edge_first_jpeg_verified.discard(sid)
+                        # Release the streaming slot only after a confirmed
+                        # close, outside this generator's cleanup block.
 
         # Synchronous endpoint thread: actually open/decode the camera's
         # 12-frame privacy-gated preflight BEFORE committing HTTP status 200.
@@ -505,7 +565,15 @@ def create_bridge_app(
                     or not verify_policy(cfg)):
                 raise ValueError("Camera media unavailable")
         except Exception:
-            iterator.close()
+            try:
+                iterator.close()
+            except Exception:
+                # Native cleanup is uncertain. Never leak an exception that
+                # might include RTSP credentials or permit a second decoder.
+                pass
+            else:
+                with guard:
+                    streaming.discard(sid)
             raise HTTPException(503, "Protected camera frames unavailable") from None
 
         with guard:
@@ -513,16 +581,6 @@ def create_bridge_app(
             # only 12/12 decoded frames followed by a valid first JPEG can.
             if sid in previews and sid in streaming:
                 edge_first_jpeg_verified.add(sid)
-
-        def ready_parts():
-            try:
-                # The session might be revoked between the preflight and
-                # browser consumption. Recheck BEFORE yielding first frame.
-                if preview_authorized(sid, token, camera_id) and verify_policy(cfg):
-                    yield first
-                    yield from iterator
-            finally:
-                iterator.close()
 
         def revoke():
             with guard:
@@ -534,7 +592,13 @@ def create_bridge_app(
                 streaming.discard(sid)
 
         return RevocableMediaResponse(
-            ready_parts(), revoke=revoke, released=released,
+            PreflightMediaParts(
+                first, iterator,
+                authorized=lambda: (
+                    preview_authorized(sid, token, camera_id) and verify_policy(cfg)
+                ),
+            ),
+            revoke=revoke, released=released,
         )
 
     @app.delete("/api/v1/cameras/{camera_id}/preview-sessions/{sid}",

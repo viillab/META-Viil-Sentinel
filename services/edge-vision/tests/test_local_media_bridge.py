@@ -337,6 +337,30 @@ def test_native_decoder_exception_redacted_and_503(tmp_path, monkeypatch):
         assert start(client).status_code == 201
 
 
+def test_failed_native_preflight_close_is_redacted_and_fail_closed(
+    tmp_path, monkeypatch,
+):
+    """A native close failure may leave an active handle: never reopen it."""
+    def unsafe_source(_cv2, **_kwargs):
+        try:
+            yield b"invalid synthetic MJPEG frame"
+        finally:
+            raise RuntimeError("rtsp://private:TOP-SECRET@192.168.1.2/live")
+
+    client, _, _ = setup(tmp_path, monkeypatch, fake=unsafe_source)
+    with client:
+        assert login(client).status_code == 200
+        sid = start(client).json()["session_id"]
+        result = client.get(f"{POST_PATH}/{sid}/mjpeg")
+        assert result.status_code == 503
+        assert "TOP-SECRET" not in result.text
+        assert "192.168" not in result.text
+        assert "no-store" in result.headers["cache-control"]
+        # Native resource disposal is not proven. A new decoder would
+        # exceed the one-handle privacy and memory budget.
+        assert start(client).status_code == 409
+
+
 @pytest.mark.parametrize("first", [
     b"not a jpeg",
     b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: 7\r\n\r\n\xff\xd8FAKE\xff\xd9\r\n",

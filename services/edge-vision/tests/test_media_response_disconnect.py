@@ -6,7 +6,7 @@ from threading import Event
 import pytest
 
 from sentinel_edge.local_media_bridge import (
-    RevocableMediaResponse, SynchronizedMediaParts,
+    PreflightMediaParts, RevocableMediaResponse, SynchronizedMediaParts,
 )
 
 
@@ -61,6 +61,101 @@ def test_network_disconnect_releases_synthetic_decoder(failure_point):
     assert state["released"] == 1
     assert state["closed"] == (0 if failure_point == "headers" else 1)
     assert state["starts"] == (0 if failure_point == "headers" else 1)
+
+
+def test_preflighted_decoder_closed_when_asgi_headers_fail_before_first_body():
+    state = {"preflighted": 0, "closed": 0, "revoked": 0, "released": 0}
+
+    def camera():
+        try:
+            state["preflighted"] += 1
+            yield b"synthetic-first-jpeg"
+            yield b"should-not-be-observed"
+        finally:
+            state["closed"] += 1
+
+    native = camera()
+    first = next(native)  # 12/12 preflight and first JPEG already completed
+    parts = PreflightMediaParts(first, native, authorized=lambda: True)
+    response = RevocableMediaResponse(
+        parts,
+        revoke=lambda: state.__setitem__("revoked", state["revoked"] + 1),
+        released=lambda: state.__setitem__("released", state["released"] + 1),
+    )
+
+    async def send(message):
+        if message["type"] == "http.response.start":
+            raise OSError("simulated browser disconnect before MJPEG body")
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def exercise():
+        with pytest.raises(Exception) as error:
+            await response(_scope(), receive, send)
+        # Starlette ASGI 2.4 translates network OSError to ClientDisconnect.
+        assert type(error.value).__name__ in ("ClientDisconnect", "OSError")
+
+    anyio.run(exercise)
+    assert state == {
+        "preflighted": 1, "closed": 1, "revoked": 1, "released": 1,
+    }
+    with pytest.raises(StopIteration):
+        next(parts)
+
+
+def test_preflighted_decoder_not_sent_if_viewer_revoked_after_preflight():
+    state = {"closed": 0}
+
+    def native():
+        try:
+            yield b"prepared-jpeg"
+        finally:
+            state["closed"] += 1
+
+    source = native()
+    first = next(source)
+    parts = PreflightMediaParts(first, source, authorized=lambda: False)
+    with pytest.raises(StopIteration):
+        next(parts)
+    parts.close()
+    assert state["closed"] == 1
+
+
+def test_native_close_exception_redacted_and_global_capacity_not_released():
+    state = {"revoked": 0, "released": 0}
+
+    class FailingDecoder:
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            return b"synthetic"
+
+        def close(self):
+            raise RuntimeError("rtsp://private:TOP-SECRET@192.168.1.2/live")
+
+    response = RevocableMediaResponse(
+        FailingDecoder(),
+        revoke=lambda: state.__setitem__("revoked", state["revoked"] + 1),
+        released=lambda: state.__setitem__("released", state["released"] + 1),
+    )
+
+    async def send(message):
+        if message["type"] == "http.response.start":
+            raise OSError("synthetic send failure")
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def exercise():
+        with pytest.raises(RuntimeError) as raised:
+            await response(_scope(), receive, send)
+        assert str(raised.value) == "Protected media cleanup unavailable (redacted)"
+        assert raised.value.__cause__ is None
+
+    anyio.run(exercise)
+    assert state == {"revoked": 1, "released": 0}
 
 
 def test_synchronized_close_joins_inflight_worker_before_release():

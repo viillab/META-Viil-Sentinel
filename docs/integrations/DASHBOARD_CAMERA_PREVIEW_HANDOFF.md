@@ -80,6 +80,35 @@ Security constraints:
 5. Verify manual Stop, idle tab, expired privacy, denied 401/403, stream
    errors, frame budget, no raw recording and redacted errors.
 
+## 1 Nov 2026 — preflighted decoder ownership across early browser disconnects
+
+A successful native 12-frame preflight and first JPEG happens **before**
+the local HTTP bridge sends response headers. If a client disconnects
+while headers are being sent, the response body iterator might never
+start. Python's `close()` on an *unstarted wrapper generator* does not
+run its `finally` block, leaving an already-open native camera iterator
+unclosed. Member 1's bridge now wraps the preflighted source in an
+explicit closable `PreflightMediaParts` iterator. Its `close()` owns and
+closes the **already-started underlying media generator**, even when no
+MJPEG body chunk has been requested.
+
+The response still revokes operator access first and uses its synchronized
+AnyIO shielded cleanup so an in-flight native decoder read cannot race
+with `close()`. The single-decoder capacity slot is freed **only after
+verified cleanup**. Preflight decoder close failures return a generic
+`503 Protected camera frames unavailable` without leaking camera
+credentials; stream teardown failures report only
+`Protected media cleanup unavailable (redacted)`. When native cleanup
+fails, the capacity slot intentionally stays occupied until the **local
+bridge process is safely restarted** by an authorized operator; it is
+unsafe to presume the decoder released its resources.
+
+Synthetic ASGI and FastAPI regression tests cover disconnect before
+HTTP headers/body, revocation before the first delivered frame,
+in-flight close coordination, redacted cleanup failures, and
+fail-closed decoder slot capacity. No actual Hikvision images or
+signed site approval were accessed during these tests.
+
 ## Member 1: bounded in-process JPEG media adapter (new)
 
 `services/edge-vision/sentinel_edge/edge_mjpeg.py` now exports
