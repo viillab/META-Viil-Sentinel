@@ -79,6 +79,17 @@
 .laptop-webcam-demo{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);align-items:stretch;gap:20px;padding:21px;margin:18px 0 22px;border-radius:16px;border:1px solid #bdd8ef;background:linear-gradient(125deg,#f5faff,#eaf4ff)}
 .laptop-webcam-info h2{margin:10px 0 5px;font-size:20px;letter-spacing:-.025em;color:#1b406b}
 .laptop-webcam-info p{font-size:12px;line-height:1.7;color:#517190;max-width:540px;margin:6px 0 15px}
+.laptop-pose-controls{display:flex;flex-direction:column;gap:8px;border:1px solid #ccdeeb;background:#fff;border-radius:10px;padding:12px;margin:10px 0}
+.laptop-pose-controls label{font-size:11px;font-weight:800;color:#315579}
+.laptop-pose-controls input{font-size:11px;max-width:100%;color:#345b7f}
+.laptop-pose-controls small{font-size:10px;line-height:1.5;color:#69849e;overflow-wrap:anywhere}
+.laptop-pose-controls strong{font-size:10px;color:#197459}
+.laptop-pose-controls [role=alert]{color:#b34444}
+.laptop-pose-feedback{border:1px solid #b7d0ec;background:#f8fcff;border-radius:9px;padding:10px 12px;display:flex;flex-direction:column;gap:5px;font-size:11px;color:#315b7c}
+.laptop-pose-feedback strong{color:#94571d}
+.laptop-pose-feedback small{font-size:10px;line-height:1.5}
+.laptop-pose-overlay{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none;z-index:1}
+.laptop-webcam-video-box .camera-preview-watermark{z-index:2}
 .laptop-webcam-status{display:flex;flex-wrap:wrap;gap:8px 13px;padding:11px 0;font-size:10px;font-weight:700;color:#355879}
 .laptop-webcam-status strong{color:#224b78}
 .laptop-webcam-status span{padding:5px 8px;border-radius:5px;background:#fff;color:#916a36}

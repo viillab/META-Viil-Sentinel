@@ -229,7 +229,7 @@ export default function IntegrationCenter() {
             : feedState === "loading" ? "CHECKING LOCAL BACKEND" : "INTEGRATION ENDPOINT NOT CONNECTED"}</strong>
       <span>{preview
         ? "Illustrative devices are in-memory examples only. No camera or Meta call is made."
-        : "Camera preview requires an explicit click and an authenticated backend media session. No direct RTSP or camera passwords in browser."}</span>
+        : "Protected RTSP cameras require backend authorization. The local-only laptop webcam and optional Pose demo are available below without Member 2."}</span>
     </div>
 
     {isLive && readiness && nowMs - readiness.at <= 30_000
