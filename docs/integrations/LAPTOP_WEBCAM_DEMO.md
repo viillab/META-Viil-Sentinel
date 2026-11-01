@@ -144,10 +144,17 @@ npm run smoke:fake-webcam -- --pose-model D:\VIIL-Sentinel\models\pose_landmarke
 ```
 
 This runs the actual local MediaPipe CPU PoseLandmarker against moving
-canvas pixels. It requires at least 4 inference results, validates
-reported latency, requires zero candidates on this shape-only fixture,
-releases the track and model after Stop, and checks that any attempted
-off-device SDK logging is blocked by CSP (zero external responses).
+canvas pixels. It requires at least **16 analyzed frames**, prints the
+observed processed FPS and inference p50/p95 (actual local measurements,
+not a performance guarantee), and checks zero candidates and 0% reliable
+human-pose coverage on the abstract canvas fixture. It then verifies:
+manual Stop and local model release, **reloading the same private model**,
+fresh inference after reload, **frozen-frame fail-closed Stop** after 3.5s,
+a third model reload, and **hidden-tab cleanup**. Each Stop must detach
+the video, end the MediaStreamTrack, clear the operator-visible model
+status and preserve a strictly local, unconfirmed session report. It also
+checks that all off-device SDK logging attempts are CSP-blocked (zero
+external responses). The tests never create a real patient/fall event.
 The private `.task` bytes are not copied to Git or uploaded. The local
 file path may appear in the shell command log; the model contents are not
 printed. Selection occurs only inside the isolated test browser.
