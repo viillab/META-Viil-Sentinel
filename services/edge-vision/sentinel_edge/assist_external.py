@@ -19,6 +19,7 @@ from sentinel_edge.temporal_pose_association import (
     ASSOCIATION_CATEGORIES, MULTIPLE_CATEGORIES,
 )
 from sentinel_edge.public_dataset_ingest import _github_blob_sha1
+from sentinel_edge.pinned_https_download import fetch_pinned_https
 from sentinel_edge.temporal_training import pool_temporal_window
 from sentinel_edge.video_benchmark import collect_video_frames
 from sentinel_edge.window_export import NearestFrameSampler, _private_output_path
@@ -66,25 +67,9 @@ def source_url(group: str, name: str) -> str:
 
 
 def _download(url: str, size: int) -> bytes:
-    # _fetch_binary() in the earlier downloader is hard-pinned to GMDCSA;
-    # fetch ASSIST only from the immutable SHA + fixed names above.
-    from urllib.request import Request, urlopen
-    if not url.startswith(SOURCE_URL + "/videos/"):
-        raise ValueError("Non-pinned external source")
-    with urlopen(Request(url, headers={"User-Agent": "VIIL-Sentinel-research/1.0"}),
-                 timeout=45) as res:
-        if res.status != 200:
-            raise ValueError("Source HTTP response not successful")
-        chunks, length = [], 0
-        while True:
-            chunk = res.read(min(65536, size + 1 - length))
-            if not chunk:
-                break
-            length += len(chunk)
-            if length > size:
-                raise ValueError("External video exceeds pinned length")
-            chunks.append(chunk)
-    return b"".join(chunks)
+    # Only immutable public Git raw video URLs from the frozen catalog.
+    urls = frozenset(source_url(group, name) for group, name, *_ in CATALOG)
+    return fetch_pinned_https(url, allowed_urls=urls, byte_limit=size)
 
 
 def verify_download(root: Path, *, fetcher=None, metadata_reader=_video_metadata) -> dict:

@@ -7,7 +7,7 @@ name = "viil-sentinel-edge"
 version = "0.1.0"
 description = "Prototype-only temporal pose fall-candidate event extraction"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = ["defusedxml>=0.7.1,<0.8"]
 
 [project.optional-dependencies]
 video = ["mediapipe>=0.10.20,<0.11"]

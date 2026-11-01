@@ -91,6 +91,37 @@ def test_read_only_digest_audit_prefers_real_h264_substream():
     assert "192.168.10.204" not in str(report)
 
 
+def test_isapi_parser_defuses_dtd_entities_and_external_references(monkeypatch):
+    original = audit.safe_xml_fromstring
+    observed = []
+
+    def guarded_parse(payload, **kwargs):
+        observed.append(kwargs)
+        return original(payload, **kwargs)
+
+    monkeypatch.setattr(audit, "safe_xml_fromstring", guarded_parse)
+    result = audit.parse_stream_xml(xml(), "101")
+    assert result["codec"] == "H.264"
+    assert observed == [{
+        "forbid_dtd": True,
+        "forbid_entities": True,
+        "forbid_external": True,
+    }]
+
+
+def test_parser_library_failures_are_redacted(monkeypatch):
+    from defusedxml.common import DefusedXmlException
+
+    def malicious_parser(*_args, **_kwargs):
+        raise DefusedXmlException("secret XML native parser information")
+
+    monkeypatch.setattr(audit, "safe_xml_fromstring", malicious_parser)
+    with pytest.raises(audit.CameraAuditUnavailable) as caught:
+        audit.parse_stream_xml(xml(), "101")
+    assert "secret" not in str(caught.value).lower()
+    assert "invalid hikvision channel metadata" in str(caught.value).lower()
+
+
 def test_mjpeg_codec_report_is_configuration_only():
     a, b = Response(xml()), Response(xml("102", codec="MJPEG"))
     report = audit.audit_camera(

@@ -17,6 +17,9 @@ from urllib.request import (
 )
 from xml.etree import ElementTree
 
+from defusedxml.ElementTree import fromstring as safe_xml_fromstring
+from defusedxml.common import DefusedXmlException
+
 MAX_XML_BYTES = 64 * 1024
 _PRIVATE = (ip_network("10.0.0.0/8"), ip_network("172.16.0.0/12"),
             ip_network("192.168.0.0/16"))
@@ -74,7 +77,11 @@ def parse_stream_xml(payload: bytes, expected_channel: str) -> dict:
             b"<!DOCTYPE" in payload.upper() or b"<!ENTITY" in payload.upper()):
         raise CameraAuditUnavailable("Invalid Hikvision channel metadata")
     try:
-        root = ElementTree.fromstring(payload)
+        # Reject DTD/entities in the parser itself, not only by checking bytes.
+        # Only short, allowlisted, read-only codec metadata is inspected.
+        root = safe_xml_fromstring(
+            payload, forbid_dtd=True, forbid_entities=True, forbid_external=True,
+        )
         if root.tag.rsplit("}", 1)[-1] != "StreamingChannel":
             raise ValueError
         actual_id = _field(root, "id")
@@ -111,7 +118,8 @@ def parse_stream_xml(payload: bytes, expected_channel: str) -> dict:
             "h264_profile": profile if codec == "H.264" and profile in _PROFILE else None,
             "bitrate_control": rate_control if rate_control in _BITRATE else None,
         }
-    except (ElementTree.ParseError, ValueError, StopIteration, TypeError):
+    except (ElementTree.ParseError, DefusedXmlException,
+            ValueError, StopIteration, TypeError):
         raise CameraAuditUnavailable("Invalid Hikvision channel metadata") from None
 
 
