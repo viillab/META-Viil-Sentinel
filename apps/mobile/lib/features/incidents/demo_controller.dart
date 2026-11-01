@@ -9,8 +9,12 @@ class DemoController extends ChangeNotifier {
   }
 
   final DateTime Function() _clock;
+  /// Upper bound for all fictional in-memory records. No persistent storage.
+  static const maxDemoEvents = 32;
+
   final List<DemoIncident> _events = [];
   int _sequence = 3;
+  String? _guidedEventId;
 
   List<DemoIncident> get events => List.unmodifiable(_events);
   List<DemoIncident> get pending => List.unmodifiable(
@@ -42,8 +46,29 @@ class DemoController extends ChangeNotifier {
       occurredAt: _clock(),
     );
     _events.insert(0, event);
+    if (_events.length > maxDemoEvents) {
+      _events.removeRange(maxDemoEvents, _events.length);
+    }
     notifyListeners();
     return event;
+  }
+
+  /// Reuse the single pending guided event rather than duplicating it.
+  /// On replay after acknowledgement, replace only the old guided sample:
+  /// other manually generated scenarios and their review state are retained.
+  DemoIncident startOrResumeGuidedDemo() {
+    final previousId = _guidedEventId;
+    if (previousId != null) {
+      final previous = byId(previousId);
+      if (previous != null && previous.review == DemoReview.pending) {
+        return previous;
+      }
+      _events.removeWhere((event) => event.id == previousId);
+      _guidedEventId = null;
+    }
+    final next = simulate(DemoScenario.rapidDescent)!;
+    _guidedEventId = next.id;
+    return next;
   }
 
   bool acknowledge(String id) {
@@ -76,6 +101,7 @@ class DemoController extends ChangeNotifier {
         ),
       ]);
     _sequence = 3;
+    _guidedEventId = null;
     notifyListeners();
   }
 }

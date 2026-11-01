@@ -39,6 +39,72 @@ void main() {
     expect(find.byKey(const Key('incident-demo-3')), findsOneWidget);
   });
 
+  testWidgets('reopening a pending walkthrough does not duplicate inbox entries',
+      (tester) async {
+    await tester.pumpWidget(const CareApp());
+    await tester.tap(find.byKey(const Key('start-guided-demo')));
+    await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('start-guided-demo')));
+    await tester.pumpAndSettle();
+    expect(find.text('A candidate appears'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('tab-alerts')));
+    await tester.pumpAndSettle();
+    expect(find.text('Pending review · 2'), findsOneWidget);
+    expect(find.byKey(const Key('incident-demo-3')), findsOneWidget);
+    expect(find.byKey(const Key('incident-demo-4')), findsNothing);
+  });
+
+  testWidgets('replay from completed guide replaces only its own sample',
+      (tester) async {
+    await tester.pumpWidget(const CareApp());
+    await tester.tap(find.byKey(const Key('start-guided-demo')));
+    await tester.pumpAndSettle();
+    for (var index = 0; index < 3; index++) {
+      await tapWalkthroughAction(tester, index);
+    }
+    expect(find.text('Demo completed'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('walkthrough-replay')));
+    await tester.pumpAndSettle();
+    expect(find.text('A candidate appears'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('tab-alerts')));
+    await tester.pumpAndSettle();
+    expect(find.text('Pending review · 2'), findsOneWidget);
+    expect(find.byKey(const Key('incident-demo-3')), findsNothing);
+    expect(find.byKey(const Key('incident-demo-4')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('tab-history')));
+    await tester.pumpAndSettle();
+    expect(find.text('Acknowledged · 1'), findsOneWidget);
+  });
+
+  testWidgets('replay remains tappable on 320px display with larger text',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.4;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+      tester.platformDispatcher.clearTextScaleFactorTestValue();
+    });
+    await tester.pumpWidget(const CareApp());
+    await tester.tap(find.byKey(const Key('start-guided-demo')));
+    await tester.pumpAndSettle();
+    for (var i = 0; i < 3; i++) {
+      await tapWalkthroughAction(tester, i);
+    }
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.byKey(const Key('walkthrough-replay')));
+    await tester.pumpAndSettle();
+    expect(find.text('A candidate appears'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('guide from controls returns to Home without duplicate generated events',
       (tester) async {
     await tester.pumpWidget(const CareApp());

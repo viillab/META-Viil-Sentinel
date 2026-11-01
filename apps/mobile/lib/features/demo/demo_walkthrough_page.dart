@@ -13,11 +13,13 @@ class DemoWalkthroughPage extends StatefulWidget {
     required this.controller,
     required this.eventId,
     required this.onOpenHistory,
+    required this.onReplay,
   });
 
   final DemoController controller;
   final String eventId;
   final VoidCallback onOpenHistory;
+  final VoidCallback onReplay;
 
   @override
   State<DemoWalkthroughPage> createState() => _DemoWalkthroughPageState();
@@ -205,7 +207,14 @@ class _DemoWalkthroughPageState extends State<DemoWalkthroughPage> {
                       }),
                     ),
                   ),
-                  if (step > 0)
+                  if (step == 3)
+                    TextButton.icon(
+                      key: const Key('walkthrough-replay'),
+                      onPressed: widget.onReplay,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Replay guided scenario'),
+                    )
+                  else if (step > 0)
                     TextButton(
                       key: const Key('walkthrough-back'),
                       onPressed: previousStep,

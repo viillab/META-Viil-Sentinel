@@ -32,7 +32,10 @@ Home, Alerts, Event Details, History, and Demo Control screens. It lets a judge
 start a one-tap **guided 4-step demo** (Generate → Review → Acknowledge →
 History), generate other fictional fall/follow-up scenarios, locally
 acknowledge an event and see it move to History, or reset instantly.
-The guided CTA stays pinned at the bottom on compact displays. Sitting generates no
+The guided CTA stays pinned at the bottom on compact displays. Opening an
+unfinished walkthrough reuses its pending candidate; Replay after review
+replaces only that scripted sample. Demo-only memory is bounded at 32
+fictional events, with no real incident retention or backend calls. Sitting generates no
 candidate. **No camera, backend, Meta provider, push alerts, emergency dispatch
 or real fall verification occurs on mobile.** All sample data is in memory,
 with conspicuous DEMO labels. From `apps/mobile`:
