@@ -39,6 +39,19 @@ test("no model or camera frames still requires operator review, never a technica
   assert.equal(report.durationSeconds, 0.3);
 });
 
+test("preview-only reports fresh video frames without claiming Pose inference", () => {
+  const report = makeWebcamSmokeReport({
+    ...sample, elapsedMs: 12_000, presentedFrameCallbacks: 132,
+    analyzedFrames: 0, reliablePoseFrames: 0, unconfirmedCandidates: 0,
+    lastWindowInferenceP95Ms: null, stopReason: "manual",
+  });
+  assert.equal(report.status, "OPERATOR_REVIEW_REQUIRED");
+  assert.equal(report.presentedFrameCallbacks, 132);
+  assert.equal(report.analyzedFrames, 0);
+  assert.equal(report.reliablePoseFrames, 0);
+  assert.equal(report.lastWindowInferenceP95Ms, null);
+});
+
 test("malformed counters and unsupported stop reasons abstain without unsafe fallback", () => {
   for (const patch of [
     { elapsedMs: NaN }, { elapsedMs: -1 }, { elapsedMs: 90_001 },

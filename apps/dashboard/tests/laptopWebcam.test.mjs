@@ -107,6 +107,13 @@ test("webcam demo UI has no transport or recording implementation", () => {
   assert.match(source, /candidateNoticeVisible/);
   assert.match(source, /setLastCandidateAt\(null\)/);
   assert.match(source, /Webcam frames stopped arriving/);
+  assert.match(source, /Preview frame callbacks observed/);
+  assert.match(source, /const count = \+\+sessionCounters\.current\.presentedFrameCallbacks/);
+  assert.match(source, /poseStreamStalled\(ms, lastFrameMs \?\? firstWatchMs\)/);
+  assert.match(source, /stop\("frame_stalled"\)/);
+  assert.match(source, /setPreviewFrames\(count\)/);
+  assert.match(source, /LOCAL · FRESH FRAMES OBSERVED/);
+  assert.match(source, /LOCAL VIDEO FRAMES · NO POSE ANALYSIS/);
   assert.match(source, /requestVideoFrameCallback/);
   assert.match(source, /cancelVideoFrameCallback/);
   assert.match(source, /freshVideoFrameCount/);
