@@ -32,6 +32,8 @@ from sentinel_edge.privacy_approval_operator import inspect_unsigned_draft
 
 SESSION_SECONDS = 600
 PREVIEW_SECONDS = 25
+# Independent HTTP boundary limit even if a future media producer changes.
+MAX_PREVIEW_PARTS = 120
 COOKIE_NAME = "viil_local_operator"
 MEDIA_SCHEMA = "viil.backend.camera_preview_session.v1"
 OVERVIEW_SCHEMA = "viil.backend.integration_overview.v1"
@@ -88,21 +90,33 @@ class PreflightMediaParts:
         self._first = first
         self._source = source
         self._authorized = authorized
-        self._first_sent = False
+        self._emitted = 0
         self._closed = False
 
     def __iter__(self):
         return self
 
+    def _still_authorized(self) -> bool:
+        try:
+            return self._authorized() is True
+        except Exception:
+            # Any future policy/backend error is denial, not a source of
+            # potentially credential-bearing exception details to the client.
+            return False
+
     def __next__(self):
-        if self._closed:
+        if (self._closed or self._emitted >= MAX_PREVIEW_PARTS
+                or not self._still_authorized()):
             raise StopIteration
-        if not self._first_sent:
-            self._first_sent = True
-            if self._authorized() is not True:
-                raise StopIteration
-            return self._first
-        return next(self._source)
+        # No additional camera read if the viewer was already revoked.
+        part = self._first if self._emitted == 0 else next(self._source)
+        # The camera may be revoked *during* a blocking decoder read.
+        # The bridge must independently validate even an incorrectly
+        # configured / future replacement media producer's next part.
+        if not self._still_authorized() or not valid_first_mjpeg_part(part):
+            raise StopIteration
+        self._emitted += 1
+        return part
 
     def close(self) -> None:
         if not self._closed:

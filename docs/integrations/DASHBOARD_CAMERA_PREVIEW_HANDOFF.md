@@ -109,6 +109,29 @@ in-flight close coordination, redacted cleanup failures, and
 fail-closed decoder slot capacity. No actual Hikvision images or
 signed site approval were accessed during these tests.
 
+## 1 Nov 2026 — independent HTTP output boundary
+
+The local Member 1 bridge now checks **current operator + signed privacy
+authorization twice around every outgoing MJPEG part**: once before
+advancing the decoder, and again after a potentially blocking frame read.
+This second check prevents a frame from leaving even if the session was
+revoked *while* a media producer was reading it. The bridge validates
+every emitted multipart JPEG header, byte length, JPEG markers and the
+256 KiB limit, and permits at most 120 parts per session regardless of
+producer behavior. It fails closed on authorization callback errors,
+malformed follow-up frames, and excess frames. The underlying producer
+still performs its independent checks; these new boundary gates are
+defense in depth, not replacements for the native decoder checks.
+
+The synthetic tests include producer stubs intentionally lacking
+their own authorization/JPEG guards, revocation during a blocked
+follow-up read, over-limit JPEG payloads, and a genuine local HTTP
+TestClient transport where an invalid second part is discarded after
+the first valid frame. The bridge can no longer change HTTP status
+after it has started streaming; a later invalid part **terminates**
+that stream with the normal guarded decoder cleanup. No real Hikvision
+decode or browser rendering was performed.
+
 ## Member 1: bounded in-process JPEG media adapter (new)
 
 `services/edge-vision/sentinel_edge/edge_mjpeg.py` now exports

@@ -361,6 +361,45 @@ def test_failed_native_preflight_close_is_redacted_and_fail_closed(
         assert start(client).status_code == 409
 
 
+@pytest.mark.parametrize("second", [
+    b"unexpected second frame",
+    b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: 99"
+    b"\r\n\r\n\xff\xd8FAKE\xff\xd9\r\n",
+    b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: 262145"
+    b"\r\n\r\n" + b"X" * 262145 + b"\r\n",
+], ids=["non-mjpeg", "wrong-length", "oversize"])
+def test_bridge_drops_invalid_followup_without_leaking_and_releases_slot(
+    tmp_path, monkeypatch, second,
+):
+    """Actual HTTP bridge, fake inner producer deliberately lacks validation."""
+    frame = (
+        b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: 8"
+        b"\r\n\r\n\xff\xd8FAKE\xff\xd9\r\n"
+    )
+    state = {"closed": 0, "after_bad": 0}
+
+    def untrusted_media(_cv2, **_kwargs):
+        try:
+            yield frame
+            yield second
+            state["after_bad"] += 1
+            yield frame
+        finally:
+            state["closed"] += 1
+
+    client, _, _ = setup(tmp_path, monkeypatch, fake=untrusted_media)
+    with client:
+        assert login(client).status_code == 200
+        sid = start(client).json()["session_id"]
+        response = client.get(f"{POST_PATH}/{sid}/mjpeg")
+        assert response.status_code == 200  # First valid JPEG already streamed.
+        assert response.content == frame  # Invalid second JPEG is never sent.
+        assert state == {"closed": 1, "after_bad": 0}
+        assert "no-store" in response.headers["cache-control"]
+        # Healthy cleanup must permit a new preview and avoid wedging capacity.
+        assert start(client).status_code == 201
+
+
 @pytest.mark.parametrize("first", [
     b"not a jpeg",
     b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: 7\r\n\r\n\xff\xd8FAKE\xff\xd9\r\n",
