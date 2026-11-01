@@ -54,7 +54,10 @@ def _local_path(root: Path, subject: int, category: str, clip: str) -> Path:
 
 
 def _github_blob_sha1(data: bytes) -> str:
-    return sha1(b"blob " + str(len(data)).encode("ascii") + b"\0" + data).hexdigest()
+    # Git's historical blob object ID uses SHA-1; this is a content
+    # identifier, NOT authentication or collision-resistant security proof.
+    return sha1(b"blob " + str(len(data)).encode("ascii") + b"\0" + data,
+                usedforsecurity=False).hexdigest()
 
 
 def _fetch_binary(url: str, limit: int) -> bytes:
