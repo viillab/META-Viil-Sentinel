@@ -7,16 +7,28 @@ import '../incidents/demo_incident.dart';
 class HomePage extends StatelessWidget {
   const HomePage({
     super.key, required this.controller, required this.onOpenEvent,
-    required this.onOpenDemo, required this.onSeeAlerts,
+    required this.onOpenDemo, required this.onStartWalkthrough,
+    required this.onSeeAlerts,
   });
   final DemoController controller;
   final void Function(DemoIncident) onOpenEvent;
   final VoidCallback onOpenDemo;
+  final VoidCallback onStartWalkthrough;
   final VoidCallback onSeeAlerts;
 
   @override
   Widget build(BuildContext context) => CenteredPage(children: [
     const DemoNotice(),
+    const SizedBox(height: 15),
+    SizedBox(
+      width: double.infinity,
+      child: FilledButton.icon(
+        key: const Key('start-guided-demo'),
+        onPressed: onStartWalkthrough,
+        icon: const Icon(Icons.auto_stories_outlined),
+        label: const Text('Start guided demo'),
+      ),
+    ),
     const SizedBox(height: 24),
     Text('Care at a glance', style: Theme.of(context).textTheme.headlineMedium),
     const SizedBox(height: 5),

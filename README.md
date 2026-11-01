@@ -29,8 +29,10 @@ For safe folder structure and phased refactor instructions see
 **Member 1 Flutter app:** [VIIL-Sentinel Care demo guide](apps/mobile/README.md).
 The app is a self-contained **OFFLINE / SIMULATED** caregiver experience with
 Home, Alerts, Event Details, History, and Demo Control screens. It lets a judge
-generate fictional fall/follow-up scenarios, locally acknowledge an event and
-see it move to History, or reset the demo instantly. Sitting generates no
+start a one-tap **guided 4-step demo** (Generate → Review → Acknowledge →
+History), generate other fictional fall/follow-up scenarios, locally
+acknowledge an event and see it move to History, or reset instantly.
+The guided CTA stays pinned at the bottom on compact displays. Sitting generates no
 candidate. **No camera, backend, Meta provider, push alerts, emergency dispatch
 or real fall verification occurs on mobile.** All sample data is in memory,
 with conspicuous DEMO labels. From `apps/mobile`:
