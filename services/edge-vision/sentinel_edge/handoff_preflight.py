@@ -176,6 +176,12 @@ def check_candidate(root: Path, manifest: dict) -> dict:
                 or candidate["model_sha256"] is not None
                 or candidate["delivery_mode"] != "local_stdout_only"):
             raise ValueError("Synthetic candidate has unsafe or misleading values")
+    # Freeze every field of the canonical example against the ACTUAL producer.
+    # event_id is intentionally random per run; never pin it as execution proof.
+    emitted_without_id = {key: value for key, value in emitted.items() if key != "event_id"}
+    example_without_id = {key: value for key, value in example.items() if key != "event_id"}
+    if emitted_without_id != example_without_id:
+        raise ValueError("Canonical synthetic example drift from real Python Edge emitter")
     return {"contract": SCHEMA_VERSION, "synthetic_fall_events": 1,
             "synthetic_non_fall_events": 0, "transport": "local_stdout_only"}
 

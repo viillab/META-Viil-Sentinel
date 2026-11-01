@@ -24,6 +24,25 @@ and is **not wired to the backend**. Synthetic/demo endpoints remain separate.
 For safe folder structure and phased refactor instructions see
 [Folder architecture](handoff/member1/ARCHITECTURE.md).
 
+### Python Edge → Dashboard contract verification
+
+The `edge-dashboard-contract` CI job now invokes the **real Python Edge v1
+emitter** on invented fall and sitting traces and validates both outputs
+through the exact Dashboard TypeScript JSONL parser. Unlike checking only a
+copied fixture, this detects drift in timestamp, heuristic score, safety
+fields, provenance, or JSONL representation. The fall trace currently emits
+one unconfirmed candidate at source-relative **850 ms**, score **0.928**
+(uncalibrated, **not a fall probability**); sitting emits zero. It also
+rejects forged staged authorization and unsafe source IDs. From Windows:
+
+```powershell
+cd D:\VIIL-Sentinel\apps\dashboard
+node --experimental-strip-types scripts/verify-edge-emitter.mjs --python D:\VIIL-Sentinel\services\edge-vision\.venv\Scripts\python.exe
+```
+
+No actual camera, Meta API, backend ingestion, or real-world fall accuracy is
+verified by this offline test.
+
 ## Member 1 AI Detect + Web Test Lab (Phase 1)
 
 New browser-local **AI Detect Test Lab** is the default dashboard screen.
