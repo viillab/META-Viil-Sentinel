@@ -47,6 +47,44 @@ export function candidateNoticeVisible(nowMs: number, candidateAtMs: number | nu
 }
 export const LOCAL_VISION_WASM_ROOT = "/vendor/mediapipe/wasm";
 
+/** Browser-only rolling measurements; never stores frames, landmarks or identities. */
+export type PoseRuntimeSummary = {
+  samples: number;
+  sampledFps: number | null;
+  inferenceP50Ms: number;
+  inferenceP95Ms: number;
+  singlePoseCoveragePercent: number;
+};
+
+export class LocalPoseRuntimeMeter {
+  private samples: Array<{ ms: number; costMs: number; valid: boolean }> = [];
+
+  observe(ms: number, inferenceMs: number, validSinglePose: boolean): PoseRuntimeSummary | null {
+    if (!Number.isFinite(ms) || ms < 0 || !Number.isFinite(inferenceMs)
+        || inferenceMs < 0 || inferenceMs > 60_000
+        || typeof validSinglePose !== "boolean"
+        || (this.samples.length > 0 && ms <= this.samples.at(-1)!.ms)) return null;
+    this.samples.push({ ms, costMs: inferenceMs, valid: validSinglePose });
+    this.samples = this.samples.filter(sample => ms - sample.ms <= 4000).slice(-32);
+    const costs = this.samples.map(sample => sample.costMs).sort((a, b) => a - b);
+    const quantile = (q: number) => Math.round(costs[Math.ceil(q * costs.length) - 1] * 10) / 10;
+    const oldest = this.samples[0].ms;
+    const span = ms - oldest;
+    const fps = this.samples.length > 1 && span > 0
+      ? Math.round((this.samples.length - 1) * 10000 / span) / 10 : null;
+    return {
+      samples: this.samples.length,
+      sampledFps: fps,
+      inferenceP50Ms: quantile(0.5),
+      inferenceP95Ms: quantile(0.95),
+      singlePoseCoveragePercent: Math.round(
+        this.samples.filter(sample => sample.valid).length * 100 / this.samples.length,
+      ),
+    };
+  }
+}
+
+
 export function validLocalPoseTask(file: Pick<File, "name" | "size"> | null): boolean {
   return file !== null
     && typeof file.name === "string"

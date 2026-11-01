@@ -89,6 +89,13 @@ test("webcam demo UI has no transport or recording implementation", () => {
   assert.match(source, /requestVideoFrameCallback/);
   assert.match(source, /cancelVideoFrameCallback/);
   assert.match(source, /freshVideoFrameCount/);
+  assert.match(source, /LocalPoseRuntimeMeter/);
+  assert.match(source, /performance\.now\(\)/);
+  assert.match(source, /Stop the webcam before changing/);
+  assert.match(source, /modelRef\.current = null/);
+  assert.match(source, /disabled=\{posePhase === "loading" \|\| phase === "live"/);
+  assert.match(source, /Inference p50\/p95/);
+  assert.match(source, /not fall accuracy/);
   assert.doesNotMatch(source, /video\.currentTime/);
   assert.match(source, /WAITING FOR FIRST LOCAL POSE INFERENCE/);
   assert.match(source, /Stop webcam/);

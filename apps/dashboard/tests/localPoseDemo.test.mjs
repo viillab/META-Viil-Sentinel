@@ -5,7 +5,7 @@ import {
   drawTorsoOverlay, LocalFallCandidateHeuristic, torsoFeatures, validLocalPoseTask,
   MAX_LOCAL_TASK_BYTES, POSE_DEMO_INTERVAL_MS, POSE_DEMO_STALL_MS,
   CANDIDATE_NOTICE_MS, candidateNoticeVisible, poseStreamStalled,
-  freshVideoFrameCount, LOCAL_VISION_WASM_ROOT,
+  freshVideoFrameCount, LocalPoseRuntimeMeter, LOCAL_VISION_WASM_ROOT,
 } from "../src/localPoseDemo.ts";
 
 function body({ hipY = 0.6, shoulderY = 0.27, horizontal = false,
@@ -162,6 +162,38 @@ test("only a new presented video frame proves freshness", () => {
   }
   assert.equal(freshVideoFrameCount(3, NaN), false);
   assert.equal(freshVideoFrameCount(3, -2), false);
+});
+
+test("rolling webcam metrics are bounded, numeric, and not fall accuracy", () => {
+  const meter = new LocalPoseRuntimeMeter();
+  assert.equal(meter.observe(NaN, 4, true), null);
+  assert.equal(meter.observe(0, -1, true), null);
+  assert.equal(meter.observe(0, 2, "true"), null);
+  let value = meter.observe(1000, 1, true);
+  assert.deepEqual(value, {
+    samples: 1, sampledFps: null, inferenceP50Ms: 1,
+    inferenceP95Ms: 1, singlePoseCoveragePercent: 100,
+  });
+  for (const [ms, costMs, valid] of [
+    [1200, 2, true], [1400, 3, false],
+    [1600, 4, true], [1800, 100, true],
+  ]) value = meter.observe(ms, costMs, valid);
+  assert.deepEqual(value, {
+    samples: 5, sampledFps: 5, inferenceP50Ms: 3,
+    inferenceP95Ms: 100, singlePoseCoveragePercent: 80,
+  });
+  assert.equal(meter.observe(1800, 999, true), null);
+  assert.equal(meter.observe(1799, 999, true), null);
+  assert.equal(meter.observe(2000, Infinity, true), null);
+  value = meter.observe(6001, 7, true);
+  assert.deepEqual(value, {
+    samples: 1, sampledFps: null, inferenceP50Ms: 7,
+    inferenceP95Ms: 7, singlePoseCoveragePercent: 100,
+  });
+  for (let i = 1; i <= 80; i++) value = meter.observe(6001 + i * 50, 2, i % 2 === 0);
+  assert.ok(value.samples <= 32);
+  assert.equal(value.inferenceP95Ms, 2);
+  assert.ok(value.sampledFps > 0);
 });
 
 test("candidate notice is temporary and never a confirmation", () => {
