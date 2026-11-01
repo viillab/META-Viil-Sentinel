@@ -363,6 +363,16 @@ export default function LaptopWebcamDemo() {
     // getUserMedia requested audio:false; reject unexpected microphones too.
     for (const audioTrack of stream.getAudioTracks()) audioTrack.stop();
     streamRef.current = stream;
+    // The privacy deadline begins when the camera is granted, NOT after
+    // video.play() resolves. Playback can stall for up to eight seconds.
+    // The session must never retain that startup time in addition to 60s.
+    const streamAcceptedAt = Date.now();
+    sessionStartedMonoMs.current = performance.now();
+    stopTimer.current = window.setTimeout(() => {
+      if (generation.current !== requestId) return;
+      stop("timeout");
+      setMessage("Demo ended after 60 seconds. Click Start to open it again.");
+    }, LAPTOP_WEBCAM_DEMO_MAX_MS);
     const track = stream.getVideoTracks()[0];
     const ended = () => {
       if (generation.current !== requestId) return;
@@ -402,15 +412,9 @@ export default function LaptopWebcamDemo() {
       return;
     }
     inFlight.current = false;
-    sessionStartedMonoMs.current = performance.now();
-    setStartedAt(Date.now());
+    setStartedAt(streamAcceptedAt);
     setNow(Date.now());
     setPhase("live");
-    stopTimer.current = window.setTimeout(() => {
-      if (generation.current !== requestId) return;
-      stop("timeout");
-      setMessage("Demo ended after 60 seconds. Click Start to open it again.");
-    }, LAPTOP_WEBCAM_DEMO_MAX_MS);
   }
 
   const allowed = typeof window !== "undefined"

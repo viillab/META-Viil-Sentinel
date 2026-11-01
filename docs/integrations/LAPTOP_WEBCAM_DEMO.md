@@ -43,7 +43,8 @@ In **Microsoft Edge or Chrome on the same laptop** open
    maximum 4-second/32-sample window. These are local runtime/quality
    diagnostics, **not camera source FPS, model recall, or fall accuracy**.
 4. Click **Stop webcam** when done. Video, active model and pose
-   history are discarded. Video also auto-stops after **60 seconds**,
+   history are discarded. Video also auto-stops after **60 seconds from
+   the moment a video stream is granted** (including initial playback),
    when the tab is hidden, page unloaded, or capture track ends.
    In both preview-only and Pose modes, new rendered frames are tracked
    by the browser `requestVideoFrameCallback` API (not `video.currentTime`,
@@ -54,7 +55,9 @@ In **Microsoft Edge or Chrome on the same laptop** open
    frame presentation, not that scene content or a real person moved.
    When the browser has acquired a camera stream but `video.play()` never
    settles, an 8-second playback watchdog stops all tracks and reports a
-   redacted error instead of leaving an unbounded camera-open startup.
+   redacted error. The independent 60-second session deadline is armed
+   **before calling `video.play()`** and is never reset after playback
+   starts; the startup delay cannot extend the allowed capture window.
    A late playback rejection remains handled. `pagehide` also releases the
    device via the same Stop cleanup and invalidates the session.
    No alert is sent. Model selection/replacement is disabled during live
@@ -130,6 +133,10 @@ requests**. It then exercises restart after Stop, simulated tab hiding,
 frozen-frame auto-stop, and late camera-permission completion after Stop;
 all must release tracks without resuming capture. A simulated permission
 denial must display a redacted message, never a native device identifier.
+The browser smoke also holds `video.play()` unresolved in an isolated
+synthetic capture, asserts that the 60-second cutoff is armed **before**
+the playback call, fires that deadline without a 60-second wall-clock
+wait, and verifies the video track stops and a timeout report appears.
 It closes its own Headless browser; no recording, screenshots, external
 service, stored footage or model files are involved.
 
