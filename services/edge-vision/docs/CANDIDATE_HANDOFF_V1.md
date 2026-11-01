@@ -42,8 +42,11 @@ python -m sentinel_edge.handoff_cli --trace examples/synthetic/fall.jsonl --sour
 ```
 
 Outputs one JSONL event (a new UUID on every run); synthetic flag is true,
-no request is made to an API. The corresponding `sitting.jsonl` fixture
-produces no event. No frame/image data is present. `--model-sha256` is
+no request is made to an API. With the current pinned synthetic fall trace,
+the actual Python emitter produces source-relative offset **850 ms** and
+uncalibrated heuristic score **0.928** (not probability). The corresponding
+`sitting.jsonl` fixture produces no event. No frame/image data is present.
+`--model-sha256` is
 optional; **do not fabricate a hash** for synthetic numerical fixtures.
 
 To process an authorized staged pose trace, specify
@@ -76,7 +79,24 @@ basis, simulated boolean, allowed provenance, UUID/source/detector
 identifiers, optional SHA-256 syntax, and `local_stdout_only` delivery.
 Changing only these schema restrictions (even without changing field
 names or the example payload) causes a fail-closed error. Dedicated
-mutation tests verify this behavior.
+mutation tests verify this behavior. The preflight additionally compares
+all non-UUID fields of the canonical synthetic example against freshly
+emitted Python output, preventing stale judge/demo figures.
+
+**Actual Python → TypeScript contract smoke (no network/media):**
+
+```powershell
+cd D:\VIIL-Sentinel\apps\dashboard
+node --experimental-strip-types scripts/verify-edge-emitter.mjs --python D:\VIIL-Sentinel\services\edge-vision\.venv\Scripts\python.exe
+```
+
+This runs both real Python CLI synthetic traces and parses stdout with
+Dashboard's production `parseEdgeCandidateJsonl` adapter. It requires a
+previously installed local Edge package, returns no candidate IDs, validates
+that no-fall remains empty, and rejects forged staged authorization/source
+identifiers. The dedicated `edge-dashboard-contract` GitHub CI job runs the
+same check with Python 3.12 and Node 22. Synthetic contract success is **not**
+camera validation, model accuracy, real Meta API or backend ingestion.
 
 This check is a **version-specific repository contract drift guard**,
 not a general JSON Schema parser, input authorization test, or a proof

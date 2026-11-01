@@ -107,6 +107,19 @@ def test_backend_not_ready_must_remain_blocked(miniature_repo):
         preflight(miniature_repo)
 
 
+@pytest.mark.parametrize(("field", "value"), [
+    ("source_timestamp_ms", 880),
+    ("detector_score", 0.8),
+    ("detector", "historical-detector"),
+])
+def test_synthetic_example_must_match_real_emitter(miniature_repo, field, value):
+    mutate(miniature_repo,
+           "services/edge-vision/examples/synthetic/candidate_v1.example.json",
+           lambda e: e.update({field: value}))
+    with pytest.raises(ValueError, match="example drift"):
+        preflight(miniature_repo)
+
+
 def test_synthetic_example_cannot_be_relabelled_real(miniature_repo):
     mutate(miniature_repo, "services/edge-vision/examples/synthetic/candidate_v1.example.json",
            lambda e: e.update(simulated=False))

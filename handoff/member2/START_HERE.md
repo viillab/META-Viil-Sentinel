@@ -45,6 +45,14 @@ the 5,777,746-byte MediaPipe Lite `.task` and the 2,654-byte
 Never commit, upload or post these private files to an incident API.
 Failure exits nonzero; do not continue using a wrong model.
 
+**New cross-runtime regression gate:** From `apps/dashboard`, after installing
+the Edge Python package in its venv, run
+`node --experimental-strip-types scripts/verify-edge-emitter.mjs --python D:\VIIL-Sentinel\services\edge-vision\.venv\Scripts\python.exe`.
+The same offline check runs in GitHub CI as `edge-dashboard-contract` and
+verifies the real Python output through the Dashboard TypeScript parser.
+The fixed fixture tracks 850 ms and 0.928 uncalibrated score (synthetic only);
+event UUIDs intentionally vary per execution. No video or API is used.
+
 ## 2. Understand the source contract before implementing ingestion
 
 These are the existing **only approved outbound Edge files**:
