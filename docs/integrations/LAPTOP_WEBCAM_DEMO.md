@@ -117,8 +117,12 @@ The script starts its own local Vite server, waits for at least 15 real
 browser video-frame callbacks from synthetic moving pixels, clicks Stop,
 and checks `MediaStreamTrack.readyState === "ended"`, detached video,
 the ephemeral operator-review report, zero Pose analyses and **no POST
-requests**. It closes its own Headless browser; no recording, screenshots,
-external service, stored footage or model files are involved.
+requests**. It then exercises restart after Stop, simulated tab hiding,
+frozen-frame auto-stop, and late camera-permission completion after Stop;
+all must release tracks without resuming capture. A simulated permission
+denial must display a redacted message, never a native device identifier.
+It closes its own Headless browser; no recording, screenshots, external
+service, stored footage or model files are involved.
 
 CI runs this as `webcam-browser-smoke` on Ubuntu with a bundled Chrome.
 This verifies **browser preview/cleanup only**; it does not verify physical
