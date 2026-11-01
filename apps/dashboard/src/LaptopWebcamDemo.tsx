@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PoseLandmarker } from "@mediapipe/tasks-vision";
 import {
-  drawTorsoOverlay, LocalFallCandidateHeuristic, LOCAL_VISION_WASM_ROOT,
-  POSE_DEMO_INTERVAL_MS, validLocalPoseTask,
+  candidateNoticeVisible, drawTorsoOverlay, LocalFallCandidateHeuristic,
+  LOCAL_VISION_WASM_ROOT, poseStreamStalled, POSE_DEMO_INTERVAL_MS,
+  validLocalPoseTask,
 } from "./localPoseDemo";
 import type { PoseObservation } from "./localPoseDemo";
 import { loadLocalPoseLandmarker } from "./localPoseEngine";
@@ -29,6 +30,7 @@ export default function LaptopWebcamDemo() {
   const [posePhase, setPosePhase] = useState<PosePhase>("unloaded");
   const [poseObservation, setPoseObservation] = useState<PoseObservation["status"]>("unknown");
   const [candidateCount, setCandidateCount] = useState(0);
+  const [lastCandidateAt, setLastCandidateAt] = useState<number | null>(null);
   const [poseFrames, setPoseFrames] = useState(0);
   const [poseMessage, setPoseMessage] = useState("");
   const streamRef = useRef<MediaStream | null>(null);
@@ -71,6 +73,7 @@ export default function LaptopWebcamDemo() {
     setPosePhase("unloaded");
     setPoseObservation("unknown");
     setCandidateCount(0);
+    setLastCandidateAt(null);
     setPoseFrames(0);
     setPoseMessage("");
   }, [clearCapture]);
@@ -124,6 +127,7 @@ export default function LaptopWebcamDemo() {
     setPosePhase("ready");
     setPoseObservation("unknown");
     setCandidateCount(0);
+    setLastCandidateAt(null);
     setPoseFrames(0);
   }
 
@@ -138,15 +142,25 @@ export default function LaptopWebcamDemo() {
     let cancelled = false;
     let previousMs = -1;
     let previousVideoTime = -1;
+    let lastProgressMs: number | null = null;
     const tick = (ms: number) => {
       if (cancelled || generation.current !== session
           || document.visibilityState !== "visible") return;
       frameId = window.requestAnimationFrame(tick);
+      if (lastProgressMs === null) lastProgressMs = ms;
       if (previousMs >= 0 && ms - previousMs < POSE_DEMO_INTERVAL_MS) return;
       if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA
-          || video.currentTime === previousVideoTime) return;
+          || video.currentTime === previousVideoTime) {
+        if (poseStreamStalled(ms, lastProgressMs)) {
+          stop();
+          setPhase("error");
+          setMessage("Webcam video stopped advancing. Local inference halted; no alert was sent.");
+        }
+        return;
+      }
       previousMs = ms;
       previousVideoTime = video.currentTime;
+      lastProgressMs = ms;
       try {
         // Same browser-owned video element: no second webcam capture, upload
         // or video snapshot. Inference is synchronous and at most 5Hz.
@@ -159,7 +173,12 @@ export default function LaptopWebcamDemo() {
         );
         setPoseFrames(n => n + 1);
         setPoseObservation(observation.status);
-        if (observation.candidate) setCandidateCount(detector.count);
+        if (observation.candidate) {
+          const candidateAt = Date.now();
+          setCandidateCount(detector.count);
+          setLastCandidateAt(candidateAt);
+          setNow(candidateAt);
+        }
       } catch {
         if (!cancelled && generation.current === session) {
           stop();
@@ -313,6 +332,9 @@ export default function LaptopWebcamDemo() {
             : poseObservation === "upright"
               ? "UPRIGHT BASELINE OBSERVED"
               : "OBSERVING BODY MOTION · NO CONFIRMED EVENT"}</strong>
+        {candidateNoticeVisible(now, lastCandidateAt) && <strong
+          className="laptop-pose-candidate">RECENT POSSIBLE FALL CANDIDATE ·
+          UNCONFIRMED · HUMAN REVIEW REQUIRED</strong>}
         <span>Frames analyzed locally: {poseFrames} · Session-only candidate count: {candidateCount}</span>
         <small>Experimental torso-motion heuristic, not a fall confirmation,
           calibrated model probability or emergency monitoring.</small>

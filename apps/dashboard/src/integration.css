@@ -87,6 +87,7 @@
 .laptop-pose-controls [role=alert]{color:#b34444}
 .laptop-pose-feedback{border:1px solid #b7d0ec;background:#f8fcff;border-radius:9px;padding:10px 12px;display:flex;flex-direction:column;gap:5px;font-size:11px;color:#315b7c}
 .laptop-pose-feedback strong{color:#94571d}
+.laptop-pose-feedback .laptop-pose-candidate{border:1px solid #dbad73;background:#fff5e7;border-radius:6px;padding:6px 8px;color:#8a4f18;line-height:1.5}
 .laptop-pose-feedback small{font-size:10px;line-height:1.5}
 .laptop-pose-overlay{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none;z-index:1}
 .laptop-webcam-video-box .camera-preview-watermark{z-index:2}

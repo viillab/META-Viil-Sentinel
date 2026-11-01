@@ -3,7 +3,9 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   drawTorsoOverlay, LocalFallCandidateHeuristic, torsoFeatures, validLocalPoseTask,
-  MAX_LOCAL_TASK_BYTES, POSE_DEMO_INTERVAL_MS, LOCAL_VISION_WASM_ROOT,
+  MAX_LOCAL_TASK_BYTES, POSE_DEMO_INTERVAL_MS, POSE_DEMO_STALL_MS,
+  CANDIDATE_NOTICE_MS, candidateNoticeVisible, poseStreamStalled,
+  LOCAL_VISION_WASM_ROOT,
 } from "../src/localPoseDemo.ts";
 
 function body({ hipY = 0.6, shoulderY = 0.27, horizontal = false,
@@ -136,6 +138,27 @@ test("overlay follows real video dimensions and never paints captured pixels", (
   assert.ok(steps.length > before);
   drawTorsoOverlay(canvas, upright(), 0, 0);
   assert.equal(steps.at(-1)[0], "clearRect");
+});
+
+test("video frames must keep advancing or the demo fails closed", () => {
+  assert.equal(POSE_DEMO_STALL_MS, 3500);
+  assert.equal(poseStreamStalled(1000, 0), false);
+  assert.equal(poseStreamStalled(3499, 0), false);
+  assert.equal(poseStreamStalled(3500, 0), true);
+  assert.equal(poseStreamStalled(8000, 6000), false);
+  assert.equal(poseStreamStalled(6000, 8000), true);
+  assert.equal(poseStreamStalled(Infinity, 0), true);
+  assert.equal(poseStreamStalled(3500, NaN), true);
+});
+
+test("candidate notice is temporary and never a confirmation", () => {
+  assert.equal(CANDIDATE_NOTICE_MS, 8000);
+  assert.equal(candidateNoticeVisible(1000, null), false);
+  assert.equal(candidateNoticeVisible(1000, 1000), true);
+  assert.equal(candidateNoticeVisible(8999, 1000), true);
+  assert.equal(candidateNoticeVisible(9000, 1000), false);
+  assert.equal(candidateNoticeVisible(999, 1000), false);
+  assert.equal(candidateNoticeVisible(Infinity, 1000), false);
 });
 
 test("browser model worker loads only local WASM and chosen File bytes", () => {
