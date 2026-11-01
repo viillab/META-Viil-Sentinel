@@ -54,6 +54,21 @@ In **Microsoft Edge or Chrome on the same laptop** open
    preview and pending capture, and starting a webcam is disabled until
    local model loading completes. Replacing a stopped model closes the
    old instance and clears the former session metrics.
+5. After a session ends, read **Local webcam technical smoke report**:
+   stop reason, bounded monotonic session duration, counts of freshly
+   presented frames and analyzed frames, reliable single-person poses,
+   unconfirmed candidates, and the *last* 4-second inference p95.
+   This ephemeral browser-only summary has status
+   `OPERATOR_REVIEW_REQUIRED`, never hardware acceptance or model
+   correctness. It contains no camera identity, video, pose coordinates,
+   model path, API calls, disk exports, or timestamps. Dismiss the report
+   or start a new session to clear it.
+6. A real camera acceptance still requires a human operator to confirm
+   that the visible preview moves, the torso overlay tracks a consenting
+   subject correctly, a 60-second session produces nonzero actual frames,
+   and the camera LED/device tracks stop after Stop, tab-hide or timeout.
+   The report alone is **not** evidence that actual camera hardware ran
+   unless it is seen during an operator-approved physical test.
 
 The webcam feature uses `navigator.mediaDevices.getUserMedia`
 with **audio disabled**, 640×360 preferred at 15fps (maximum 24fps).

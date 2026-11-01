@@ -7,6 +7,8 @@ import {
 } from "./localPoseDemo";
 import type { PoseObservation, PoseRuntimeSummary } from "./localPoseDemo";
 import { loadLocalPoseLandmarker } from "./localPoseEngine";
+import { makeWebcamSmokeReport } from "./webcamAcceptance";
+import type { WebcamSmokeReport, WebcamStopReason } from "./webcamAcceptance";
 import {
   hasUsableVideoTrack, LAPTOP_WEBCAM_DEMO_MAX_MS,
   requestLaptopWebcam, stopLaptopWebcam,
@@ -33,6 +35,12 @@ export default function LaptopWebcamDemo() {
   const [lastCandidateAt, setLastCandidateAt] = useState<number | null>(null);
   const [poseFrames, setPoseFrames] = useState(0);
   const [runtime, setRuntime] = useState<PoseRuntimeSummary | null>(null);
+  const [smokeReport, setSmokeReport] = useState<WebcamSmokeReport | null>(null);
+  const sessionStartedMonoMs = useRef<number | null>(null);
+  const sessionCounters = useRef({
+    presentedFrameCallbacks: 0, analyzedFrames: 0, reliablePoseFrames: 0,
+    unconfirmedCandidates: 0, lastWindowInferenceP95Ms: null as number | null,
+  });
   const [poseMessage, setPoseMessage] = useState("");
   const streamRef = useRef<MediaStream | null>(null);
   const trackListener = useRef<(() => void) | null>(null);
@@ -66,7 +74,14 @@ export default function LaptopWebcamDemo() {
     stopLaptopWebcam(stream);
   }, []);
 
-  const stop = useCallback(() => {
+  const stop = useCallback((reason: WebcamStopReason = "manual") => {
+    if (sessionStartedMonoMs.current !== null) {
+      const elapsedMs = performance.now() - sessionStartedMonoMs.current;
+      setSmokeReport(makeWebcamSmokeReport({
+        elapsedMs, ...sessionCounters.current, stopReason: reason,
+      }));
+      sessionStartedMonoMs.current = null;
+    }
     clearCapture();
     setStartedAt(null);
     setPhase("idle");
@@ -82,7 +97,7 @@ export default function LaptopWebcamDemo() {
 
   useEffect(() => {
     const invisible = () => {
-      if (document.visibilityState !== "visible") stop();
+      if (document.visibilityState !== "visible") stop("hidden");
     };
     const pageExit = () => clearCapture();
     document.addEventListener("visibilitychange", invisible);
@@ -157,7 +172,7 @@ export default function LaptopWebcamDemo() {
     // currentTime can advance while a live MediaStream picture is frozen.
     if (typeof video.requestVideoFrameCallback !== "function"
         || typeof video.cancelVideoFrameCallback !== "function") {
-      stop();
+      stop("unsupported_browser");
       setPhase("error");
       setMessage("Browser cannot verify fresh camera frames. Local Pose demo disabled.");
       return;
@@ -178,6 +193,7 @@ export default function LaptopWebcamDemo() {
       if (freshVideoFrameCount(metadata.presentedFrames, latestPresentedFrames)) {
         latestPresentedFrames = metadata.presentedFrames;
         lastRenderedMs = ms;
+        sessionCounters.current.presentedFrameCallbacks += 1;
       }
       callbackId = video.requestVideoFrameCallback(framePresented);
     };
@@ -188,7 +204,7 @@ export default function LaptopWebcamDemo() {
       frameId = window.requestAnimationFrame(tick);
       if (firstWatchMs === null) firstWatchMs = ms;
       if (poseStreamStalled(ms, lastRenderedMs ?? firstWatchMs)) {
-        stop();
+        stop("frame_stalled");
         setPhase("error");
         setMessage("Webcam frames stopped arriving. Local inference halted; no alert was sent.");
         return;
@@ -207,7 +223,12 @@ export default function LaptopWebcamDemo() {
         if (cancelled || generation.current !== session) return;
         const observation = detector.observe(result.landmarks, ms);
         const summary = meter.observe(ms, inferenceMs, observation.status !== "unknown");
-        if (summary) setRuntime(summary);
+        sessionCounters.current.analyzedFrames += 1;
+        if (observation.status !== "unknown") sessionCounters.current.reliablePoseFrames += 1;
+        if (summary) {
+          sessionCounters.current.lastWindowInferenceP95Ms = summary.inferenceP95Ms;
+          setRuntime(summary);
+        }
         const overlay = overlayRef.current;
         if (overlay) drawTorsoOverlay(
           overlay, result.landmarks, video.videoWidth, video.videoHeight,
@@ -215,6 +236,7 @@ export default function LaptopWebcamDemo() {
         setPoseFrames(n => n + 1);
         setPoseObservation(observation.status);
         if (observation.candidate) {
+          sessionCounters.current.unconfirmedCandidates += 1;
           const candidateAt = Date.now();
           setCandidateCount(detector.count);
           setLastCandidateAt(candidateAt);
@@ -222,7 +244,7 @@ export default function LaptopWebcamDemo() {
         }
       } catch {
         if (!cancelled && generation.current === session) {
-          stop();
+          stop("inference_error");
           setPosePhase("error");
           setPoseMessage("Local inference stopped unexpectedly. No alert was sent.");
         }
@@ -254,6 +276,12 @@ export default function LaptopWebcamDemo() {
     if (document.visibilityState !== "visible") return;
     const requestId = ++generation.current;
     inFlight.current = true;
+    sessionStartedMonoMs.current = null;
+    sessionCounters.current = {
+      presentedFrameCallbacks: 0, analyzedFrames: 0, reliablePoseFrames: 0,
+      unconfirmedCandidates: 0, lastWindowInferenceP95Ms: null,
+    };
+    setSmokeReport(null);
     setMessage("");
     setPhase("requesting");
     let stream: MediaStream;
@@ -284,7 +312,7 @@ export default function LaptopWebcamDemo() {
     const track = stream.getVideoTracks()[0];
     const ended = () => {
       if (generation.current !== requestId) return;
-      stop();
+      stop("camera_disconnected");
       setPhase("error");
       setMessage("Camera stopped or was disconnected.");
     };
@@ -302,7 +330,7 @@ export default function LaptopWebcamDemo() {
       await video.play();
     } catch {
       if (generation.current === requestId) {
-        stop();
+        stop("playback_error");
         setPhase("error");
         setMessage("Browser could not play the local camera stream.");
       }
@@ -313,12 +341,13 @@ export default function LaptopWebcamDemo() {
       return;
     }
     inFlight.current = false;
+    sessionStartedMonoMs.current = performance.now();
     setStartedAt(Date.now());
     setNow(Date.now());
     setPhase("live");
     stopTimer.current = window.setTimeout(() => {
       if (generation.current !== requestId) return;
-      stop();
+      stop("timeout");
       setMessage("Demo ended after 60 seconds. Click Start to open it again.");
     }, LAPTOP_WEBCAM_DEMO_MAX_MS);
   }
@@ -395,7 +424,7 @@ export default function LaptopWebcamDemo() {
       </div>}
       <div className="laptop-webcam-actions">
         {phase === "live" || phase === "requesting"
-          ? <button type="button" onClick={stop}>Stop webcam</button>
+          ? <button type="button" onClick={() => stop("manual")}>Stop webcam</button>
           : <button type="button" disabled={!allowed || posePhase === "loading"}
               onClick={() => void start()}>Start laptop webcam demo</button>}
         {phase === "live" && <small role="status">
@@ -405,6 +434,24 @@ export default function LaptopWebcamDemo() {
           Open the Dashboard at http://127.0.0.1:5173 to use this demo.
         </small>}
       </div>
+      {smokeReport && phase !== "live" && <section className="laptop-pose-feedback"
+        aria-label="Local webcam technical smoke report">
+        <strong>SESSION ENDED · OPERATOR REVIEW REQUIRED</strong>
+        <span>Stop reason: {smokeReport.stopReason.replaceAll("_", " ")}
+          · Duration: {smokeReport.durationSeconds.toFixed(1)}s</span>
+        <span>Presented-frame callbacks: {smokeReport.presentedFrameCallbacks}
+          · Locally analyzed: {smokeReport.analyzedFrames}</span>
+        <span>Reliable single-person poses: {smokeReport.reliablePoseFrames}
+          · Unconfirmed candidates: {smokeReport.unconfirmedCandidates}</span>
+        <span>Last rolling 4s inference p95: {smokeReport.lastWindowInferenceP95Ms === null
+          ? "not measured" : `${smokeReport.lastWindowInferenceP95Ms.toFixed(1)} ms`}</span>
+        <small>Local counters only, not independent camera acceptance, fall accuracy,
+          a safety guarantee, or proof of real alerts. Preview-only sessions may
+          have zero frame callbacks because Pose mode was not enabled.
+          Nothing is saved or uploaded.</small>
+        <button type="button" onClick={() => setSmokeReport(null)}>
+          Dismiss local report</button>
+      </section>}
       {message && <small role={phase === "error" ? "alert" : "status"}
           className="laptop-webcam-message">{message}</small>}
       <small className="laptop-webcam-disclaimer">
