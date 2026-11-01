@@ -5,7 +5,7 @@ import {
   drawTorsoOverlay, LocalFallCandidateHeuristic, torsoFeatures, validLocalPoseTask,
   MAX_LOCAL_TASK_BYTES, POSE_DEMO_INTERVAL_MS, POSE_DEMO_STALL_MS,
   CANDIDATE_NOTICE_MS, candidateNoticeVisible, poseStreamStalled,
-  LOCAL_VISION_WASM_ROOT,
+  freshVideoFrameCount, LOCAL_VISION_WASM_ROOT,
 } from "../src/localPoseDemo.ts";
 
 function body({ hipY = 0.6, shoulderY = 0.27, horizontal = false,
@@ -149,6 +149,19 @@ test("video frames must keep advancing or the demo fails closed", () => {
   assert.equal(poseStreamStalled(6000, 8000), true);
   assert.equal(poseStreamStalled(Infinity, 0), true);
   assert.equal(poseStreamStalled(3500, NaN), true);
+});
+
+test("only a new presented video frame proves freshness", () => {
+  assert.equal(freshVideoFrameCount(0, -1), true);
+  assert.equal(freshVideoFrameCount(1, 0), true);
+  assert.equal(freshVideoFrameCount(5, 1), true);
+  assert.equal(freshVideoFrameCount(5, 5), false);
+  assert.equal(freshVideoFrameCount(4, 5), false);
+  for (const invalid of [NaN, Infinity, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.equal(freshVideoFrameCount(invalid, 0), false);
+  }
+  assert.equal(freshVideoFrameCount(3, NaN), false);
+  assert.equal(freshVideoFrameCount(3, -2), false);
 });
 
 test("candidate notice is temporary and never a confirmation", () => {

@@ -32,6 +32,13 @@ export function poseStreamStalled(nowMs: number, lastFrameMs: number): boolean {
     || nowMs < lastFrameMs || nowMs - lastFrameMs >= POSE_DEMO_STALL_MS;
 }
 
+/** requestVideoFrameCallback metadata, not media currentTime, proves a new rendered frame. */
+export function freshVideoFrameCount(presentedFrames: number, previousFrames: number): boolean {
+  return Number.isSafeInteger(presentedFrames) && presentedFrames >= 0
+    && Number.isSafeInteger(previousFrames) && previousFrames >= -1
+    && presentedFrames > previousFrames;
+}
+
 /** Do not leave an unconfirmed candidate banner visible indefinitely. */
 export function candidateNoticeVisible(nowMs: number, candidateAtMs: number | null): boolean {
   return candidateAtMs !== null

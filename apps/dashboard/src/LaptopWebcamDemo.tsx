@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PoseLandmarker } from "@mediapipe/tasks-vision";
 import {
-  candidateNoticeVisible, drawTorsoOverlay, LocalFallCandidateHeuristic,
-  LOCAL_VISION_WASM_ROOT, poseStreamStalled, POSE_DEMO_INTERVAL_MS,
-  validLocalPoseTask,
+  candidateNoticeVisible, drawTorsoOverlay, freshVideoFrameCount,
+  LocalFallCandidateHeuristic, LOCAL_VISION_WASM_ROOT,
+  poseStreamStalled, POSE_DEMO_INTERVAL_MS, validLocalPoseTask,
 } from "./localPoseDemo";
 import type { PoseObservation } from "./localPoseDemo";
 import { loadLocalPoseLandmarker } from "./localPoseEngine";
@@ -136,31 +136,50 @@ export default function LaptopWebcamDemo() {
     const engine = modelRef.current;
     const video = videoRef.current;
     if (!engine || !video) return;
+    // Chrome/Edge guarantee a decoded/presented video frame callback.
+    // currentTime can advance while a live MediaStream picture is frozen.
+    if (typeof video.requestVideoFrameCallback !== "function"
+        || typeof video.cancelVideoFrameCallback !== "function") {
+      stop();
+      setPhase("error");
+      setMessage("Browser cannot verify fresh camera frames. Local Pose demo disabled.");
+      return;
+    }
     const session = generation.current;
     const detector = new LocalFallCandidateHeuristic();
     let frameId = 0;
+    let callbackId = 0;
     let cancelled = false;
     let previousMs = -1;
-    let previousVideoTime = -1;
-    let lastProgressMs: number | null = null;
+    let latestPresentedFrames = -1;
+    let analyzedPresentedFrames = -1;
+    let firstWatchMs: number | null = null;
+    let lastRenderedMs: number | null = null;
+    const framePresented = (ms: number, metadata: VideoFrameCallbackMetadata) => {
+      if (cancelled || generation.current !== session) return;
+      if (freshVideoFrameCount(metadata.presentedFrames, latestPresentedFrames)) {
+        latestPresentedFrames = metadata.presentedFrames;
+        lastRenderedMs = ms;
+      }
+      callbackId = video.requestVideoFrameCallback(framePresented);
+    };
+    callbackId = video.requestVideoFrameCallback(framePresented);
     const tick = (ms: number) => {
       if (cancelled || generation.current !== session
           || document.visibilityState !== "visible") return;
       frameId = window.requestAnimationFrame(tick);
-      if (lastProgressMs === null) lastProgressMs = ms;
-      if (previousMs >= 0 && ms - previousMs < POSE_DEMO_INTERVAL_MS) return;
-      if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA
-          || video.currentTime === previousVideoTime) {
-        if (poseStreamStalled(ms, lastProgressMs)) {
-          stop();
-          setPhase("error");
-          setMessage("Webcam video stopped advancing. Local inference halted; no alert was sent.");
-        }
+      if (firstWatchMs === null) firstWatchMs = ms;
+      if (poseStreamStalled(ms, lastRenderedMs ?? firstWatchMs)) {
+        stop();
+        setPhase("error");
+        setMessage("Webcam frames stopped arriving. Local inference halted; no alert was sent.");
         return;
       }
+      if (previousMs >= 0 && ms - previousMs < POSE_DEMO_INTERVAL_MS) return;
+      if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA
+          || latestPresentedFrames <= analyzedPresentedFrames) return;
       previousMs = ms;
-      previousVideoTime = video.currentTime;
-      lastProgressMs = ms;
+      analyzedPresentedFrames = latestPresentedFrames;
       try {
         // Same browser-owned video element: no second webcam capture, upload
         // or video snapshot. Inference is synchronous and at most 5Hz.
@@ -191,6 +210,7 @@ export default function LaptopWebcamDemo() {
     return () => {
       cancelled = true;
       window.cancelAnimationFrame(frameId);
+      video.cancelVideoFrameCallback(callbackId);
       const canvas = overlayRef.current;
       canvas?.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
     };
