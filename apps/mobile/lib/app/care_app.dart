@@ -27,18 +27,24 @@ class _CareAppState extends State<CareApp> {
     ));
   }
 
-  void startGuidedDemo() {
-    final event = controller.simulate(DemoScenario.rapidDescent)!;
-    navigatorKey.currentState!.push(MaterialPageRoute<void>(
+  void startGuidedDemo({bool replayCurrent = false}) {
+    final event = controller.startOrResumeGuidedDemo();
+    final route = MaterialPageRoute<void>(
       builder: (_) => DemoWalkthroughPage(
         controller: controller,
         eventId: event.id,
+        onReplay: () => startGuidedDemo(replayCurrent: true),
         onOpenHistory: () {
           navigatorKey.currentState!.pop();
           setState(() => tab = 2);
         },
       ),
-    ));
+    );
+    if (replayCurrent) {
+      navigatorKey.currentState!.pushReplacement(route);
+    } else {
+      navigatorKey.currentState!.push(route);
+    }
   }
 
   void openDemo() {

@@ -12,12 +12,18 @@ and does not connect to any backend or external service.
   the pending count and recent fictional events.
 - For the fastest judge presentation, tap **Start guided demo** from
   Home (or the Demo control center). Four explicit screens lead through
-  **Generate → Review → Acknowledge → History**. The Start action creates
-  exactly one fictional rapid-descent event. Acknowledge changes only
-  local memory; **Open History** selects the History tab automatically.
-  Closing the guided screen before acknowledgement leaves the fictional
-  event pending and never sends a notification. The primary action stays
-  pinned at the bottom on small screens; event details remain scrollable.
+  **Generate → Review → Acknowledge → History**. The first Start action
+  creates exactly one fictional rapid-descent event. Reopening an
+  unfinished walkthrough **resumes the same pending demo sample** and
+  does not inflate the alert count. Acknowledge changes only local
+  memory; **Open History** selects the History tab automatically.
+  After acknowledgement, **Replay guided scenario** replaces only the
+  prior guided sample with a new pending sample. Other manually created
+  samples remain untouched. This is an intentional *demo reset*, not a
+  persistent audit history. Closing an unfinished walkthrough leaves
+  its fictional event pending and never sends a notification. The
+  primary action stays pinned at the bottom on small screens; event
+  details remain scrollable.
 - Tap the flask icon → **Demo control center**.
 - Tap **Possible fall candidate**, **Uncertain transfer**, or
   **Normal sitting**. The sitting scenario correctly creates no event.
@@ -30,6 +36,10 @@ and does not connect to any backend or external service.
 Nothing is persisted. No camera permissions, API calls, notifications,
 media, real patients or emergency dispatch are present. All status
 and actions are UI demonstration only. The seed content is fictional.
+To prevent a judge from accidentally growing the in-memory list without
+limit, the demo retains at most **32 recent fictional events** and
+discards the oldest sample entries first. Reset restores the two seed
+events and clears any unfinished guided session.
 Live mode is intentionally unavailable pending Member 2's authenticated,
 authorized caregiver API and evidence/Meta integration.
 
@@ -94,6 +104,8 @@ it represented real candidate ingestion.
   monitoring. All UI is labeled DEMO.
 - Human review and real API integration require a separate authorization
   design and security review before enabling Live mode.
-- Widget tests cover the end-to-end guided demo, early exit without duplicate
-  events, and 320px-wide layouts at 140% text scale. These are simulated
-  widget tests, not physical Android hardware acceptance.
+- Widget/unit tests cover the end-to-end guided demo, early exit without
+  duplicates, replay after acknowledgement, preservation of manual
+  scenarios, bounded in-memory retention, and 320px-wide layouts at
+  140% text scale. These are simulated tests, not physical Android
+  hardware acceptance.

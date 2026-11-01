@@ -54,6 +54,55 @@ void main() {
     controller.dispose();
   });
 
+  test('guided start resumes pending event without creating duplicates', () {
+    final controller = DemoController(clock: () => sampleTime);
+    final first = controller.startOrResumeGuidedDemo();
+    expect(first.id, 'demo-3');
+    expect(controller.events.length, 3);
+    expect(controller.startOrResumeGuidedDemo().id, first.id);
+    expect(controller.events.where((event) => event.id == first.id).length, 1);
+    expect(controller.pendingCount, 2);
+    controller.dispose();
+  });
+
+  test('guided replay replaces only prior guided event and preserves manual events', () {
+    final controller = DemoController(clock: () => sampleTime);
+    final manuallyCreated = controller.simulate(DemoScenario.transfer)!;
+    final first = controller.startOrResumeGuidedDemo();
+    expect(controller.acknowledge(first.id), true);
+    final replay = controller.startOrResumeGuidedDemo();
+    expect(replay.id, isNot(first.id));
+    expect(replay.review, DemoReview.pending);
+    expect(controller.byId(first.id), isNull);
+    expect(controller.byId(manuallyCreated.id), isNotNull);
+    expect(controller.events.length, 4);
+    expect(controller.pendingCount, 3);
+    expect(controller.reviewedCount, 1);
+    expect(controller.startOrResumeGuidedDemo().id, replay.id);
+    controller.reset();
+    expect(controller.events.length, 2);
+    expect(controller.startOrResumeGuidedDemo().id, 'demo-3');
+    controller.dispose();
+  });
+
+  test('rapid fictional scenario creation is bounded without id reuse', () {
+    final controller = DemoController(clock: () => sampleTime);
+    for (var i = 0; i < 120; i++) {
+      controller.simulate(DemoScenario.rapidDescent);
+      expect(controller.events.length, lessThanOrEqualTo(DemoController.maxDemoEvents));
+    }
+    expect(controller.events.length, DemoController.maxDemoEvents);
+    expect(controller.events.map((event) => event.id).toSet().length,
+      controller.events.length);
+    expect(controller.events.first.id, 'demo-122');
+    expect(controller.simulate(DemoScenario.sitting), isNull);
+    expect(controller.events.length, DemoController.maxDemoEvents);
+    controller.reset();
+    expect(controller.pendingCount, 1);
+    expect(controller.reviewedCount, 1);
+    controller.dispose();
+  });
+
   test('returned event lists cannot mutate repository', () {
     final controller = DemoController(clock: () => sampleTime);
     expect(
