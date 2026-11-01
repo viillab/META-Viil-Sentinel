@@ -17,6 +17,7 @@ venv/
 *.egg-info/
 # Web
 node_modules/
+apps/dashboard/public/vendor/
 dist/
 build/
 coverage/

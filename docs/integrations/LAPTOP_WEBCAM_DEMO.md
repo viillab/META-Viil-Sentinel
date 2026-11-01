@@ -1,6 +1,6 @@
 # VIIL-Sentinel — Laptop Webcam Demo (Member 1)
 
-**Status (1 November 2026): Browser-local preview implemented; AI fall classification is NOT connected to this preview.**
+**Status (1 November 2026): Browser-local video and optional real MediaPipe Pose inference are implemented; the temporal FALL CANDIDATE is an uncalibrated, non-clinical heuristic requiring human review, not production fall detection.**
 
 Use the **Integrated Camera** of the developer's laptop for the
 initial visual demonstration. The webcam mode is intentionally separate
@@ -8,7 +8,7 @@ from the production **Hikvision RTSP / HMAC-signed privacy approval**
 pipeline. It cannot alter, unlock, fake or replace that protected
 network-camera authorization.
 
-## Start the laptop preview
+## Start the laptop preview and optional local Pose inference
 
 From the user's Windows laptop:
 
@@ -22,25 +22,39 @@ In **Microsoft Edge or Chrome on the same laptop** open
 [http://127.0.0.1:5173](http://127.0.0.1:5173). Navigate to
 **Integration Center → Laptop camera preview → Start laptop webcam demo**.
 
-1. Click **Start laptop webcam demo** and **Allow** in the browser's
-   camera permission prompt. No camera permission is requested before
-   this click.
-2. Preview the laptop's live image locally. The UI explicitly reports
-   **AI Fall Detection: NOT CONNECTED**, **Caregiver alerts: DISABLED**
-   and a **LIVE · BROWSER LOCAL · NOT AI ANALYZED** watermark.
-3. Click **Stop webcam** when done. It also automatically stops after
-   **60 seconds**, when the tab is hidden, the page is unloaded, or
-   the camera track ends/disconnects.
+1. For local pose inference, choose **Select local MediaPipe .task model**
+   and select **D:\\VIIL-Sentinel\\models\\pose_landmarker_lite.task**
+   from your own laptop. This explicit browser File selection reads the
+   model into memory only; the file is **not uploaded or committed**.
+   Without a model, the ordinary local Webcam Preview still works.
+2. Click **Start laptop webcam demo** and **Allow** in the browser
+   permission prompt. No camera permission is requested before this
+   click. The **same browser MediaStream** owns both the live video and
+   MediaPipe frame inference, with no second OS device handle.
+3. Watch the local green **torso landmark overlay**, Pose status,
+   and **Session-only candidate count**. A status of
+   **POSSIBLE FALL CANDIDATE · HUMAN REVIEW REQUIRED** is strictly
+   unconfirmed. More than one person, missing visibility, or a large
+   frame gap causes a fail-closed abstention; **unknown is not safe**.
+4. Click **Stop webcam** when done. Video, active model and pose
+   history are discarded. Video also auto-stops after **60 seconds**,
+   when the tab is hidden, page unloaded, or capture track ends.
 
 The webcam feature uses `navigator.mediaDevices.getUserMedia`
-with **audio disabled**, 640×360 preferred video at 15fps and max
-24fps, direct `<video srcObject>` playback. There is **no WebSocket,
-fetch, upload, canvas extraction, MediaRecorder, frame recording,
-snapshot, local file, cloud request or backend API call** in the webcam
-component. It does not infer pose, fall likelihood, medical status or
-real notifications. Only the page's local JavaScript owns the
-MediaStream; the existing Dashboard/backend may still load unrelated
-metadata as before.
+with **audio disabled**, 640×360 preferred at 15fps (maximum 24fps).
+The optional MediaPipe `@mediapipe/tasks-vision@1.2.0` is dynamically
+loaded **only when the operator selects the private .task**. Four WASM
+runtime files are copied from the npm package to a **gitignored
+same-origin** `/vendor/mediapipe/wasm` location by `predev` and
+`prebuild` npm scripts. No model binary is copied into the public
+assets. The app does not send video, pose landmarks, or candidate data
+to the backend, Meta/cloud, persistent storage, or caregivers. The
+WASM/vendor SDK may have its own usage telemetry/privacy notice; this
+developer demo does **not** claim a full offline network guarantee.
+Only short-lived numeric landmarks and candidate counts exist in
+browser memory; the green canvas draws joints, **not saved image
+pixels**. The pre-existing Dashboard may request unrelated metadata
+as before.
 
 This feature refuses non-loopback hosts, missing camera support or
 insecure browser contexts. Use `localhost` or `127.0.0.1` on the
@@ -58,15 +72,25 @@ the laptop webcam from a remote Dashboard URL.
 - If the camera prompt is denied, the UI shows an actionable redacted
   error. The feature never retries silently.
 
-## Real local fall-candidate inference is a separate workflow
+## Experimental browser candidate logic and separate Python Edge workflow
 
-The existing Member 1 Python Edge runner supports local USB camera
-index 0 and a local MediaPipe Pose Landmarker model. The connected
-Windows development machine currently reports an **Integrated Camera**
-device and has a nonempty local
-`D:\VIIL-Sentinel\models\pose_landmarker_lite.task` asset.
-The offline `viil-edge-doctor` probe checks software/model file
-availability, **not** camera frame decoding or fall accuracy.
+The JavaScript `LocalFallCandidateHeuristic` mirrors the Python
+temporal detector's **thresholds**, but is independently implemented
+for **local research demonstration**, not a validated exported model:
+upright torso <=32°, then normalized hip descent >=0.13, torso
+horizontal >=56° for >=450ms, with 1600ms history, 700ms max gap,
+4000ms cooldown, and min 0.55 landmark visibility. It runs on a
+single unambiguous detected pose, at most 5 inference cycles/second,
+in a browser CPU backend. It is not trained, calibrated or independently
+validated. Do not simulate/induce dangerous falls to test it; use
+safe staged movements and synthetic fixtures.
+
+The separate Member 1 **Python Edge runner** also supports local
+USB index 0 and a local MediaPipe Pose Landmarker task model. The
+Windows host previously reported an **Integrated Camera** and a
+nonempty `D:\VIIL-Sentinel\models\pose_landmarker_lite.task`.
+Offline `viil-edge-doctor` only verifies software/model file readiness,
+**not** camera frames or accuracy.
 
 **Important:** The Python live inference runner is intentionally
 **stricter than browser-local preview**. It requires a genuinely
@@ -94,18 +118,17 @@ Member 2 before that separate authenticated ingestion is ready.
 
 ## Testing evidence and remaining work
 
-Dashboard Node contract tests include local secure-context allowlisting,
-video-only constraints, stop-all-tracks, late permission safety
-conditions in code review, redacted errors and no recording/API
-transport references. The Dashboard TypeScript/Vite build is a
-static integration gate. **Opening the real camera and verifying
-visible frames in a human-operated browser remains a manual
-acceptance test**; device-manager "OK" alone is not proof of actual
-successful frames.
+Dashboard Node contract tests cover secure-origin allowlisting,
+camera stop, non-uploads, local model validation, single/multi-person
+pose quality, synthetic upright→horizontal hold, safe sitting
+non-trigger, occlusion, time gaps, cooldown and source inspection.
+TypeScript/Vite Build validates package bundling and local WASM asset
+copy. **A human operator must still explicitly Allow webcam access
+and confirm actual visible Pose overlay/inference on physical hardware**.
+Device Manager "OK", a green build, and synthetic tests do not prove
+the browser decoded frames or that the fall heuristic is accurate.
 
-A future single-capture laptop **webcam + MediaPipe live inference
-overlay** should run pose processing and video from the same local
-capture owner, never open the webcam twice or pretend the browser
-preview alone is fall detection. That future integration must preserve
-explicit consent, short-lived sessions, local-only processing and
-no automatic medical/emergency actions.
+The current integration is **one browser-owned webcam stream with
+optional local MediaPipe Pose**. It does not integrate with the
+Member 2 Incident API, production Edge Candidate v1 signature
+or real Meta provider. No real caregiver notification is sent.

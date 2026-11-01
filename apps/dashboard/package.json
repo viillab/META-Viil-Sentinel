@@ -4,12 +4,15 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "predev": "node scripts/prepare-mediapipe-wasm.mjs",
+    "prebuild": "node scripts/prepare-mediapipe-wasm.mjs",
     "dev": "vite --host 127.0.0.1",
     "build": "npm run test:contract && tsc -b && vite build",
     "test:contract": "node --experimental-strip-types --test tests/*.test.mjs",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
+    "@mediapipe/tasks-vision": "1.2.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
