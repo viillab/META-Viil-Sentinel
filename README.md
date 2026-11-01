@@ -43,6 +43,17 @@ node --experimental-strip-types scripts/verify-edge-emitter.mjs --python D:\VIIL
 No actual camera, Meta API, backend ingestion, or real-world fall accuracy is
 verified by this offline test.
 
+### Synthetic Chrome webcam UI test
+
+The `webcam-browser-smoke` CI job opens a disposable Chrome Headless
+instance and injects an animated Canvas `MediaStream` into the actual
+React laptop-webcam UI, so it never touches a real laptop camera. It verifies
+fresh frames, the Stop action, released video tracks, the operator-review
+session report, and no POST/upload. Run `npm run smoke:fake-webcam` from
+`apps/dashboard` (Node 22 and local Chrome/Edge required). This is **not**
+hardware or fall-model validation. See
+[Webcam testing guide](docs/integrations/LAPTOP_WEBCAM_DEMO.md).
+
 ## Member 1 AI Detect + Web Test Lab (Phase 1)
 
 New browser-local **AI Detect Test Lab** is the default dashboard screen.

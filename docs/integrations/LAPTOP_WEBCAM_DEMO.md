@@ -99,6 +99,34 @@ insecure browser contexts. Use `localhost` or `127.0.0.1` on the
 **same Windows machine**; a phone or remote machine cannot view
 the laptop webcam from a remote Dashboard URL.
 
+## Automated synthetic browser smoke (no camera permission)
+
+A separate Chrome/Edge Headless test now exercises the **actual React
+Integration Center → Laptop webcam component** with an isolated temporary
+browser profile and a moving **synthetic canvas MediaStream**. It overrides
+`getUserMedia` inside that disposable test page before clicking Start;
+the physical laptop camera is never requested, and no user images are read.
+It requires Node 22+, installed Dashboard dependencies, and Chrome/Edge:
+
+```powershell
+cd D:\VIIL-Sentinel\apps\dashboard
+npm run smoke:fake-webcam
+```
+
+The script starts its own local Vite server, waits for at least 15 real
+browser video-frame callbacks from synthetic moving pixels, clicks Stop,
+and checks `MediaStreamTrack.readyState === "ended"`, detached video,
+the ephemeral operator-review report, zero Pose analyses and **no POST
+requests**. It closes its own Headless browser; no recording, screenshots,
+external service, stored footage or model files are involved.
+
+CI runs this as `webcam-browser-smoke` on Ubuntu with a bundled Chrome.
+This verifies **browser preview/cleanup only**; it does not verify physical
+hardware, real MediaPipe pose inference, candidate detection accuracy,
+an authenticated backend, or caregiver delivery. Independent authorized
+camera acceptance remains mandatory. Never label a synthetic browser test
+as a real camera trial.
+
 ## If the camera is not visible
 
 - Confirm Windows **Settings → Privacy & security → Camera** permits
