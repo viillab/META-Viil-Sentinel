@@ -1,0 +1,35 @@
+{
+    "name": "VIIL Sentinel Care · Offline Demo",
+    "short_name": "VIIL Care",
+    "start_url": ".",
+    "display": "standalone",
+    "background_color": "#F4F7FC",
+    "theme_color": "#132D4F",
+    "description": "Offline simulated caregiver experience. No live monitoring or alerts.",
+    "orientation": "portrait-primary",
+    "prefer_related_applications": false,
+    "icons": [
+        {
+            "src": "icons/Icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-maskable-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "maskable"
+        },
+        {
+            "src": "icons/Icon-maskable-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ]
+}

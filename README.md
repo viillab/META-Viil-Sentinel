@@ -24,6 +24,29 @@ and is **not wired to the backend**. Synthetic/demo endpoints remain separate.
 For safe folder structure and phased refactor instructions see
 [Folder architecture](handoff/member1/ARCHITECTURE.md).
 
+### Flutter mobile caregiver demo · apps/mobile
+
+**Member 1 Flutter app:** [VIIL-Sentinel Care demo guide](apps/mobile/README.md).
+The app is a self-contained **OFFLINE / SIMULATED** caregiver experience with
+Home, Alerts, Event Details, History, and Demo Control screens. It lets a judge
+generate fictional fall/follow-up scenarios, locally acknowledge an event and
+see it move to History, or reset the demo instantly. Sitting generates no
+candidate. **No camera, backend, Meta provider, push alerts, emergency dispatch
+or real fall verification occurs on mobile.** All sample data is in memory,
+with conspicuous DEMO labels. From `apps/mobile`:
+
+```powershell
+flutter pub get
+flutter analyze
+flutter test
+flutter run -d chrome
+flutter build apk --debug
+```
+
+Connecting a live mobile caregiver inbox is deferred until Member 2 ships an
+authenticated, authorized backend service. The current `caregiver_inbox.v1`
+dashboard contract is a *proposal*, not a verified production endpoint.
+
 ### Python Edge → Dashboard contract verification
 
 The `edge-dashboard-contract` CI job now invokes the **real Python Edge v1
