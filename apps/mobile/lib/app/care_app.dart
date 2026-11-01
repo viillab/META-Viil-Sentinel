@@ -7,6 +7,7 @@ import '../features/incidents/alerts_page.dart';
 import '../features/incidents/event_details_page.dart';
 import '../features/history/history_page.dart';
 import '../features/demo/demo_control_page.dart';
+import '../features/demo/demo_walkthrough_page.dart';
 
 class CareApp extends StatefulWidget {
   const CareApp({super.key});
@@ -26,9 +27,29 @@ class _CareAppState extends State<CareApp> {
     ));
   }
 
+  void startGuidedDemo() {
+    final event = controller.simulate(DemoScenario.rapidDescent)!;
+    navigatorKey.currentState!.push(MaterialPageRoute<void>(
+      builder: (_) => DemoWalkthroughPage(
+        controller: controller,
+        eventId: event.id,
+        onOpenHistory: () {
+          navigatorKey.currentState!.pop();
+          setState(() => tab = 2);
+        },
+      ),
+    ));
+  }
+
   void openDemo() {
     navigatorKey.currentState!.push(MaterialPageRoute<void>(
-      builder: (_) => DemoControlPage(controller: controller),
+      builder: (_) => DemoControlPage(
+        controller: controller,
+        onStartWalkthrough: () {
+          navigatorKey.currentState!.pop();
+          startGuidedDemo();
+        },
+      ),
     ));
   }
 
@@ -80,6 +101,7 @@ class _CareAppState extends State<CareApp> {
               controller: controller,
               onOpenEvent: openEvent,
               onOpenDemo: openDemo,
+              onStartWalkthrough: startGuidedDemo,
               onSeeAlerts: () => setState(() => tab = 1),
             ),
             1 => AlertsPage(controller: controller, onOpenEvent: openEvent),

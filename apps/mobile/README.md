@@ -10,6 +10,14 @@ and does not connect to any backend or external service.
 
 - Open the app: the Home page shows **DEMO · SIMULATED DATA ONLY**,
   the pending count and recent fictional events.
+- For the fastest judge presentation, tap **Start guided demo** from
+  Home (or the Demo control center). Four explicit screens lead through
+  **Generate → Review → Acknowledge → History**. The Start action creates
+  exactly one fictional rapid-descent event. Acknowledge changes only
+  local memory; **Open History** selects the History tab automatically.
+  Closing the guided screen before acknowledgement leaves the fictional
+  event pending and never sends a notification. The primary action stays
+  pinned at the bottom on small screens; event details remain scrollable.
 - Tap the flask icon → **Demo control center**.
 - Tap **Possible fall candidate**, **Uncertain transfer**, or
   **Normal sitting**. The sitting scenario correctly creates no event.
@@ -63,7 +71,8 @@ daemon**, without changing the Windows language or locale.
   Alerts and Event Details
 - `lib/features/home/` — status overview
 - `lib/features/history/` — acknowledged event history
-- `lib/features/demo/` — controlled fictional scenarios and reset
+- `lib/features/demo/` — guided judge walkthrough, controlled fictional
+  scenarios and reset
 - `lib/shared/` — presentational components
 
 The future `viil.backend.caregiver_inbox.v1` contract is described by
@@ -85,3 +94,6 @@ it represented real candidate ingestion.
   monitoring. All UI is labeled DEMO.
 - Human review and real API integration require a separate authorization
   design and security review before enabling Live mode.
+- Widget tests cover the end-to-end guided demo, early exit without duplicate
+  events, and 320px-wide layouts at 140% text scale. These are simulated
+  widget tests, not physical Android hardware acceptance.

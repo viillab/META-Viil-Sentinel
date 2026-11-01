@@ -5,8 +5,11 @@ import '../incidents/demo_controller.dart';
 import '../incidents/demo_incident.dart';
 
 class DemoControlPage extends StatelessWidget {
-  const DemoControlPage({super.key, required this.controller});
+  const DemoControlPage({
+    super.key, required this.controller, required this.onStartWalkthrough,
+  });
   final DemoController controller;
+  final VoidCallback onStartWalkthrough;
 
   void _run(BuildContext context, DemoScenario scenario) {
     final event = controller.simulate(scenario);
@@ -22,6 +25,16 @@ class DemoControlPage extends StatelessWidget {
     appBar: AppBar(title: const Text('Demo control center')),
     body: CenteredPage(children: [
       const DemoNotice(),
+      const SizedBox(height: 15),
+      SizedBox(
+        width: double.infinity,
+        child: FilledButton.icon(
+          key: const Key('walkthrough-from-controls'),
+          onPressed: onStartWalkthrough,
+          icon: const Icon(Icons.auto_stories_outlined),
+          label: const Text('Start guided demo'),
+        ),
+      ),
       const SizedBox(height: 20),
       Text('Run a scenario', style: Theme.of(context).textTheme.headlineMedium),
       const SizedBox(height: 7),
