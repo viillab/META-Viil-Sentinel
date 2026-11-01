@@ -86,9 +86,18 @@ runtime files are copied from the npm package to a **gitignored
 same-origin** `/vendor/mediapipe/wasm` location by `predev` and
 `prebuild` npm scripts. No model binary is copied into the public
 assets. The app does not send video, pose landmarks, or candidate data
-to the backend, Meta/cloud, persistent storage, or caregivers. The
-WASM/vendor SDK may have its own usage telemetry/privacy notice; this
-developer demo does **not** claim a full offline network guarantee.
+to the backend, Meta/cloud, persistent storage, or caregivers.
+
+**Verified SDK egress behavior:** MediaPipe Vision 1.2.0 attempts a
+`POST https://odml.pa.googleapis.com/v1/log` while loading the real local
+model. The Dashboard HTML now applies a browser `connect-src 'self'` CSP,
+preserving loopback HMR, to **block this external SDK request**. Chrome CDP
+confirmed that the request was blocked by CSP and no off-device response
+was received during the synthetic test. New remote backend hosts must not
+be whitelisted without explicit privacy/security review; use same-origin
+authenticated backend endpoints. CSP is browser-level defense in depth,
+**not** proof that every possible outbound channel is disabled. Strict
+offline deployments also need host-level network isolation.
 Only short-lived numeric landmarks and candidate counts exist in
 browser memory; the green canvas draws joints, **not saved image
 pixels**. The pre-existing Dashboard may request unrelated metadata
@@ -125,8 +134,28 @@ It closes its own Headless browser; no recording, screenshots, external
 service, stored footage or model files are involved.
 
 CI runs this as `webcam-browser-smoke` on Ubuntu with a bundled Chrome.
-This verifies **browser preview/cleanup only**; it does not verify physical
-hardware, real MediaPipe pose inference, candidate detection accuracy,
+The synthetic-only default test needs no private model. An additional
+**opt-in, local-only real MediaPipe inference smoke** uses the operator's
+private local task file without committing its bytes:
+
+```powershell
+cd D:\VIIL-Sentinel\apps\dashboard
+npm run smoke:fake-webcam -- --pose-model D:\VIIL-Sentinel\models\pose_landmarker_lite.task
+```
+
+This runs the actual local MediaPipe CPU PoseLandmarker against moving
+canvas pixels. It requires at least 4 inference results, validates
+reported latency, requires zero candidates on this shape-only fixture,
+releases the track and model after Stop, and checks that any attempted
+off-device SDK logging is blocked by CSP (zero external responses).
+The private `.task` bytes are not copied to Git or uploaded. The local
+file path may appear in the shell command log; the model contents are not
+printed. Selection occurs only inside the isolated test browser.
+Since CI has no private model file, this **model smoke is local-only**, not
+a CI claim. It is not a fall accuracy benchmark or proof of any human pose.
+
+The default test verifies **browser preview/cleanup only**; it does not
+verify physical hardware, real MediaPipe pose inference, candidate accuracy,
 an authenticated backend, or caregiver delivery. Independent authorized
 camera acceptance remains mandatory. Never label a synthetic browser test
 as a real camera trial.

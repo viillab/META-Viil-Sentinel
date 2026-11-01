@@ -4,15 +4,28 @@
  */
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const cwd = fileURLToPath(new URL("../", import.meta.url));
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+const argv = process.argv.slice(2);
+if (argv.length && (argv.length !== 2 || argv[0] !== "--pose-model")) {
+  throw new Error("Usage: npm run smoke:fake-webcam -- --pose-model ABSOLUTE_LOCAL_PATH");
+}
+// Private model bytes are read by the isolated browser only, never logged or committed.
+const poseModel = argv.length ? resolve(argv[1]) : null;
+if (poseModel && (!poseModel.toLowerCase().endsWith(".task")
+    || !existsSync(poseModel)
+    || statSync(poseModel).size < 1024
+    || statSync(poseModel).size > 16 * 1024 * 1024)) {
+  throw new Error("A valid local .task file (1 KiB-16 MiB) is required.");
+}
 
 function chromeBinary() {
   const candidates = [
@@ -54,10 +67,35 @@ async function connectCdp(url) {
   let sequence = 0;
   const promises = new Map();
   const networkMethods = [];
+  const networkRequests = [];
+  const externalRequests = new Map();
+  const blockedExternal = [];
+  const completedExternal = [];
   ws.addEventListener("message", e => {
     const event = JSON.parse(String(e.data));
-    if (event.method === "Network.requestWillBeSent")
+    if (event.method === "Network.requestWillBeSent") {
       networkMethods.push(event.params.request.method);
+      const request = event.params.request;
+      const u = new URL(request.url);
+      // Never inspect or print request bodies, local File objects, or credentials.
+      networkRequests.push({ method: request.method, host: u.host,
+        path: u.pathname.slice(0, 120) });
+      if (u.protocol === "https:" || u.protocol === "http:") {
+        if (!["localhost", "127.0.0.1", "[::1]"].includes(u.hostname)) {
+          externalRequests.set(event.params.requestId, { host: u.host,
+            method: request.method });
+        }
+      }
+    }
+    if (event.method === "Network.loadingFailed"
+      && externalRequests.has(event.params.requestId)) {
+      blockedExternal.push({ ...externalRequests.get(event.params.requestId),
+        reason: event.params.blockedReason ?? null });
+    }
+    if (event.method === "Network.responseReceived"
+      && externalRequests.has(event.params.requestId)) {
+      completedExternal.push(externalRequests.get(event.params.requestId));
+    }
     if (event.id === undefined) return;
     const callback = promises.get(event.id);
     if (!callback) return;
@@ -66,6 +104,9 @@ async function connectCdp(url) {
   });
   return {
     networkMethods,
+    networkRequests,
+    blockedExternal,
+    completedExternal,
     send(method, params = {}) {
       const id = ++sequence;
       const response = new Promise((resolve, reject) => promises.set(id, { resolve, reject }));
@@ -83,6 +124,14 @@ async function main() {
   const profile = await mkdtemp(join(tmpdir(), "viil-fake-webcam-"));
   let vite, chrome, cdp;
   try {
+    if (poseModel) {
+      const result = spawnSync(process.execPath, [
+        join(cwd, "scripts", "prepare-mediapipe-wasm.mjs"),
+      ], { cwd, encoding: "utf8", timeout: 20_000, windowsHide: true });
+      if (result.error || result.status !== 0) {
+        throw new Error("Unable to prepare same-origin MediaPipe WASM assets");
+      }
+    }
     vite = spawn(process.execPath, [
       join(cwd, "node_modules", "vite", "bin", "vite.js"),
       "--host", "127.0.0.1", "--port", String(vitePort), "--strictPort",
@@ -129,6 +178,28 @@ async function main() {
     await until(() => evaluate(
       "document.querySelector('[aria-label=\"Laptop webcam demo\"]') !== null"
     ), "React webcam view");
+    // Always verify the browser has the same egress guard before the SDK
+    // is imported. The optional local-model smoke additionally observes
+    // a real SDK telemetry attempt and the CSP-blocked network failure.
+    const policy = await evaluate(
+      "document.querySelector('meta[http-equiv=Content-Security-Policy]')?.content");
+    assert.match(policy, /connect-src 'self'/);
+    assert.doesNotMatch(policy, /https:\/\//);
+    if (poseModel) {
+      // CDP injects a real local File through the browser's file input.
+      // No model bytes go through the test script, logs, app API or network.
+      const documentNode = await cdp.send("DOM.getDocument");
+      const input = await cdp.send("DOM.querySelector", {
+        nodeId: documentNode.root.nodeId, selector: "#viil-local-pose-model",
+      });
+      assert.ok(input.nodeId, "Local model File input missing");
+      await cdp.send("DOM.setFileInputFiles", {
+        nodeId: input.nodeId, files: [poseModel],
+      });
+      await until(() => evaluate(
+        "document.body.innerText.includes('Pose model loaded into browser memory')",
+      ), "actual MediaPipe PoseLandmarker load", 35_000);
+    }
     // Replace only this isolated test page's getUserMedia with a moving
     // synthetic canvas stream. The real camera permission is never requested.
     await evaluate("(() => { window.__viilFakeTrace=[];" +
@@ -147,6 +218,56 @@ async function main() {
       "t.addEventListener('ended',()=>window.__viilFakeTrace.push('track-ended'));}" +
       "return s;};return true;})()");
     assert.equal(await clickButton("Start laptop webcam demo"), true);
+    if (poseModel) {
+      const stats = await until(async () => {
+        const data = await evaluate("(() => {" +
+          "const root=document.querySelector('[aria-label=\\\"Laptop webcam demo\\\"]');" +
+          "const label=root?.querySelector('.laptop-pose-feedback')?.innerText || '';" +
+          "const match=label.match(/Frames analyzed locally:\\s*(\\d+)/);" +
+          "const status=root?.querySelector('.laptop-webcam-status')?.innerText || '';" +
+          "return { analyzed:Number(match?.[1]||0), label, status };})()");
+        return data?.analyzed >= 4 && data?.status.includes("LOCAL HEURISTIC")
+          ? data : null;
+      }, "real MediaPipe local inference on synthetic video", 30_000);
+      assert.match(stats.label, /Inference p50\/p95:\s*\d+(?:\.\d+)?\/\d+(?:\.\d+)? ms/);
+      assert.match(stats.label, /Session-only candidate count: 0/);
+      assert.equal(await clickButton("Stop webcam"), true);
+      const closed = await until(() => evaluate("(() => {" +
+        "const v=document.querySelector('[aria-label=\\\"Laptop webcam demo\\\"] video');" +
+        "const report=document.querySelector('[aria-label=\\\"Local webcam technical smoke report\\\"]')?.innerText||'';" +
+        "return { released:v?.srcObject===null," +
+        "trackEnded:window.__viilFakeTrack?.readyState==='ended',report," +
+        "status:document.querySelector('.laptop-webcam-status')?.innerText||'' };})()")
+        .then(x => x?.released && x.trackEnded &&
+          /Locally analyzed:\s*[1-9]/.test(x.report) ? x : null),
+      "MediaPipe and synthetic stream release");
+      assert.match(closed.report, /OPERATOR REVIEW REQUIRED/);
+      assert.match(closed.report, /Unconfirmed candidates:\s*0/);
+      assert.match(closed.status, /Pose AI: NOT LOADED/);
+      // MediaPipe SDK may TRY to POST usage telemetry to Google ODML.
+      // The Dashboard's connect-src CSP must block that attempt before
+      // any response; no external request is permitted to complete.
+      assert.deepEqual(cdp.completedExternal, [],
+        "Actual MediaPipe model must not reach off-device endpoints");
+      const attempted = cdp.networkRequests.filter(r =>
+        !["localhost", "127.0.0.1", "[::1]"].includes(
+          new URL("http://" + r.host).hostname));
+      assert.deepEqual(
+        { attempted, blocked: cdp.blockedExternal, completed: cdp.completedExternal },
+        { attempted, blocked: attempted.map(r => ({
+          host: r.host, method: r.method, reason: "csp",
+        })), completed: [] },
+        "External SDK attempts must be blocked by connect-src CSP");
+      assert.match(await evaluate(
+        "document.querySelector('meta[http-equiv=Content-Security-Policy]')?.content"),
+        /connect-src 'self'/);
+      await evaluate("clearInterval(window.__viilFakeRenderTimer)");
+      console.log("LOCAL MEDIAPIPE BROWSER PASS: actual model loaded; " +
+        "synthetic frames analyzed=" + stats.analyzed +
+        "; reported latency=yes; candidates=0; stopped/released=yes; " +
+        "external-completed=0; synthetic camera; fall accuracy=NOT tested");
+      return;
+    }
     let lastSnapshot = null;
     const snapshot = await until(async () => {
       const state = await evaluate("(() => {" +
