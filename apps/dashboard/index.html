@@ -4,6 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0c1425" />
+    <!-- Browser-only dashboard: deny outbound SDK telemetry and arbitrary API
+         connections; same-origin API and local Vite HMR remain allowed. -->
+    <meta http-equiv="Content-Security-Policy"
+      content="connect-src 'self' ws://127.0.0.1:* ws://localhost:*; form-action 'self'" />
     <meta name="description" content="VIIL Sentinel — local non-clinical incident intelligence prototype" />
     <title>VIIL Sentinel — Incident Operations</title>
   </head>

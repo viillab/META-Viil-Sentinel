@@ -45,6 +45,21 @@ verified by this offline test.
 
 ### Synthetic Chrome webcam UI test
 
+The Dashboard also has a same-origin `connect-src` CSP that blocks
+off-device MediaPipe SDK logging attempts. A dedicated **local-only**
+test can load the existing private task model, run the actual MediaPipe
+CPU inference over a synthetic Canvas stream, verify local latency
+measurement and track/model release, and check that external requests
+are CSP-blocked:
+
+```powershell
+cd D:\VIIL-Sentinel\apps\dashboard
+npm run smoke:fake-webcam -- --pose-model D:\VIIL-Sentinel\models\pose_landmarker_lite.task
+```
+
+No private model is included in CI or Git. This test proves runtime
+plumbing, not real-person pose detection, fall accuracy or medical safety.
+
 The `webcam-browser-smoke` CI job opens a disposable Chrome Headless
 instance and injects an animated Canvas `MediaStream` into the actual
 React laptop-webcam UI, so it never touches a real laptop camera. It verifies
