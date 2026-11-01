@@ -74,6 +74,28 @@
 .integration-operator-login input{min-width:150px;flex:1 1 150px;border:1px solid #b7cde5;padding:10px 11px;border-radius:8px;font-size:13px}
 .integration-operator-login button{padding:10px}
 .integration-operator-login small[role=alert]{flex-basis:100%;color:#bb4a4a;font-size:11px}
+
+/* Deliberate browser-local webcam demo; separated from backend RTSP states. */
+.laptop-webcam-demo{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);align-items:stretch;gap:20px;padding:21px;margin:18px 0 22px;border-radius:16px;border:1px solid #bdd8ef;background:linear-gradient(125deg,#f5faff,#eaf4ff)}
+.laptop-webcam-info h2{margin:10px 0 5px;font-size:20px;letter-spacing:-.025em;color:#1b406b}
+.laptop-webcam-info p{font-size:12px;line-height:1.7;color:#517190;max-width:540px;margin:6px 0 15px}
+.laptop-webcam-status{display:flex;flex-wrap:wrap;gap:8px 13px;padding:11px 0;font-size:10px;font-weight:700;color:#355879}
+.laptop-webcam-status strong{color:#224b78}
+.laptop-webcam-status span{padding:5px 8px;border-radius:5px;background:#fff;color:#916a36}
+.laptop-webcam-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:13px 0}
+.laptop-webcam-actions button{background:#1f5fa6;color:#fff;border:0;border-radius:8px;min-height:39px;padding:9px 16px;font-size:12px;font-weight:800;cursor:pointer}
+.laptop-webcam-actions button:disabled{background:#90a8be;cursor:not-allowed}
+.laptop-webcam-actions small{font-size:10px;color:#557694}
+.laptop-webcam-message{display:block;font-size:11px;color:#aa4a35;line-height:1.5;margin:8px 0}
+.laptop-webcam-disclaimer{display:block;margin-top:16px;color:#6586a2;font-size:10px;line-height:1.7}
+.laptop-webcam-video-box{position:relative;min-height:226px;aspect-ratio:16/9;border-radius:12px;overflow:hidden;background:#081525;display:grid;place-items:center}
+.laptop-webcam-video-box video{width:100%;height:100%;position:absolute;inset:0;object-fit:contain;opacity:0;pointer-events:none}
+.laptop-webcam-video-box video.is-visible{opacity:1}
+.laptop-webcam-placeholder{color:#bed1e3;display:flex;align-items:center;justify-content:center;gap:8px;flex-direction:column;text-align:center;padding:20px}
+.laptop-webcam-placeholder>span{font-size:38px;color:#6e9fcf}
+.laptop-webcam-placeholder strong{font-size:11px;letter-spacing:.08em}
+.laptop-webcam-placeholder small{font-size:10px;color:#91a7bd}
+@media(max-width:850px){.laptop-webcam-demo{grid-template-columns:1fr}.laptop-webcam-video-box{min-height:220px}}
 .camera-preview-panel{margin:17px 0 13px}
 .camera-preview-panel .integration-dark-preview{margin:0 0 8px}
 .camera-preview-frame{position:relative;aspect-ratio:16/9;border-radius:10px;overflow:hidden;background:#081322;display:flex;align-items:center}

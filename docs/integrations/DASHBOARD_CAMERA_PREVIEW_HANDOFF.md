@@ -1,5 +1,7 @@
 # VIIL-Sentinel — Browser Live Camera Preview (Member 1 / Member 2 handoff)
 
+**Local laptop demo (1 Nov 2026):** [Laptop Webcam Demo](LAPTOP_WEBCAM_DEMO.md) is a separate, browser-only, user-clicked Integrated Camera preview. It works without Hikvision/Member 2 backend and deliberately performs no AI inference, recording or alerts. The signed RTSP pathway below is unchanged.
+
 ## Status (29 Oct 2026)
 
 **UI implemented, real live Hikvision playback NOT verified.** The Dashboard
