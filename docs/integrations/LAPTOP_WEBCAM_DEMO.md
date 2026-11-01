@@ -38,6 +38,10 @@ In **Microsoft Edge or Chrome on the same laptop** open
    frame gap causes a fail-closed abstention; **unknown is not safe**.
    A possible-candidate notice remains visible for only 8 seconds, then
    expires. Its counter is session-only and does not confirm a fall.
+   The operator-only panel now shows rolling processed FPS, inference
+   p50/p95 milliseconds and reliable single-person pose coverage over a
+   maximum 4-second/32-sample window. These are local runtime/quality
+   diagnostics, **not camera source FPS, model recall, or fall accuracy**.
 4. Click **Stop webcam** when done. Video, active model and pose
    history are discarded. Video also auto-stops after **60 seconds**,
    when the tab is hidden, page unloaded, or capture track ends.
@@ -46,7 +50,10 @@ In **Microsoft Edge or Chrome on the same laptop** open
    which may advance despite a frozen webcam). A 3.5-second frame stall
    stops capture and displays a redacted error. Browsers without this
    API fail closed in Pose mode; preview-only mode remains available.
-   No alert is sent.
+   No alert is sent. Model selection/replacement is disabled during live
+   preview and pending capture, and starting a webcam is disabled until
+   local model loading completes. Replacing a stopped model closes the
+   old instance and clears the former session metrics.
 
 The webcam feature uses `navigator.mediaDevices.getUserMedia`
 with **audio disabled**, 640×360 preferred at 15fps (maximum 24fps).
@@ -127,7 +134,9 @@ Member 2 before that separate authenticated ingestion is ready.
 ## Testing evidence and remaining work
 
 Dashboard Node contract tests cover secure-origin allowlisting,
-actual presented-video-frame freshness, camera-frame stall fail-closed
+actual presented-video-frame freshness, bounded numeric runtime
+metrics (processed FPS, inference p50/p95, pose coverage), model lifecycle
+replacement guards, camera-frame stall fail-closed
 behavior and temporary candidate notice,
 camera stop, non-uploads, local model validation, single/multi-person
 pose quality, synthetic upright→horizontal hold, safe sitting

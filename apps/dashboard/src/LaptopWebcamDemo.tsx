@@ -2,10 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { PoseLandmarker } from "@mediapipe/tasks-vision";
 import {
   candidateNoticeVisible, drawTorsoOverlay, freshVideoFrameCount,
-  LocalFallCandidateHeuristic, LOCAL_VISION_WASM_ROOT,
+  LocalFallCandidateHeuristic, LocalPoseRuntimeMeter, LOCAL_VISION_WASM_ROOT,
   poseStreamStalled, POSE_DEMO_INTERVAL_MS, validLocalPoseTask,
 } from "./localPoseDemo";
-import type { PoseObservation } from "./localPoseDemo";
+import type { PoseObservation, PoseRuntimeSummary } from "./localPoseDemo";
 import { loadLocalPoseLandmarker } from "./localPoseEngine";
 import {
   hasUsableVideoTrack, LAPTOP_WEBCAM_DEMO_MAX_MS,
@@ -32,6 +32,7 @@ export default function LaptopWebcamDemo() {
   const [candidateCount, setCandidateCount] = useState(0);
   const [lastCandidateAt, setLastCandidateAt] = useState<number | null>(null);
   const [poseFrames, setPoseFrames] = useState(0);
+  const [runtime, setRuntime] = useState<PoseRuntimeSummary | null>(null);
   const [poseMessage, setPoseMessage] = useState("");
   const streamRef = useRef<MediaStream | null>(null);
   const trackListener = useRef<(() => void) | null>(null);
@@ -75,6 +76,7 @@ export default function LaptopWebcamDemo() {
     setCandidateCount(0);
     setLastCandidateAt(null);
     setPoseFrames(0);
+    setRuntime(null);
     setPoseMessage("");
   }, [clearCapture]);
 
@@ -99,12 +101,26 @@ export default function LaptopWebcamDemo() {
   }, [phase, startedAt]);
 
   async function loadPoseModel(file: File | undefined) {
-    if (!file || !validLocalPoseTask(file)) {
+    if (!file) return;
+    if (streamRef.current || inFlight.current) {
+      setPoseMessage("Stop the webcam before changing the local Pose model.");
+      return;
+    }
+    // Invalidate late loads and release prior model before replacement.
+    const requestId = ++modelLoadGeneration.current;
+    const previous = modelRef.current;
+    modelRef.current = null;
+    try { previous?.close(); } catch { /* local SDK error redacted */ }
+    setRuntime(null);
+    setPoseFrames(0);
+    setLastCandidateAt(null);
+    setCandidateCount(0);
+    setPoseObservation("unknown");
+    if (!validLocalPoseTask(file)) {
       setPosePhase("error");
       setPoseMessage("Choose the local pose_landmarker_lite.task file (1 KiB–16 MiB).");
       return;
     }
-    const requestId = ++modelLoadGeneration.current;
     setPosePhase("loading");
     setPoseMessage("");
     let engine: PoseLandmarker;
@@ -122,13 +138,14 @@ export default function LaptopWebcamDemo() {
       try { engine.close(); } catch { /* no native error disclosure */ }
       return;
     }
-    try { modelRef.current?.close(); } catch { /* redacted */ }
+    // Previous model was already closed before this asynchronous load.
     modelRef.current = engine;
     setPosePhase("ready");
     setPoseObservation("unknown");
     setCandidateCount(0);
     setLastCandidateAt(null);
     setPoseFrames(0);
+    setRuntime(null);
   }
 
   useEffect(() => {
@@ -147,6 +164,7 @@ export default function LaptopWebcamDemo() {
     }
     const session = generation.current;
     const detector = new LocalFallCandidateHeuristic();
+    const meter = new LocalPoseRuntimeMeter();
     let frameId = 0;
     let callbackId = 0;
     let cancelled = false;
@@ -183,9 +201,13 @@ export default function LaptopWebcamDemo() {
       try {
         // Same browser-owned video element: no second webcam capture, upload
         // or video snapshot. Inference is synchronous and at most 5Hz.
+        const inferenceStartedMs = performance.now();
         const result = engine.detectForVideo(video, ms);
+        const inferenceMs = performance.now() - inferenceStartedMs;
         if (cancelled || generation.current !== session) return;
         const observation = detector.observe(result.landmarks, ms);
+        const summary = meter.observe(ms, inferenceMs, observation.status !== "unknown");
+        if (summary) setRuntime(summary);
         const overlay = overlayRef.current;
         if (overlay) drawTorsoOverlay(
           overlay, result.landmarks, video.videoWidth, video.videoHeight,
@@ -218,6 +240,10 @@ export default function LaptopWebcamDemo() {
 
   async function start() {
     if (inFlight.current || streamRef.current) return;
+    if (posePhase === "loading") {
+      setMessage("Wait for the local Pose model to finish loading first.");
+      return;
+    }
     if (!webcamDemoSupported(
       window.location.hostname, window.isSecureContext, navigator.mediaDevices,
     )) {
@@ -328,13 +354,14 @@ export default function LaptopWebcamDemo() {
         <label htmlFor="viil-local-pose-model">Select local MediaPipe .task model
           (never uploaded)</label>
         <input id="viil-local-pose-model" type="file" accept=".task"
-          disabled={posePhase === "loading"}
+          disabled={posePhase === "loading" || phase === "live" || phase === "requesting"}
           onChange={event => {
             const file = event.currentTarget.files?.[0];
             event.currentTarget.value = "";
             void loadPoseModel(file);
           }} />
         <small>On this laptop: D:\VIIL-Sentinel\models\pose_landmarker_lite.task</small>
+        <small>Stop the webcam before selecting or replacing the model.</small>
         <small>Local WASM: <code>{LOCAL_VISION_WASM_ROOT}</code> · up to 5 analyses/sec</small>
         {posePhase === "ready" && <strong>Pose model loaded into browser memory</strong>}
         {posePhase === "loading" && <small role="status">Loading local Pose Landmarker…</small>}
@@ -356,13 +383,20 @@ export default function LaptopWebcamDemo() {
           className="laptop-pose-candidate">RECENT POSSIBLE FALL CANDIDATE ·
           UNCONFIRMED · HUMAN REVIEW REQUIRED</strong>}
         <span>Frames analyzed locally: {poseFrames} · Session-only candidate count: {candidateCount}</span>
+        <span>Local measured rate (rolling 4s): {runtime?.sampledFps == null
+          ? "—" : runtime.sampledFps.toFixed(1)} processed FPS · Inference p50/p95: {runtime
+            ? `${runtime.inferenceP50Ms.toFixed(1)}/${runtime.inferenceP95Ms.toFixed(1)} ms`
+            : "—"}</span>
+        <span>Reliable single-person pose: {runtime
+          ? `${runtime.singlePoseCoveragePercent}%` : "—"} of last {runtime?.samples ?? 0}
+          locally analyzed frames (not fall accuracy)</span>
         <small>Experimental torso-motion heuristic, not a fall confirmation,
           calibrated model probability or emergency monitoring.</small>
       </div>}
       <div className="laptop-webcam-actions">
         {phase === "live" || phase === "requesting"
           ? <button type="button" onClick={stop}>Stop webcam</button>
-          : <button type="button" disabled={!allowed}
+          : <button type="button" disabled={!allowed || posePhase === "loading"}
               onClick={() => void start()}>Start laptop webcam demo</button>}
         {phase === "live" && <small role="status">
           Auto-stop in {secondsRemaining}s · stops when tab is hidden
