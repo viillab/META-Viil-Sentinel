@@ -51,7 +51,9 @@ def verify_archive(path: Path) -> str:
     path = path.resolve(strict=True)
     if path.name != "IKAR_dataset.tar.gz" or path.stat().st_size != ARCHIVE_BYTES:
         raise ValueError("IKAR official archive identity or size changed")
-    digest, md5sum = sha256(), md5()
+    # Publisher MD5 is a legacy archive identifier, never an auth hash.
+    # The pinned SHA-256 above is the actual strong integrity check.
+    digest, md5sum = sha256(), md5(usedforsecurity=False)
     with path.open("rb") as stream:
         for block in iter(lambda: stream.read(1 << 20), b""):
             digest.update(block)
