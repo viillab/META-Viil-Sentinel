@@ -11,7 +11,7 @@ import { makeWebcamSmokeReport } from "./webcamAcceptance";
 import type { WebcamSmokeReport, WebcamStopReason } from "./webcamAcceptance";
 import {
   hasUsableVideoTrack, LAPTOP_WEBCAM_DEMO_MAX_MS,
-  requestLaptopWebcam, stopLaptopWebcam,
+  requestLaptopWebcam, stopLaptopWebcam, waitForLocalWebcamPlayback,
   webcamDemoSupported, webcamErrorLabel,
 } from "./laptopWebcam";
 
@@ -99,7 +99,7 @@ export default function LaptopWebcamDemo() {
     const invisible = () => {
       if (document.visibilityState !== "visible") stop("hidden");
     };
-    const pageExit = () => clearCapture();
+    const pageExit = () => stop("hidden");
     document.addEventListener("visibilitychange", invisible);
     window.addEventListener("pagehide", pageExit);
     return () => {
@@ -327,7 +327,14 @@ export default function LaptopWebcamDemo() {
     }
     video.srcObject = stream;
     try {
-      await video.play();
+      if (!await waitForLocalWebcamPlayback(video.play())) {
+        if (generation.current === requestId) {
+          stop("playback_error");
+          setPhase("error");
+          setMessage("Camera playback timed out after 8 seconds. The camera was released.");
+        }
+        return;
+      }
     } catch {
       if (generation.current === requestId) {
         stop("playback_error");

@@ -50,6 +50,11 @@ In **Microsoft Edge or Chrome on the same laptop** open
    which may advance despite a frozen webcam). A 3.5-second frame stall
    stops capture and displays a redacted error. Browsers without this
    API fail closed in Pose mode; preview-only mode remains available.
+   When the browser has acquired a camera stream but `video.play()` never
+   settles, an 8-second playback watchdog stops all tracks and reports a
+   redacted error instead of leaving an unbounded camera-open startup.
+   A late playback rejection remains handled. `pagehide` also releases the
+   device via the same Stop cleanup and invalidates the session.
    No alert is sent. Model selection/replacement is disabled during live
    preview and pending capture, and starting a webcam is disabled until
    local model loading completes. Replacing a stopped model closes the
