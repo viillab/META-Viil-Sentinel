@@ -72,9 +72,22 @@ Chrome/Edge required). This is **not**
 hardware or fall-model validation. See
 [Webcam testing guide](docs/integrations/LAPTOP_WEBCAM_DEMO.md).
 
+### Offline browser Pose heuristic scenarios
+
+The **AI Detect Test Lab** now includes an interactive, browser-local
+synthetic Pose trace simulator built on the exact torso-motion heuristic
+used by the Laptop Webcam Demo. Its generated upright-to-horizontal
+sequence produces **one UNCONFIRMED candidate at 1000 ms**; sitting,
+horizontal-without-baseline, pose loss and multiple-person sequences
+produce none. The timeline displays derived state and measurements only.
+It does **not** invoke MediaPipe, open a camera, call Meta/backend, emit a
+Python Edge JSONL event, or notify a caregiver. An isolated Chrome UI
+smoke checks all scenarios. See
+[synthetic Pose trace guide](docs/integrations/SYNTHETIC_POSE_HEURISTIC_LAB.md).
+
 ## Member 1 AI Detect + Web Test Lab (Phase 1)
 
-New browser-local **AI Detect Test Lab** is the default dashboard screen.
+The browser-local **AI Detect Test Lab** is available from the sidebar (the default Dashboard screen is Judge walkthrough).
 It replays strictly validated, metadata-only `viil.edge.candidate.v1` JSONL
 from the real Python Edge emitter with **zero backend requests while the
 Lab tab is selected**; no photo, person trace or private model upload.

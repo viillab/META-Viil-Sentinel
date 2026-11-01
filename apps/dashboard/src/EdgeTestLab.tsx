@@ -1,4 +1,5 @@
 import { useState } from "react";
+import SyntheticPoseTraceLab from "./SyntheticPoseTraceLab";
 import syntheticCandidate from "./fixtures/edgeCandidateSynthetic.json" with { type: "json" };
 import {
   formatSourceOffset, MAX_LOCAL_CANDIDATE_BYTES, parseEdgeCandidateJsonl,
@@ -6,9 +7,9 @@ import {
 import type { EdgeCandidateV1, LocalReplay } from "./edgeLab";
 
 /**
- * MEMBER 1 only. No MediaPipe inference in browser; consumes metadata
- * produced by Python Edge emitter, not videos, poses or model weights.
- * No API requests, notifications, storage or emergency response.
+ * MEMBER 1 only. Replays Python Edge metadata and separately exercises a
+ * synthetic browser-only torso heuristic. Neither path loads real media or
+ * MediaPipe; no API requests, notifications, storage or emergency response.
  */
 export default function EdgeTestLab() {
   const [replay, setReplay] = useState<LocalReplay | null>(null);
@@ -69,7 +70,7 @@ export default function EdgeTestLab() {
         <div>
           <div className="eyebrow blue">MEMBER 1 · PHASE 1 / EDGE AI TEST LAB</div>
           <h1>Fall candidate lab</h1>
-          <p>Inspect actual Python Edge candidate metadata locally. No upload, API, or automatic alert.</p>
+          <p>Inspect Python Edge metadata and test a separate synthetic Pose heuristic locally. No upload, API, or automatic alert.</p>
         </div>
         <div className="lab-mode">OFFLINE METADATA REPLAY</div>
       </div>
@@ -146,6 +147,7 @@ export default function EdgeTestLab() {
             </div>}
         </section>
       </div>
+      <SyntheticPoseTraceLab />
       <div className="lab-footer-note">
         <strong>Next test:</strong> run <code>python -m sentinel_edge.handoff_cli</code> with the synthetic traces and
         redirect stdout to a local <code>.jsonl</code> file. Load it here to inspect the

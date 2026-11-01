@@ -437,9 +437,37 @@ async function main() {
     assert.match(denied, /permission denied/i);
     assert.doesNotMatch(denied, /private device information/i);
 
+    // Same headless browser now exercises the actual Lab's production
+    // browser heuristic, entirely separately from Python Edge and MediaPipe.
+    // No camera permission, backend, Meta or alert may be invoked here.
+    assert.equal(await clickButton("AI Detect Test Lab"), true);
+    await until(() => evaluate(
+      "document.querySelector('[aria-label=\\\"Synthetic browser Pose heuristic trace\\\"]')!==null"),
+      "synthetic browser heuristic lab mounted");
+    assert.equal(await clickButton("Run synthetic fall trace"), true);
+    const syntheticFall = await until(() => evaluate("(() => {" +
+      "const root=document.querySelector('[aria-label=\\\"Synthetic heuristic result\\\"]');" +
+      "return root?.innerText || '';})()"), "synthetic fall heuristic result");
+    assert.match(syntheticFall, /Synthetic possible-fall candidates:\s*1/);
+    assert.match(syntheticFall, /UNCONFIRMED CANDIDATE/);
+    assert.match(syntheticFall, /Confirmed falls:\s*0/);
+    assert.match(syntheticFall, /Backend \/ Meta \/ alerts:\s*OFF/);
+    assert.equal(await clickButton("Run synthetic sitting trace"), true);
+    const syntheticSitting = await evaluate(
+      "document.querySelector('[aria-label=\\\"Synthetic heuristic result\\\"]')?.innerText");
+    assert.match(syntheticSitting, /Synthetic possible-fall candidates:\s*0/);
+    assert.match(syntheticSitting, /NO CANDIDATE IN THIS GENERATED TRACE/);
+    for (const choice of [
+      "Run no-baseline trace", "Run lost-pose trace", "Run multi-person trace",
+    ]) {
+      assert.equal(await clickButton(choice), true);
+      const summary = await evaluate(
+        "document.querySelector('[aria-label=\\\"Synthetic heuristic result\\\"]')?.innerText");
+      assert.match(summary, /Synthetic possible-fall candidates:\s*0/);
+    }
     assert.equal(cdp.networkMethods.filter(m => !["GET", "OPTIONS"].includes(m)).length,
       0, "Browser must not upload frames or POST demo incidents");
-    console.log("FAKE WEBCAM BROWSER PASS: rendered=" + snapshot.count +
+    console.log("FAKE WEBCAM + SYNTHETIC HEURISTIC BROWSER PASS: rendered=" + snapshot.count +
       "; manual/hidden/stall/late-permission cleanup=verified; " +
       "permission-denied=redacted; local report=shown; " +
       "inference=none; POST=0; real hardware=NOT tested");
