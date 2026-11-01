@@ -82,6 +82,14 @@ test("webcam demo UI has no transport or recording implementation", () => {
   assert.match(source, /LAPTOP_WEBCAM_DEMO_MAX_MS/);
   assert.match(source, /LOCAL HEURISTIC/);
   assert.match(source, /poseFrames > 0/);
+  assert.match(source, /poseStreamStalled/);
+  assert.match(source, /candidateNoticeVisible/);
+  assert.match(source, /setLastCandidateAt\(null\)/);
+  assert.match(source, /Webcam frames stopped arriving/);
+  assert.match(source, /requestVideoFrameCallback/);
+  assert.match(source, /cancelVideoFrameCallback/);
+  assert.match(source, /freshVideoFrameCount/);
+  assert.doesNotMatch(source, /video\.currentTime/);
   assert.match(source, /WAITING FOR FIRST LOCAL POSE INFERENCE/);
   assert.match(source, /Stop webcam/);
   for (const prohibited of [

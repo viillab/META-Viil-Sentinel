@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PoseLandmarker } from "@mediapipe/tasks-vision";
 import {
-  drawTorsoOverlay, LocalFallCandidateHeuristic, LOCAL_VISION_WASM_ROOT,
-  POSE_DEMO_INTERVAL_MS, validLocalPoseTask,
+  candidateNoticeVisible, drawTorsoOverlay, freshVideoFrameCount,
+  LocalFallCandidateHeuristic, LOCAL_VISION_WASM_ROOT,
+  poseStreamStalled, POSE_DEMO_INTERVAL_MS, validLocalPoseTask,
 } from "./localPoseDemo";
 import type { PoseObservation } from "./localPoseDemo";
 import { loadLocalPoseLandmarker } from "./localPoseEngine";
@@ -29,6 +30,7 @@ export default function LaptopWebcamDemo() {
   const [posePhase, setPosePhase] = useState<PosePhase>("unloaded");
   const [poseObservation, setPoseObservation] = useState<PoseObservation["status"]>("unknown");
   const [candidateCount, setCandidateCount] = useState(0);
+  const [lastCandidateAt, setLastCandidateAt] = useState<number | null>(null);
   const [poseFrames, setPoseFrames] = useState(0);
   const [poseMessage, setPoseMessage] = useState("");
   const streamRef = useRef<MediaStream | null>(null);
@@ -71,6 +73,7 @@ export default function LaptopWebcamDemo() {
     setPosePhase("unloaded");
     setPoseObservation("unknown");
     setCandidateCount(0);
+    setLastCandidateAt(null);
     setPoseFrames(0);
     setPoseMessage("");
   }, [clearCapture]);
@@ -124,6 +127,7 @@ export default function LaptopWebcamDemo() {
     setPosePhase("ready");
     setPoseObservation("unknown");
     setCandidateCount(0);
+    setLastCandidateAt(null);
     setPoseFrames(0);
   }
 
@@ -132,21 +136,50 @@ export default function LaptopWebcamDemo() {
     const engine = modelRef.current;
     const video = videoRef.current;
     if (!engine || !video) return;
+    // Chrome/Edge guarantee a decoded/presented video frame callback.
+    // currentTime can advance while a live MediaStream picture is frozen.
+    if (typeof video.requestVideoFrameCallback !== "function"
+        || typeof video.cancelVideoFrameCallback !== "function") {
+      stop();
+      setPhase("error");
+      setMessage("Browser cannot verify fresh camera frames. Local Pose demo disabled.");
+      return;
+    }
     const session = generation.current;
     const detector = new LocalFallCandidateHeuristic();
     let frameId = 0;
+    let callbackId = 0;
     let cancelled = false;
     let previousMs = -1;
-    let previousVideoTime = -1;
+    let latestPresentedFrames = -1;
+    let analyzedPresentedFrames = -1;
+    let firstWatchMs: number | null = null;
+    let lastRenderedMs: number | null = null;
+    const framePresented = (ms: number, metadata: VideoFrameCallbackMetadata) => {
+      if (cancelled || generation.current !== session) return;
+      if (freshVideoFrameCount(metadata.presentedFrames, latestPresentedFrames)) {
+        latestPresentedFrames = metadata.presentedFrames;
+        lastRenderedMs = ms;
+      }
+      callbackId = video.requestVideoFrameCallback(framePresented);
+    };
+    callbackId = video.requestVideoFrameCallback(framePresented);
     const tick = (ms: number) => {
       if (cancelled || generation.current !== session
           || document.visibilityState !== "visible") return;
       frameId = window.requestAnimationFrame(tick);
+      if (firstWatchMs === null) firstWatchMs = ms;
+      if (poseStreamStalled(ms, lastRenderedMs ?? firstWatchMs)) {
+        stop();
+        setPhase("error");
+        setMessage("Webcam frames stopped arriving. Local inference halted; no alert was sent.");
+        return;
+      }
       if (previousMs >= 0 && ms - previousMs < POSE_DEMO_INTERVAL_MS) return;
       if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA
-          || video.currentTime === previousVideoTime) return;
+          || latestPresentedFrames <= analyzedPresentedFrames) return;
       previousMs = ms;
-      previousVideoTime = video.currentTime;
+      analyzedPresentedFrames = latestPresentedFrames;
       try {
         // Same browser-owned video element: no second webcam capture, upload
         // or video snapshot. Inference is synchronous and at most 5Hz.
@@ -159,7 +192,12 @@ export default function LaptopWebcamDemo() {
         );
         setPoseFrames(n => n + 1);
         setPoseObservation(observation.status);
-        if (observation.candidate) setCandidateCount(detector.count);
+        if (observation.candidate) {
+          const candidateAt = Date.now();
+          setCandidateCount(detector.count);
+          setLastCandidateAt(candidateAt);
+          setNow(candidateAt);
+        }
       } catch {
         if (!cancelled && generation.current === session) {
           stop();
@@ -172,6 +210,7 @@ export default function LaptopWebcamDemo() {
     return () => {
       cancelled = true;
       window.cancelAnimationFrame(frameId);
+      video.cancelVideoFrameCallback(callbackId);
       const canvas = overlayRef.current;
       canvas?.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
     };
@@ -313,6 +352,9 @@ export default function LaptopWebcamDemo() {
             : poseObservation === "upright"
               ? "UPRIGHT BASELINE OBSERVED"
               : "OBSERVING BODY MOTION · NO CONFIRMED EVENT"}</strong>
+        {candidateNoticeVisible(now, lastCandidateAt) && <strong
+          className="laptop-pose-candidate">RECENT POSSIBLE FALL CANDIDATE ·
+          UNCONFIRMED · HUMAN REVIEW REQUIRED</strong>}
         <span>Frames analyzed locally: {poseFrames} · Session-only candidate count: {candidateCount}</span>
         <small>Experimental torso-motion heuristic, not a fall confirmation,
           calibrated model probability or emergency monitoring.</small>

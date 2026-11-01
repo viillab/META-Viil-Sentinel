@@ -22,7 +22,29 @@ const GAP_MS = 700;
 const MIN_VISIBILITY = 0.55;
 
 export const POSE_DEMO_INTERVAL_MS = 200; // <=5Hz, no second camera capture
+export const POSE_DEMO_STALL_MS = 3500; // no fresh video frames => stop instead of implying live AI
+export const CANDIDATE_NOTICE_MS = 8000; // ephemeral, unconfirmed local notice
 export const MAX_LOCAL_TASK_BYTES = 16 * 1024 * 1024;
+
+/** Valid monotonic RAF timings only. Bad clocks also fail closed. */
+export function poseStreamStalled(nowMs: number, lastFrameMs: number): boolean {
+  return !Number.isFinite(nowMs) || !Number.isFinite(lastFrameMs)
+    || nowMs < lastFrameMs || nowMs - lastFrameMs >= POSE_DEMO_STALL_MS;
+}
+
+/** requestVideoFrameCallback metadata, not media currentTime, proves a new rendered frame. */
+export function freshVideoFrameCount(presentedFrames: number, previousFrames: number): boolean {
+  return Number.isSafeInteger(presentedFrames) && presentedFrames >= 0
+    && Number.isSafeInteger(previousFrames) && previousFrames >= -1
+    && presentedFrames > previousFrames;
+}
+
+/** Do not leave an unconfirmed candidate banner visible indefinitely. */
+export function candidateNoticeVisible(nowMs: number, candidateAtMs: number | null): boolean {
+  return candidateAtMs !== null
+    && Number.isFinite(nowMs) && Number.isFinite(candidateAtMs)
+    && nowMs >= candidateAtMs && nowMs - candidateAtMs < CANDIDATE_NOTICE_MS;
+}
 export const LOCAL_VISION_WASM_ROOT = "/vendor/mediapipe/wasm";
 
 export function validLocalPoseTask(file: Pick<File, "name" | "size"> | null): boolean {

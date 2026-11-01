@@ -36,9 +36,17 @@ In **Microsoft Edge or Chrome on the same laptop** open
    **POSSIBLE FALL CANDIDATE · HUMAN REVIEW REQUIRED** is strictly
    unconfirmed. More than one person, missing visibility, or a large
    frame gap causes a fail-closed abstention; **unknown is not safe**.
+   A possible-candidate notice remains visible for only 8 seconds, then
+   expires. Its counter is session-only and does not confirm a fall.
 4. Click **Stop webcam** when done. Video, active model and pose
    history are discarded. Video also auto-stops after **60 seconds**,
    when the tab is hidden, page unloaded, or capture track ends.
+   In Pose mode, verified new rendered frames are tracked by the
+   browser `requestVideoFrameCallback` API (not `video.currentTime`,
+   which may advance despite a frozen webcam). A 3.5-second frame stall
+   stops capture and displays a redacted error. Browsers without this
+   API fail closed in Pose mode; preview-only mode remains available.
+   No alert is sent.
 
 The webcam feature uses `navigator.mediaDevices.getUserMedia`
 with **audio disabled**, 640×360 preferred at 15fps (maximum 24fps).
@@ -119,6 +127,8 @@ Member 2 before that separate authenticated ingestion is ready.
 ## Testing evidence and remaining work
 
 Dashboard Node contract tests cover secure-origin allowlisting,
+actual presented-video-frame freshness, camera-frame stall fail-closed
+behavior and temporary candidate notice,
 camera stop, non-uploads, local model validation, single/multi-person
 pose quality, synthetic upright→horizontal hold, safe sitting
 non-trigger, occlusion, time gaps, cooldown and source inspection.
