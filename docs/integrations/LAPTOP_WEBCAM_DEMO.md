@@ -45,11 +45,13 @@ In **Microsoft Edge or Chrome on the same laptop** open
 4. Click **Stop webcam** when done. Video, active model and pose
    history are discarded. Video also auto-stops after **60 seconds**,
    when the tab is hidden, page unloaded, or capture track ends.
-   In Pose mode, verified new rendered frames are tracked by the
-   browser `requestVideoFrameCallback` API (not `video.currentTime`,
+   In both preview-only and Pose modes, new rendered frames are tracked
+   by the browser `requestVideoFrameCallback` API (not `video.currentTime`,
    which may advance despite a frozen webcam). A 3.5-second frame stall
-   stops capture and displays a redacted error. Browsers without this
-   API fail closed in Pose mode; preview-only mode remains available.
+   or missing first frame stops capture and displays a redacted error.
+   Browsers without this API fail closed in both modes; Chrome/Edge on
+   the same Windows laptop are recommended. Fresh frame callbacks prove
+   frame presentation, not that scene content or a real person moved.
    When the browser has acquired a camera stream but `video.play()` never
    settles, an 8-second playback watchdog stops all tracks and reports a
    redacted error instead of leaving an unbounded camera-open startup.
@@ -69,7 +71,8 @@ In **Microsoft Edge or Chrome on the same laptop** open
    model path, API calls, disk exports, or timestamps. Dismiss the report
    or start a new session to clear it.
 6. A real camera acceptance still requires a human operator to confirm
-   that the visible preview moves, the torso overlay tracks a consenting
+   that the visible preview moves (including in preview-only mode), the
+   on-screen frame count advances, and the torso overlay tracks a consenting
    subject correctly, a 60-second session produces nonzero actual frames,
    and the camera LED/device tracks stop after Stop, tab-hide or timeout.
    The report alone is **not** evidence that actual camera hardware ran

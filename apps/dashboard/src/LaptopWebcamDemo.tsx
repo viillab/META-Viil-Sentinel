@@ -34,6 +34,7 @@ export default function LaptopWebcamDemo() {
   const [candidateCount, setCandidateCount] = useState(0);
   const [lastCandidateAt, setLastCandidateAt] = useState<number | null>(null);
   const [poseFrames, setPoseFrames] = useState(0);
+  const [previewFrames, setPreviewFrames] = useState(0);
   const [runtime, setRuntime] = useState<PoseRuntimeSummary | null>(null);
   const [smokeReport, setSmokeReport] = useState<WebcamSmokeReport | null>(null);
   const sessionStartedMonoMs = useRef<number | null>(null);
@@ -91,6 +92,7 @@ export default function LaptopWebcamDemo() {
     setCandidateCount(0);
     setLastCandidateAt(null);
     setPoseFrames(0);
+    setPreviewFrames(0);
     setRuntime(null);
     setPoseMessage("");
   }, [clearCapture]);
@@ -162,6 +164,57 @@ export default function LaptopWebcamDemo() {
     setPoseFrames(0);
     setRuntime(null);
   }
+
+  // Preview-only sessions must prove fresh browser frames too. Without this,
+  // a frozen camera could be displayed as LIVE even with no Pose model loaded.
+  useEffect(() => {
+    if (phase !== "live" || posePhase === "ready") return;
+    const video = videoRef.current;
+    if (!video) return;
+    if (typeof video.requestVideoFrameCallback !== "function"
+        || typeof video.cancelVideoFrameCallback !== "function") {
+      stop("unsupported_browser");
+      setPhase("error");
+      setMessage("Browser cannot verify fresh webcam frames. Preview stopped.");
+      return;
+    }
+    const session = generation.current;
+    let cancelled = false;
+    let callbackId = 0;
+    let rafId = 0;
+    let lastPresented = -1;
+    let firstWatchMs: number | null = null;
+    let lastFrameMs: number | null = null;
+    const onFrame = (ms: number, metadata: VideoFrameCallbackMetadata) => {
+      if (cancelled || generation.current !== session) return;
+      if (freshVideoFrameCount(metadata.presentedFrames, lastPresented)) {
+        lastPresented = metadata.presentedFrames;
+        lastFrameMs = ms;
+        const count = ++sessionCounters.current.presentedFrameCallbacks;
+        // Keep the screen responsive without rendering React for every frame.
+        if (count === 1 || count % 15 === 0) setPreviewFrames(count);
+      }
+      callbackId = video.requestVideoFrameCallback(onFrame);
+    };
+    const watchFrames = (ms: number) => {
+      if (cancelled || generation.current !== session
+          || document.visibilityState !== "visible") return;
+      rafId = window.requestAnimationFrame(watchFrames);
+      if (firstWatchMs === null) firstWatchMs = ms;
+      if (poseStreamStalled(ms, lastFrameMs ?? firstWatchMs)) {
+        stop("frame_stalled");
+        setPhase("error");
+        setMessage("Webcam preview stopped receiving new frames. Camera released.");
+      }
+    };
+    callbackId = video.requestVideoFrameCallback(onFrame);
+    rafId = window.requestAnimationFrame(watchFrames);
+    return () => {
+      cancelled = true;
+      video.cancelVideoFrameCallback(callbackId);
+      window.cancelAnimationFrame(rafId);
+    };
+  }, [phase, posePhase, stop]);
 
   useEffect(() => {
     if (phase !== "live" || posePhase !== "ready") return;
@@ -282,6 +335,7 @@ export default function LaptopWebcamDemo() {
       unconfirmedCandidates: 0, lastWindowInferenceP95Ms: null,
     };
     setSmokeReport(null);
+    setPreviewFrames(0);
     setMessage("");
     setPhase("requesting");
     let stream: MediaStream;
@@ -376,7 +430,10 @@ export default function LaptopWebcamDemo() {
         First select your own .task model, then click Start and approve the browser
         permission prompt. No audio, recorded frames, uploaded video or alerts.</p>
       <div className="laptop-webcam-status">
-        <strong>Video:</strong> {phase === "live" ? "LIVE · LOCAL DEVICE"
+        <strong>Video:</strong> {phase === "live"
+          ? (poseFrames > 0 || previewFrames > 0
+            ? "LOCAL · FRESH FRAMES OBSERVED"
+            : "CAMERA OPEN · WAITING FOR FIRST FRAME")
           : phase === "requesting" ? "REQUESTING PERMISSION" : "OFF"}
         <span>Pose AI: {posePhase === "ready"
           ? phase === "live"
@@ -404,6 +461,15 @@ export default function LaptopWebcamDemo() {
         {poseMessage && <small role={posePhase === "error" ? "alert" : "status"}>
           {poseMessage}</small>}
       </div>
+      {phase === "live" && posePhase !== "ready" && <div
+          className="laptop-pose-feedback" role="status" aria-live="polite">
+        <strong>{previewFrames > 0
+          ? "LOCAL PREVIEW · NEW VIDEO FRAMES OBSERVED"
+          : "WAITING FOR FIRST LOCAL CAMERA FRAME"}</strong>
+        <span>Preview frame callbacks observed: {previewFrames}</span>
+        <small>No Pose model loaded. Video frames are not AI analyzed;
+          this is not fall detection or hardware acceptance.</small>
+      </div>}
       {phase === "live" && posePhase === "ready" && <div
           className="laptop-pose-feedback" role="status" aria-live="polite">
         <strong>{poseFrames === 0
@@ -453,8 +519,8 @@ export default function LaptopWebcamDemo() {
         <span>Last rolling 4s inference p95: {smokeReport.lastWindowInferenceP95Ms === null
           ? "not measured" : `${smokeReport.lastWindowInferenceP95Ms.toFixed(1)} ms`}</span>
         <small>Local counters only, not independent camera acceptance, fall accuracy,
-          a safety guarantee, or proof of real alerts. Preview-only sessions may
-          have zero frame callbacks because Pose mode was not enabled.
+          a safety guarantee, or proof of real alerts. Preview-only sessions
+          count fresh rendered video frames but do not run Pose inference.
           Nothing is saved or uploaded.</small>
         <button type="button" onClick={() => setSmokeReport(null)}>
           Dismiss local report</button>
@@ -481,7 +547,8 @@ export default function LaptopWebcamDemo() {
       {phase === "live" && <span className="camera-preview-watermark">
         {posePhase === "ready" && poseFrames > 0
           ? "LIVE · LOCAL POSE HEURISTIC · NOT CONFIRMED"
-          : "LIVE · BROWSER LOCAL · NOT AI ANALYZED"}
+          : previewFrames > 0 ? "LOCAL VIDEO FRAMES · NO POSE ANALYSIS"
+            : "CAMERA OPEN · WAITING FOR FIRST VIDEO FRAME"}
       </span>}
     </div>
   </section>;
