@@ -1,0 +1,91 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { readFileSync } from "node:fs";
+import {
+  hasUsableVideoTrack, LAPTOP_WEBCAM_DEMO_MAX_MS, LOCAL_WEBCAM_HOSTS,
+  requestLaptopWebcam, stopLaptopWebcam, webcamDemoSupported, webcamErrorLabel,
+} from "../src/laptopWebcam.ts";
+
+test("webcam demo only enabled in secure loopback browser contexts", () => {
+  const devices = { getUserMedia: async () => ({}) };
+  assert.deepEqual(LOCAL_WEBCAM_HOSTS, ["127.0.0.1", "localhost", "[::1]"]);
+  for (const host of LOCAL_WEBCAM_HOSTS) {
+    assert.equal(webcamDemoSupported(host, true, devices), true);
+    assert.equal(webcamDemoSupported(host, false, devices), false);
+  }
+  for (const host of ["example.com", "192.168.1.10", "evil.localhost.com", "0.0.0.0"]) {
+    assert.equal(webcamDemoSupported(host, true, devices), false);
+  }
+  assert.equal(webcamDemoSupported("localhost", true, null), false);
+  assert.equal(webcamDemoSupported("localhost", true, {}), false);
+});
+
+test("manual getUserMedia asks for video only and bounded preview resolution", async () => {
+  let requested;
+  const devices = {
+    getUserMedia: async (constraints) => {
+      requested = constraints;
+      return { synthetic: true };
+    },
+  };
+  assert.deepEqual(await requestLaptopWebcam(devices), { synthetic: true });
+  assert.deepEqual(requested, {
+    audio: false,
+    video: {
+      width: { ideal: 640 }, height: { ideal: 360 },
+      frameRate: { ideal: 15, max: 24 },
+    },
+  });
+  assert.equal(LAPTOP_WEBCAM_DEMO_MAX_MS, 60_000);
+});
+
+test("stop shuts down all tracks, including unexpected audio", () => {
+  let stopped = 0;
+  const stream = { getTracks: () => [
+    { stop() { stopped++; } },
+    { stop() { stopped++; } },
+  ] };
+  stopLaptopWebcam(stream);
+  stopLaptopWebcam(null);
+  assert.equal(stopped, 2);
+});
+
+test("only a genuinely live video track permits preview", () => {
+  assert.equal(hasUsableVideoTrack({
+    getVideoTracks: () => [{ readyState: "live" }],
+  }), true);
+  assert.equal(hasUsableVideoTrack({
+    getVideoTracks: () => [{ readyState: "ended" }],
+  }), false);
+  assert.equal(hasUsableVideoTrack({ getVideoTracks: () => [] }), false);
+});
+
+test("camera permission and device errors are redacted", () => {
+  const failure = name => Object.assign(new Error("private /device/camera"), { name });
+  assert.match(webcamErrorLabel(failure("NotAllowedError")), /permission denied/i);
+  assert.match(webcamErrorLabel(failure("NotFoundError")), /no laptop camera/i);
+  assert.match(webcamErrorLabel(failure("NotReadableError")), /in use/i);
+  for (const err of [failure("SomeOtherError"), { secret: "rtsp://SECRET" }, null]) {
+    const label = webcamErrorLabel(err);
+    assert.equal(label.includes("SECRET"), false);
+    assert.equal(label.includes("/device/"), false);
+  }
+});
+
+test("webcam demo UI has no transport or recording implementation", () => {
+  const source = readFileSync(
+    new URL("../src/LaptopWebcamDemo.tsx", import.meta.url), "utf8",
+  );
+  assert.match(source, /requestLaptopWebcam/);
+  assert.match(source, /visibilitychange/);
+  assert.match(source, /pagehide/);
+  assert.match(source, /LAPTOP_WEBCAM_DEMO_MAX_MS/);
+  assert.match(source, /NOT CONNECTED/);
+  assert.match(source, /Stop webcam/);
+  for (const prohibited of [
+    /\bfetch\s*\(/, /XMLHttpRequest/, /MediaRecorder/, /toDataURL/,
+    /WebSocket/, /sendBeacon/, /RTSP_PASSWORD/, /createObjectURL/,
+  ]) {
+    assert.equal(prohibited.test(source), false, "preview must never upload/record");
+  }
+});

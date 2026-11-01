@@ -4,6 +4,7 @@ import {
 } from "./integrationOverview";
 import type { IntegrationOverview, CameraSummary } from "./integrationOverview";
 import CameraLivePreview from "./CameraLivePreview";
+import LaptopWebcamDemo from "./LaptopWebcamDemo";
 import { fetchCameraReadiness } from "./cameraReadiness";
 import type { CameraReadiness } from "./cameraReadiness";
 import { fetchApprovalChecklist } from "./approvalChecklist";
@@ -285,6 +286,8 @@ export default function IntegrationCenter() {
       {loginState === "denied" && <small role="alert">Sign-in unavailable or denied.
         Check the local bridge and operator password.</small>}
     </form>}
+
+    <LaptopWebcamDemo />
 
     <section className="integration-kpis" aria-label="Connection summary">
       <div className="integration-kpi"><small>REGISTERED SOURCES</small><strong>{data ? cameras.length : "—"}</strong><span>{preview ? "Sample devices" : isLive ? "Backend-reported only" : "Waiting for Member 2 API"}</span></div>
