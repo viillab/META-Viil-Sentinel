@@ -83,6 +83,56 @@ def check_team(roster: dict, manifest: dict) -> None:
         raise ValueError("Handoff manifest and two-member roster disagree")
 
 
+# Immutable v1 boundary: the schema must NOT silently relax safety flags
+# while keeping the same field names. Any intentional v2 change requires a
+# separately reviewed contract and new version, not a weakened v1 artifact.
+_CANDIDATE_V1_PROPERTIES = {
+    "schema_version": {"const": SCHEMA_VERSION},
+    "event_type": {"const": "FALL_CANDIDATE"},
+    "event_id": {"type": "string", "format": "uuid"},
+    "source_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$"},
+    "source_timestamp_ms": {"type": "integer", "minimum": 0},
+    "timestamp_basis": {"const": "relative_to_source_start"},
+    "detector": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$"},
+    "model_sha256": {"oneOf": [
+        {"type": "null"}, {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    ]},
+    "input_provenance": {"enum": [
+        "synthetic_pose_trace", "consented_staged_video", "authorized_local_camera",
+    ]},
+    "detector_score": {"type": "number", "minimum": 0, "maximum": 1},
+    "detector_score_type": {"const": "uncalibrated_heuristic"},
+    "score_calibrated": {"const": False},
+    "confirmed_fall": {"const": False},
+    "human_review_required": {"const": True},
+    "medical_assessment_performed": {"const": False},
+    "simulated": {"type": "boolean"},
+    "evidence_refs": {"type": "array", "maxItems": 0},
+    "delivery_mode": {"const": "local_stdout_only"},
+}
+
+
+def check_candidate_schema_invariants(schema: dict) -> set[str]:
+    """Ensure canonical v1 meaning, not only field names, remains unchanged.
+
+    This is a conservative static freeze of our producer/handoff version,
+    not a general-purpose JSON Schema validator. A future Member2 backend
+    must independently validate untrusted candidate payloads.
+    """
+    expected_fields = set(_CANDIDATE_V1_PROPERTIES)
+    required = schema.get("required")
+    if (schema.get("$schema") != "https://json-schema.org/draft/2020-12/schema"
+            or schema.get("type") != "object"
+            or schema.get("additionalProperties") is not False
+            or type(required) is not list
+            or len(required) != len(expected_fields)
+            or not all(type(field) is str for field in required)
+            or set(required) != expected_fields
+            or schema.get("properties") != _CANDIDATE_V1_PROPERTIES):
+        raise ValueError("Strict canonical candidate JSON schema drift")
+    return expected_fields
+
+
 def check_candidate(root: Path, manifest: dict) -> dict:
     declared = manifest.get("edge_candidate_contract", {})
     if (declared.get("version") != SCHEMA_VERSION
@@ -94,14 +144,7 @@ def check_candidate(root: Path, manifest: dict) -> dict:
         raise ValueError("Edge contract version, path or boundaries drifted")
     schema = _json_file(root, SCHEMA_PATH)
     example = _json_file(root, EXAMPLE_PATH)
-    properties = schema.get("properties")
-    if (not isinstance(properties, dict)
-            or schema.get("additionalProperties") is not False
-            or set(schema.get("required", [])) != set(properties)
-            or schema.get("type") != "object"
-            or properties.get("schema_version", {}).get("const") != SCHEMA_VERSION):
-        raise ValueError("Strict canonical candidate JSON schema drift")
-    keys = set(properties)
+    keys = check_candidate_schema_invariants(schema)
     fall = export_trace(root / FALL_TRACE, source_id="synthetic-clip-01")
     no_fall = export_trace(root / NON_FALL_TRACE, source_id="synthetic-clip-01")
     if len(fall) != 1 or no_fall:
