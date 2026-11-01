@@ -64,6 +64,28 @@ actual local model SHA-256 and emits the exact same versioned JSONL contract
 from the `process_capture` detector. It never sends data to Meta AI or
 any backend. Only use it with the owner's explicit permission.
 
+## Frozen v1 schema safeguards (1 Nov 2026)
+
+Before a Member 2 handoff, run the **offline** command
+`python -m sentinel_edge.handoff_preflight`. In addition to comparing
+synthetic emitted fields and a single fall/non-fall trace, the preflight
+now freezes the **entire safety-relevant v1 JSON Schema property
+constraints**: unconfirmed and human-reviewed status, zero evidence
+references, uncalibrated score in 0..1, exact source-relative timestamp
+basis, simulated boolean, allowed provenance, UUID/source/detector
+identifiers, optional SHA-256 syntax, and `local_stdout_only` delivery.
+Changing only these schema restrictions (even without changing field
+names or the example payload) causes a fail-closed error. Dedicated
+mutation tests verify this behavior.
+
+This check is a **version-specific repository contract drift guard**,
+not a general JSON Schema parser, input authorization test, or a proof
+that Member 2 securely accepts untrusted data. Member 2 still needs
+independent strict request-body schema validation, authenticated source
+identity, replay/idempotency controls, and signed site/privacy review
+before real ingestion. Legitimate semantic changes require a separately
+reviewed versioned contract, not relaxing v1 in place.
+
 ## Integration requirements for Member 2
 
 1. Implement an **authenticated and authorized** ingestion endpoint, with

@@ -114,6 +114,58 @@ def test_synthetic_example_cannot_be_relabelled_real(miniature_repo):
         preflight(miniature_repo)
 
 
+@pytest.mark.parametrize(("field", "altered"), [
+    ("confirmed_fall", {"type": "boolean"}),
+    ("human_review_required", {"type": "boolean"}),
+    ("medical_assessment_performed", {"const": True}),
+    ("score_calibrated", {"const": True}),
+    ("evidence_refs", {"type": "array", "maxItems": 1}),
+    ("delivery_mode", {"type": "string"}),
+    ("detector_score_type", {"type": "string"}),
+    ("detector_score", {"type": "number", "minimum": 0, "maximum": 100}),
+    ("event_id", {"type": "string"}),
+    ("source_timestamp_ms", {"type": "integer", "minimum": -1}),
+    ("timestamp_basis", {"type": "string"}),
+    ("source_id", {"type": "string", "pattern": ".*"}),
+    ("detector", {"type": "string"}),
+    ("model_sha256", {"type": ["null", "string"]}),
+    ("input_provenance", {"type": "string"}),
+    ("simulated", {"type": "string"}),
+])
+def test_security_constraints_cannot_be_weakened_under_same_v1_schema(
+    miniature_repo, field, altered,
+):
+    def weaken(schema):
+        schema["properties"][field] = altered
+
+    mutate(miniature_repo, "services/edge-vision/docs/edge_candidate_v1.schema.json", weaken)
+    with pytest.raises(ValueError, match="schema drift"):
+        preflight(miniature_repo)
+
+
+@pytest.mark.parametrize(("field", "value"), [
+    ("$schema", "https://json-schema.org/draft-04/schema#"),
+    ("additionalProperties", True),
+    ("type", "array"),
+    ("required", ["schema_version", "event_type"]),
+])
+def test_candidate_root_schema_cannot_be_weakened(miniature_repo, field, value):
+    mutate(miniature_repo, "services/edge-vision/docs/edge_candidate_v1.schema.json",
+           lambda schema: schema.update({field: value}))
+    with pytest.raises(ValueError, match="schema drift"):
+        preflight(miniature_repo)
+
+
+def test_duplicate_required_field_does_not_mask_missing_field(miniature_repo):
+    def bad_required(schema):
+        schema["required"][-1] = schema["required"][0]
+
+    mutate(miniature_repo, "services/edge-vision/docs/edge_candidate_v1.schema.json",
+           bad_required)
+    with pytest.raises(ValueError, match="schema drift"):
+        preflight(miniature_repo)
+
+
 def test_schema_fields_must_match_producer(miniature_repo):
     mutate(miniature_repo, "services/edge-vision/docs/edge_candidate_v1.schema.json",
            lambda s: s["properties"].update(extra={"type": "string"}))
