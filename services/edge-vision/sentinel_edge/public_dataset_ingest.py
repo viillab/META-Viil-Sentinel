@@ -10,7 +10,7 @@ from hashlib import sha1, sha256
 import json
 from pathlib import Path
 from urllib.parse import quote
-from urllib.request import Request, urlopen
+from sentinel_edge.pinned_https_download import fetch_pinned_https
 
 from sentinel_edge.caucafall_curator import _video_metadata, publisher_label_pilot
 from sentinel_edge.model_quality import compare_models
@@ -61,24 +61,10 @@ def _github_blob_sha1(data: bytes) -> str:
 
 
 def _fetch_binary(url: str, limit: int) -> bytes:
-    """Only our generated URL on a pinned GitHub commit is fetched."""
-    if not url.startswith(SOURCE_URL + "/Subject%20"):
-        raise ValueError("Remote must be pinned to audited dataset source")
-    with urlopen(Request(url, headers={"User-Agent": "VIIL-Sentinel-research/1.0"}),
-                 timeout=45) as response:
-        if response.status != 200:
-            raise ValueError("HTTP download failed")
-        chunks = []
-        length = 0
-        while True:
-            chunk = response.read(min(65536, limit + 1 - length))
-            if not chunk:
-                break
-            length += len(chunk)
-            if length > limit:
-                raise ValueError("Video exceeds expected byte budget")
-            chunks.append(chunk)
-    return b"".join(chunks)
+    """Only exact frozen public Git object URLs; never follow redirects."""
+    urls = frozenset(_source_url(subject, category, clip)
+                     for subject, category, clip, *_ in CATALOG)
+    return fetch_pinned_https(url, allowed_urls=urls, byte_limit=limit)
 
 
 def download_subset(root: Path, *, fetcher=_fetch_binary) -> dict:
