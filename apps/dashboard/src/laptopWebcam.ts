@@ -1,6 +1,28 @@
 /** Browser-only, local-origin webcam demo. Never posts frames or audio anywhere. */
 
 export const LAPTOP_WEBCAM_DEMO_MAX_MS = 60_000;
+export const LAPTOP_WEBCAM_PLAYBACK_MAX_MS = 8_000;
+
+/** A camera stream must never remain open awaiting an unresolved video.play().
+ * A late playback rejection is still observed by Promise.race, not unhandled.
+ */
+export async function waitForLocalWebcamPlayback(
+  playback: Promise<void>, timeoutMs = LAPTOP_WEBCAM_PLAYBACK_MAX_MS,
+): Promise<boolean> {
+  const boundedMs = Number.isFinite(timeoutMs)
+    ? Math.max(1, Math.min(timeoutMs, LAPTOP_WEBCAM_PLAYBACK_MAX_MS))
+    : LAPTOP_WEBCAM_PLAYBACK_MAX_MS;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const timedOut = new Promise<false>(resolve => {
+    timer = setTimeout(() => resolve(false), boundedMs);
+  });
+  try {
+    return await Promise.race([playback.then(() => true), timedOut]);
+  } finally {
+    if (timer !== null) clearTimeout(timer);
+  }
+}
+
 export const LOCAL_WEBCAM_HOSTS = Object.freeze(["127.0.0.1", "localhost", "[::1]"]);
 
 export function webcamDemoSupported(

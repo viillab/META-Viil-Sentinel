@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import {
-  hasUsableVideoTrack, LAPTOP_WEBCAM_DEMO_MAX_MS, LOCAL_WEBCAM_HOSTS,
-  requestLaptopWebcam, stopLaptopWebcam, webcamDemoSupported, webcamErrorLabel,
+  hasUsableVideoTrack, LAPTOP_WEBCAM_DEMO_MAX_MS,
+  LAPTOP_WEBCAM_PLAYBACK_MAX_MS, LOCAL_WEBCAM_HOSTS,
+  requestLaptopWebcam, stopLaptopWebcam, waitForLocalWebcamPlayback,
+  webcamDemoSupported, webcamErrorLabel,
 } from "../src/laptopWebcam.ts";
 
 test("webcam demo only enabled in secure loopback browser contexts", () => {
@@ -37,6 +39,21 @@ test("manual getUserMedia asks for video only and bounded preview resolution", a
     },
   });
   assert.equal(LAPTOP_WEBCAM_DEMO_MAX_MS, 60_000);
+});
+
+test("playback watchdog releases hung starts without a native camera error", async () => {
+  assert.equal(LAPTOP_WEBCAM_PLAYBACK_MAX_MS, 8000);
+  assert.equal(await waitForLocalWebcamPlayback(Promise.resolve(), 10), true);
+  assert.equal(await waitForLocalWebcamPlayback(new Promise(() => {}), 12), false);
+  await assert.rejects(
+    () => waitForLocalWebcamPlayback(Promise.reject(new Error("private device path")), 12),
+    /private device path/,
+  );
+  let rejectLate;
+  const late = new Promise((_, reject) => { rejectLate = reject; });
+  assert.equal(await waitForLocalWebcamPlayback(late, 12), false);
+  rejectLate(new Error("late playback rejection"));
+  await new Promise(resolve => setImmediate(resolve));
 });
 
 test("stop shuts down all tracks, including unexpected audio", () => {
@@ -79,6 +96,10 @@ test("webcam demo UI has no transport or recording implementation", () => {
   assert.match(source, /requestLaptopWebcam/);
   assert.match(source, /visibilitychange/);
   assert.match(source, /pagehide/);
+  assert.match(source, /const pageExit = \(\) => stop\("hidden"\)/);
+  assert.match(source, /waitForLocalWebcamPlayback\(video\.play\(\)\)/);
+  assert.match(source, /Camera playback timed out after 8 seconds/);
+  assert.match(source, /stop\("playback_error"\)/);
   assert.match(source, /LAPTOP_WEBCAM_DEMO_MAX_MS/);
   assert.match(source, /LOCAL HEURISTIC/);
   assert.match(source, /poseFrames > 0/);
