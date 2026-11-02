@@ -23,6 +23,12 @@ from app.candidate_ingest import (
 )
 from app.caregiver_inbox import CaregiverInbox, build_inbox
 from app.config import Settings, get_settings
+from app.evidence_registry import (
+    EvidenceRegistryRecord,
+    EvidenceRegistryRejected,
+    EvidenceRegistryUnavailable,
+    SyntheticEvidenceRegistry,
+)
 from app.local_security import is_local_test_client
 from app.meta import provider_for
 from app.models import Incident, NewIncident, ReviewRequest
@@ -50,6 +56,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         Path(config.edge_candidate_ledger_path)
         if config.edge_candidate_ledger_path else DEFAULT_LEDGER_PATH
     )
+
+    evidence_registry = SyntheticEvidenceRegistry(candidate_ledger.path)
+
+    def authorize_caregiver_read(request: Request) -> None:
+        """Shared loopback and independent-token check for readonly caregiver views."""
+        configured = config.caregiver_inbox_token
+        token = configured.get_secret_value() if configured else ""
+        signer = config.edge_candidate_hmac_secret
+        if (len(token.encode("utf-8")) < 32 or (
+            signer is not None and token == signer.get_secret_value()
+        )):
+            raise HTTPException(503, "Caregiver views require an independent secret")
+        if not is_local_test_client(request):
+            raise HTTPException(403, "Caregiver views are loopback-only")
+        headers = request.headers.getlist("authorization")
+        if len(headers) != 1 or not headers[0].startswith("Bearer "):
+            raise HTTPException(401, "Caregiver bearer token required")
+        supplied = headers[0][7:]
+        if not 32 <= len(supplied.encode("utf-8")) <= 160 or not hmac.compare_digest(
+            supplied, token
+        ):
+            raise HTTPException(401, "Invalid caregiver bearer token")
 
     @app.post(
         "/api/v1/edge/candidates",
@@ -114,23 +142,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """Explicit local caregiver token; read-only synthetic metadata."""
         if not config.caregiver_inbox_enabled:
             raise HTTPException(404, "Caregiver inbox is disabled")
-        configured = config.caregiver_inbox_token
-        token = configured.get_secret_value() if configured else ""
-        signer = config.edge_candidate_hmac_secret
-        if (len(token.encode("utf-8")) < 32 or (
-            signer is not None and token == signer.get_secret_value()
-        )):
-            raise HTTPException(503, "Caregiver inbox requires an independent secret")
-        if not is_local_test_client(request):
-            raise HTTPException(403, "Caregiver inbox is loopback-only")
-        headers = request.headers.getlist("authorization")
-        if len(headers) != 1 or not headers[0].startswith("Bearer "):
-            raise HTTPException(401, "Caregiver bearer token required")
-        supplied = headers[0][7:]
-        if not 32 <= len(supplied.encode("utf-8")) <= 160 or not hmac.compare_digest(
-            supplied, token
-        ):
-            raise HTTPException(401, "Invalid caregiver bearer token")
+        authorize_caregiver_read(request)
         response.headers["Cache-Control"] = "no-store"
         try:
             return build_inbox(
@@ -139,6 +151,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         except (sqlite3.DatabaseError, OSError, ValueError):
             raise HTTPException(503, "Caregiver inbox data unavailable") from None
+
+    @app.get(
+        "/api/v1/caregiver/evidence/{event_id}",
+        response_model=EvidenceRegistryRecord,
+    )
+    def caregiver_evidence(
+        event_id: UUID, request: Request, response: Response,
+    ) -> EvidenceRegistryRecord:
+        """Metadata ONLY; no PNG/body/consent grant, never calls the model."""
+        if not config.evidence_registry_enabled:
+            raise HTTPException(404, "Synthetic evidence registry reads disabled")
+        authorize_caregiver_read(request)
+        response.headers["Cache-Control"] = "no-store"
+        try:
+            record = evidence_registry.get(
+                event_id=event_id, source_id=config.edge_candidate_source_id,
+            )
+        except EvidenceRegistryRejected:
+            raise HTTPException(503, "Synthetic evidence integrity failed") from None
+        except EvidenceRegistryUnavailable:
+            raise HTTPException(503, "Synthetic evidence registry unavailable") from None
+        if record is None:
+            raise HTTPException(404, "Synthetic evidence record not found")
+        return record
 
     @app.get("/health")
     def health() -> dict[str, str]:

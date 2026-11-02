@@ -18,6 +18,11 @@ def test_full_offline_event_bound_http_and_mock_contract(monkeypatch):
         "candidate_sha256", "trace_sha256", "image_sha256"
     ))
     assert report["offline_meta_request_prepared"] is True
+    assert report["registry_same_signed_event_verified"] is True
+    assert report["registry_read_via_local_http_verified"] is True
+    assert report["registry_deduplicated"] is True
+    assert report["registry_real_media_consent_verified"] is False
+    assert report["registry_image_bytes_stored"] is False
     assert report["meta_response_was_mocked"] is True
     assert report["real_meta_api_called"] is False
     assert report["meta_budget_modified"] is False

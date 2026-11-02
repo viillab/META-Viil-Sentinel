@@ -20,6 +20,7 @@ from app.edge_emitter_e2e import (
     EdgeProducerSmokeError,
     edge_candidates_from_trace,
 )
+from app.evidence_registry import SyntheticEvidenceRegistry
 from app.local_http_demo import loopback_http_server
 from app.main import create_app
 from app.meta_first_contract import TrustedMetaCallContext, meta_first_route
@@ -53,6 +54,7 @@ def run_synthetic_event_bound_smoke() -> dict[str, object]:
             edge_candidate_ledger_path=str(Path(tmp) / "events.sqlite3"),
             caregiver_inbox_enabled=True,
             caregiver_inbox_token=SecretStr(caregiver_key),
+            evidence_registry_enabled=True,
         )
         with loopback_http_server(create_app(settings)) as base_url:  # noqa: SIM117
             with httpx.Client(
@@ -86,6 +88,29 @@ def run_synthetic_event_bound_smoke() -> dict[str, object]:
                 verify_synthetic_evidence(source_bytes, bundle)
                 if str(bundle.manifest.event_id) != receipt.json()["event_id"]:
                     raise EdgeProducerSmokeError("Evidence UUID differs from accepted event")
+                registry = SyntheticEvidenceRegistry(Path(tmp) / "events.sqlite3")
+                registered, duplicate = registry.register(
+                    raw_candidate=source_bytes, evidence=bundle,
+                )
+                repeated, duplicate_again = registry.register(
+                    raw_candidate=source_bytes, evidence=bundle,
+                )
+                registry_read = client.get(
+                    "/api/v1/caregiver/evidence/" + event_id,
+                    headers={"Authorization": f"Bearer {caregiver_key}"},
+                )
+                if not (
+                    duplicate is False and duplicate_again is True
+                    and registered == repeated
+                    and registry_read.status_code == 200
+                    and registry_read.headers.get("cache-control") == "no-store"
+                    and registry_read.json()["event_id"] == event_id
+                    and registry_read.json()["image_bytes_stored"] is False
+                    and registry_read.json()["external_upload_authorized"] is False
+                    and registry_read.json()["consent_state"] == "not_verified_for_real_media"
+                    and registry_read.json()["meta_called"] is False
+                ):
+                    raise EdgeProducerSmokeError("Offline registry verification failed")
                 offline_request = build_offline_pose_meta_request(source_bytes, bundle)
                 if offline_request["model"] != MODEL:
                     raise EdgeProducerSmokeError("Offline model request mismatch")
@@ -145,6 +170,11 @@ def run_synthetic_event_bound_smoke() -> dict[str, object]:
         "rendered_source_timestamps_ms": list(bundle.manifest.frame_timestamps_ms),
         "evidence_origin": bundle.manifest.image_origin,
         "offline_meta_request_prepared": True,
+        "registry_same_signed_event_verified": True,
+        "registry_read_via_local_http_verified": True,
+        "registry_deduplicated": True,
+        "registry_real_media_consent_verified": False,
+        "registry_image_bytes_stored": False,
         "meta_response_was_mocked": True,
         "real_meta_api_called": False,
         "meta_budget_modified": False,

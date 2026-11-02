@@ -20,9 +20,9 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.candidate_ingest import parse_candidate
-from app.edge_emitter_e2e import EXPECTED_TRACE_HASHES, SYNTHETIC_ROOT, SYNTHETIC_SOURCE
 from app.meta_first_contract import META_FIRST_JSON_SCHEMA
 from app.meta_live import MODEL, PNG_SIGNATURE
+from app.synthetic_fixtures import EXPECTED_TRACE_HASHES, SYNTHETIC_ROOT, SYNTHETIC_SOURCE
 
 # Immutable, checked-in mathematical traces only. NOT user-selectable paths.
 TRACE_NAME = "fall"

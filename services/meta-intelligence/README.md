@@ -22,6 +22,9 @@
   UUID/source/timestamp/trace. The Meta live adapter **still refuses** these
   diagrams and no further provider calls are authorized. See
   [Synthetic Evidence v1](../api/SYNTHETIC_EVIDENCE_V1.md).
+  The related [synthetic evidence registry](../api/EVIDENCE_REGISTRY_V1.md)
+  now stores only linked receipt/manifest hashes after local signed Edge
+  ingestion; real-media consent remains unverified and no model calls occur.
 - No real camera pixels or private/person/patient evidence was transmitted.
 
 ## Budget, billing and safeguarding $150

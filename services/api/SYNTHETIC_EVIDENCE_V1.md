@@ -85,6 +85,15 @@ Run in `D:\VIIL-Sentinel\services\api`:
 
 Expected `status`: `SYNTHETIC_EVENT_BOUND_EVIDENCE_PASS`.
 
+**New local metadata registry:** The `SyntheticEvidenceRegistry` now stores
+the verified event/trace/image hashes and synthetic-only consent flags in
+the **same SQLite ledger** after authenticated synthetic Candidate intake.
+It never persists PNG bytes. A separate, explicitly enabled caregiver
+read-only endpoint `GET /api/v1/caregiver/evidence/{event_id}` exposes the
+non-sensitive record with independent bearer authorization and no-store
+caching. See [Registry v1](EVIDENCE_REGISTRY_V1.md). This does not authorize
+uploading or interpreting real-person media.
+
 The smoke runs the Member 1 emitter on the pinned `fall.jsonl`, confirms
 `sitting.jsonl` emits no false candidate, POSTs **signed raw candidate
 bytes over real localhost TCP** to the real FastAPI and its temporary

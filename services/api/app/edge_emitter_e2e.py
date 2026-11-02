@@ -19,16 +19,15 @@ from pydantic import SecretStr
 from app.candidate_ingest import EdgeCandidate, parse_candidate, sign_candidate
 from app.config import Settings
 from app.main import create_app
+from app.synthetic_fixtures import (
+    EDGE_ROOT,
+    EXPECTED_TRACE_HASHES,
+    SYNTHETIC_ROOT,
+    SYNTHETIC_SOURCE,
+)
 
-EDGE_ROOT = Path(__file__).resolve().parents[2] / "edge-vision"
-SYNTHETIC_ROOT = EDGE_ROOT / "examples" / "synthetic"
-SYNTHETIC_SOURCE = "synthetic-clip-01"
 EDGE_HMAC_SECRET = "fake-offline-edge-synthetic-signature-key-used-only-in-this-smoke"
 CAREGIVER_TOKEN = "fake-offline-caregiver-read-token-independent-from-edge-hmac"
-EXPECTED_TRACE_HASHES = {
-    "fall": "ce4eba83088d4a9728002c87a7ace082debdf48d6c12bf3be8277fec9c2155e1",
-    "sitting": "29d11e019e698647bf5d5348747c1c0f7985d02a277efebf32f5f5b836b5f468",
-}
 MAX_PRODUCER_OUTPUT_BYTES = 8192
 MAX_TRACE_FILE_BYTES = 65536
 

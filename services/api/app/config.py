@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     # Separate read-only, loopback-only UI contract. Not production user RBAC.
     caregiver_inbox_enabled: bool = False
     caregiver_inbox_token: SecretStr | None = None
+    # Separate metadata-only evidence registry reads; default closed.
+    evidence_registry_enabled: bool = False
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

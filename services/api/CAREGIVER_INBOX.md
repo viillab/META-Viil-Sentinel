@@ -93,6 +93,17 @@ returns an empty inbox without creating a DB. A damaged or inaccessible
 existing DB fails closed with 503. SQLite connections are now explicitly
 closed on both ingestion and inbox reads, including on Windows.
 
+## Evidence metadata companion (explicit opt-in)
+
+A separate, metadata-only **synthetic Evidence Registry v1** now exposes
+`GET /api/v1/caregiver/evidence/{event_id}` only with
+`EVIDENCE_REGISTRY_ENABLED=true`, the same independent local caregiver
+Bearer token and loopback restrictions. This is **not** a PNG preview,
+not a consent-verification service and not a real Meta inference.
+Registration is internal Python only and is tied to the already received
+candidate's exact payload hash in SQLite. The endpoint is disabled by
+default and read-only. See [EVIDENCE_REGISTRY_V1.md](EVIDENCE_REGISTRY_V1.md).
+
 ## Hand-off and remaining blockers
 
 - UI contract source copied unchanged from Member 1:
