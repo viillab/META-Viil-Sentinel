@@ -8,6 +8,7 @@ import '../features/incidents/event_details_page.dart';
 import '../features/history/history_page.dart';
 import '../features/demo/demo_control_page.dart';
 import '../features/demo/demo_walkthrough_page.dart';
+import '../features/integration/integration_readiness_page.dart';
 
 class CareApp extends StatefulWidget {
   const CareApp({super.key});
@@ -47,10 +48,17 @@ class _CareAppState extends State<CareApp> {
     }
   }
 
+  void openIntegrationReadiness() {
+    navigatorKey.currentState!.push(MaterialPageRoute<void>(
+      builder: (_) => const IntegrationReadinessPage(),
+    ));
+  }
+
   void openDemo() {
     navigatorKey.currentState!.push(MaterialPageRoute<void>(
       builder: (_) => DemoControlPage(
         controller: controller,
+        onOpenIntegration: openIntegrationReadiness,
         onStartWalkthrough: () {
           navigatorKey.currentState!.pop();
           startGuidedDemo();
