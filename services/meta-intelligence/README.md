@@ -17,6 +17,11 @@
   assessment and synthetic local Edge→Backend→Meta→Inbox integration.
   Neither test proves the model detects actual falls.
   See [2026-11-02 live test report](LIVE_META_TEST_REPORT_2026-11-02.md).
+- The next **offline-only** step constructs deterministic 3-panel synthetic pose
+  diagrams cryptographically tied (by SHA-256) to the generated Edge event
+  UUID/source/timestamp/trace. The Meta live adapter **still refuses** these
+  diagrams and no further provider calls are authorized. See
+  [Synthetic Evidence v1](../api/SYNTHETIC_EVIDENCE_V1.md).
 - No real camera pixels or private/person/patient evidence was transmitted.
 
 ## Budget, billing and safeguarding $150
@@ -80,9 +85,10 @@ requests were used.** Never reset the ledger simply to get more calls.
 ## Remaining critical work (not shipped as working)
 
 1. Inspect actual Meta Billing/Usage. The basic image+strict-schema+minimal
-   reasoning path now works, but image-to-Edge event grounding and actual fall
-   detection are NOT verified. Obtain a separately reviewed test budget
-   before any additional paid call.
+   reasoning path now works. A new **local synthetic-only** event→diagram
+   hash binding has been tested offline, but **real human camera evidence**
+   association and fall detection accuracy are NOT verified. Obtain a
+   separately reviewed test budget before any additional paid call.
 2. Implement signed, authenticated, consented, source-scoped evidence
    intake and an independent validator before allowing authorized real frames.
 3. Synthetic metadata idempotency now uses SQLite, but production-grade
