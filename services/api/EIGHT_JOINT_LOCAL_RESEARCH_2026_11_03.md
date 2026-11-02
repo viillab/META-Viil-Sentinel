@@ -134,6 +134,19 @@ The first command cannot be rerun into the same output folder without an
 explicit private retention/delete decision; do not delete identifiable
 traces casually just to regenerate nicer metrics.
 
+## Follow-on: temporal continuity audit
+
+The subsequent [Eight-joint Temporal Observability report](EIGHT_JOINT_TEMPORAL_OBSERVABILITY_2026_11_03.md)
+computes research-only 2D image-plane hip and ankle velocities, knee-angle
+change rates, and contiguous pose availability from the **existing**
+private eight-joint traces. It discards pairs that cross missing joints
+or gaps and adds a conservative 12-consecutive-unusable-frame
+abstention rule. Across the same five previously inspected clips,
+**all five abstained**: three because total lower-body coverage
+was below 75%, and two because long lower-body tracking gaps occurred
+despite greater-than-75% overall point coverage. This is not new
+person tracking or fall prediction, and does not authorize alerts.
+
 ## Technical next steps and release decision
 
 **NO-GO** for autonomous fall alerts or commercial pilots.

@@ -100,6 +100,21 @@ validation or a Meta-powered capability. The unchanged production Edge
 extractor still uses four torso points. No billable Meta requests or human
 media uploads occurred.
 
+## Follow-up: eight-joint temporal observability and occlusion gate
+
+[Research-only temporal motion replay](../api/EIGHT_JOINT_TEMPORAL_OBSERVABILITY_2026_11_03.md)
+now calculates bounded aggregate image-plane hip/ankle velocities,
+knee-angle rate and continuity over consecutive verified 8-point pose
+frames. On 5 previously known licensed staged videos, **894 valid
+neighboring frame pairs** were available out of 1,368 decoded frames.
+All five **abstained** from temporal evidence sufficiency: three Fall
+clips lacked overall leg visibility; two ADL clips had long missing
+lower-limb runs (76 and 107 frames) despite ~76% aggregate visibility.
+The single-pose MediaPipe stream **cannot verify continuous person
+identity** and cannot distinguish falls from normal action yet. It
+does not alter the production detector, call Meta or allow automatic
+emergency messages. Source media and pose traces stay Git-ignored.
+
 ## Verified scope / current result
 
 - A backend-only Meta Model API Chat Completions adapter exists at `services/api/app/meta_live.py`.
