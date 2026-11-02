@@ -17,6 +17,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict
 
 from app.candidate_ingest import MAX_STORED_EVENTS, parse_candidate
+from app.evidence_anchor import AnchorRejected, verify_checkpoint_snapshot
 from app.evidence_audit import (
     EvidenceAuditFailure,
     EvidenceAuditReceipt,
@@ -130,13 +131,34 @@ def _schema(connection: sqlite3.Connection) -> None:
 class SyntheticEvidenceRegistry:
     """Same-file metadata-only registry tied to the existing signed candidate receipt."""
 
-    def __init__(self, path: Path) -> None:
+    def __init__(
+        self, path: Path, *, anchor_required: bool = False,
+        anchor_path: Path | None = None, anchor_secret: bytes | None = None,
+    ) -> None:
         self.path = Path(path)
+        self.anchor_required = anchor_required
+        self.anchor_path = Path(anchor_path) if anchor_path is not None else None
+        self.anchor_secret = anchor_secret
+
+    def _require_signed_snapshot(self, records: list[EvidenceAuditReceipt]) -> None:
+        if not self.anchor_required:
+            return
+        if self.anchor_path is None or self.anchor_secret is None:
+            raise EvidenceRegistryRejected("Independent audit anchor not configured")
+        try:
+            verify_checkpoint_snapshot(
+                records=records, db_path=self.path,
+                checkpoint_path=self.anchor_path, secret=self.anchor_secret,
+            )
+        except AnchorRejected:
+            raise EvidenceRegistryRejected("Independent signed audit anchor not verified") from None
 
     def register(
         self, *, raw_candidate: bytes, evidence: SyntheticEvidence
     ) -> tuple[EvidenceRegistryRecord, bool]:
         """Atomic receipt lookup and immutable registration, with duplicate detection."""
+        if self.anchor_required:
+            raise EvidenceRegistryRejected("Signed-anchor mode is read-only; export checkpoints separately")
         verify_synthetic_evidence(raw_candidate, evidence)
         candidate = parse_candidate(raw_candidate)
         expected_digest = hashlib.sha256(raw_candidate).hexdigest()
@@ -222,6 +244,7 @@ class SyntheticEvidenceRegistry:
         try:
             uri = self.path.resolve().as_uri() + "?mode=ro"
             with closing(sqlite3.connect(uri, uri=True, timeout=3)) as connection:
+                connection.execute("BEGIN")
                 present = connection.execute(
                     "SELECT 1 FROM sqlite_master WHERE type='table' "
                     "AND name='synthetic_evidence_registry'"
@@ -234,6 +257,7 @@ class SyntheticEvidenceRegistry:
                     raise EvidenceRegistryRejected("Evidence audit integrity failed") from None
                 if any(record.source_id != source_id for record in verified_chain):
                     raise EvidenceAuditFailure("Unscoped synthetic audit history")
+                self._require_signed_snapshot(verified_chain)
                 row = connection.execute(
                     "SELECT r.source_id, r.candidate_sha256, r.manifest_json, "
                     "r.registered_at_utc, c.source_id, c.digest "
@@ -271,7 +295,9 @@ class SyntheticEvidenceRegistry:
         try:
             uri = self.path.resolve().as_uri() + "?mode=ro"
             with closing(sqlite3.connect(uri, uri=True, timeout=3.0)) as connection:
+                connection.execute("BEGIN")
                 receipts = verify_audit_chain(connection)
+                self._require_signed_snapshot(receipts)
             return next(
                 (entry for entry in receipts if entry.event_id == event_id), None
             )

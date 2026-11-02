@@ -25,6 +25,9 @@ def test_full_offline_event_bound_http_and_mock_contract(monkeypatch):
     assert report["registry_image_bytes_stored"] is False
     assert report["audit_read_via_local_http_verified"] is True
     assert report["audit_chain_verified"] is True
+    assert report["independent_hmac_audit_anchor_verified"] is True
+    assert report["read_without_anchor_rejected"] is True
+    assert report["tampered_independent_anchor_rejected_over_http"] is True
     assert report["audit_idempotent_one_registration_entry"] is True
     assert report["consent_gate_real_media_upload_blocked"] is True
     assert report["audit_never_permits_meta_calls"] is True

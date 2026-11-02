@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     caregiver_inbox_token: SecretStr | None = None
     # Separate metadata-only evidence registry reads; default closed.
     evidence_registry_enabled: bool = False
+    # Optional strict read-time independent HMAC anchor. NOT consent approval.
+    evidence_audit_anchor_required: bool = False
+    evidence_audit_anchor_path: str | None = None
+    evidence_audit_anchor_secret: SecretStr | None = None
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

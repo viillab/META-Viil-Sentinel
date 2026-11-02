@@ -54,8 +54,10 @@ corruption/unavailable storage is 503. All database handles close explicitly
 on Windows. A new transactional, SHA256-chained synthetic audit record
 is written for every first registration and validated on reads.
 See [Consent Gate & Audit v1](EVIDENCE_CONSENT_AUDIT_V1.md).
-**This is not a cryptographically tamperproof audit system** against a
-user who can rewrite the database. Existing pre-audit registry rows
+An optional [independent signed audit checkpoint](EVIDENCE_AUDIT_ANCHOR_V1.md)
+now rejects an entirely rehashed but mismatched SQLite chain when the
+separate signing key and checkpoint remain outside the attacker's control.
+**This is not a cryptographically tamperproof production audit system**. Existing pre-audit registry rows
 without audit history will now fail closed until explicitly migrated.
 
 ## Optional read-only caregiver API

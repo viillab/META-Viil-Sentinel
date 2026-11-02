@@ -26,7 +26,10 @@
   now stores only linked receipt/manifest hashes after local signed Edge
   ingestion. A [synthetic-only deny consent gate and SHA256 audit chain](../api/EVIDENCE_CONSENT_AUDIT_V1.md)
   now records registration with independent read-only local verification.
-  Real-media consent remains unverified and no model calls occur.
+  A [separately signed synthetic audit checkpoint](../api/EVIDENCE_AUDIT_ANCHOR_V1.md)
+  can now independently verify the local SQLite audit head on protected
+  read-only caregiver metadata endpoints. Real-media consent remains
+  unverified and no model calls occur.
 - No real camera pixels or private/person/patient evidence was transmitted.
 
 ## Budget, billing and safeguarding $150

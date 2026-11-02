@@ -20,6 +20,7 @@ from app.edge_emitter_e2e import (
     EdgeProducerSmokeError,
     edge_candidates_from_trace,
 )
+from app.evidence_anchor import capture_checkpoint, verify_checkpoint
 from app.evidence_registry import SyntheticEvidenceRegistry
 from app.local_http_demo import loopback_http_server
 from app.main import create_app
@@ -41,7 +42,10 @@ def run_synthetic_event_bound_smoke() -> dict[str, object]:
     event_id = json.loads(source_bytes)["event_id"]
 
     edge_key, caregiver_key = secrets.token_urlsafe(48), secrets.token_urlsafe(48)
+    anchor_key = secrets.token_urlsafe(48)
     with tempfile.TemporaryDirectory(prefix="viil-synthetic-evidence-") as tmp:
+        checkpoint = Path(tmp) / "separate-anchor" / "signed-head.json"
+        checkpoint.parent.mkdir()
         settings = Settings(
             _env_file=None,
             meta_provider="mock",
@@ -55,6 +59,9 @@ def run_synthetic_event_bound_smoke() -> dict[str, object]:
             caregiver_inbox_enabled=True,
             caregiver_inbox_token=SecretStr(caregiver_key),
             evidence_registry_enabled=True,
+            evidence_audit_anchor_required=True,
+            evidence_audit_anchor_path=str(checkpoint),
+            evidence_audit_anchor_secret=SecretStr(anchor_key),
         )
         with loopback_http_server(create_app(settings)) as base_url:  # noqa: SIM117
             with httpx.Client(
@@ -95,6 +102,22 @@ def run_synthetic_event_bound_smoke() -> dict[str, object]:
                 repeated, duplicate_again = registry.register(
                     raw_candidate=source_bytes, evidence=bundle,
                 )
+                # Strict HTTP reads must fail closed UNTIL the independent
+                # checkpoint is explicitly exported by the operator.
+                header = {"Authorization": f"Bearer {caregiver_key}"}
+                before_anchor = client.get(
+                    "/api/v1/caregiver/evidence/" + event_id, headers=header,
+                )
+                signed = capture_checkpoint(
+                    db_path=Path(tmp) / "events.sqlite3",
+                    checkpoint_path=checkpoint,
+                    secret=anchor_key.encode("utf-8"),
+                )
+                checked = verify_checkpoint(
+                    db_path=Path(tmp) / "events.sqlite3",
+                    checkpoint_path=checkpoint,
+                    secret=anchor_key.encode("utf-8"),
+                )
                 registry_read = client.get(
                     "/api/v1/caregiver/evidence/" + event_id,
                     headers={"Authorization": f"Bearer {caregiver_key}"},
@@ -114,6 +137,9 @@ def run_synthetic_event_bound_smoke() -> dict[str, object]:
                     and audit_read.json()["consent_state"] == "not_verified_for_real_media"
                     and audit_read.json()["external_upload_authorized"] is False
                     and audit_read.json()["meta_call_permitted"] is False
+                    and before_anchor.status_code == 503
+                    and signed == checked
+                    and signed.record_count == 1
                     and registry_read.status_code == 200
                     and registry_read.headers.get("cache-control") == "no-store"
                     and registry_read.json()["event_id"] == event_id
@@ -123,6 +149,18 @@ def run_synthetic_event_bound_smoke() -> dict[str, object]:
                     and registry_read.json()["meta_called"] is False
                 ):
                     raise EdgeProducerSmokeError("Offline registry verification failed")
+                # Even the fully coherent SQLite audit must not be trusted
+                # when its separate HMAC checkpoint is changed.
+                checkpoint.write_bytes(b'{"untrusted":true}')
+                forged_read = client.get(
+                    "/api/v1/caregiver/evidence/" + event_id, headers=header,
+                )
+                forged_audit = client.get(
+                    "/api/v1/caregiver/evidence/" + event_id + "/audit",
+                    headers=header,
+                )
+                if forged_read.status_code != 503 or forged_audit.status_code != 503:
+                    raise EdgeProducerSmokeError("Independent anchor corruption not detected")
                 offline_request = build_offline_pose_meta_request(source_bytes, bundle)
                 if offline_request["model"] != MODEL:
                     raise EdgeProducerSmokeError("Offline model request mismatch")
@@ -189,6 +227,9 @@ def run_synthetic_event_bound_smoke() -> dict[str, object]:
         "registry_image_bytes_stored": False,
         "audit_read_via_local_http_verified": True,
         "audit_chain_verified": True,
+        "independent_hmac_audit_anchor_verified": True,
+        "read_without_anchor_rejected": True,
+        "tampered_independent_anchor_rejected_over_http": True,
         "audit_idempotent_one_registration_entry": True,
         "consent_gate_real_media_upload_blocked": True,
         "audit_never_permits_meta_calls": True,

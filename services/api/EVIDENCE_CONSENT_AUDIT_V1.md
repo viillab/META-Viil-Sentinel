@@ -51,11 +51,14 @@ Meta responses. The existing registry continues to hold only metadata.
 The audit checker is bounded by 10,000 records, matching the existing
 local ledger capacity.
 
-This provides **tamper detection for inconsistently modified local
-records**, not an independently anchored or cryptographically signed
-audit. An attacker with direct SQLite write privileges could rewrite the
-whole chain and related registry rows, so this must **not** be marketed as
-an immutable production audit trail.
+The **default**, unanchored SHA-256 chain detects inconsistently modified
+local records, not coordinated complete SQLite rewrites. An **optional
+independent HMAC-signed audit checkpoint** is now available for local
+synthetic demonstrations. When explicitly enabled, the existing caregiver
+Evidence/Audit reads fail closed unless the separate checkpoint matches
+the whole SQLite chain. See [Signed Audit Anchor v1](EVIDENCE_AUDIT_ANCHOR_V1.md).
+This is still **not** a WORM, KMS-backed, or independently attested production
+audit trail.
 
 ## Strict real-media consent gate
 

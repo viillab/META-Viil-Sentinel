@@ -100,7 +100,10 @@ now records one SHA256-chained registration receipt per new validated
 synthetic event and categorically denies real-person upload and Meta
 inference. A read-only `GET /api/v1/caregiver/evidence/{event_id}/audit`
 exposes the verified hash link under the same independent caregiver
-token. The chain is not independently anchored or production-tamperproof.
+token. By default the chain is not independently anchored. An explicitly
+enabled [HMAC audit checkpoint](EVIDENCE_AUDIT_ANCHOR_V1.md) can now guard
+read-only Evidence/Audit endpoints and reject an altered SQLite chain.
+Neither mode is production-tamperproof or grants real-media consent.
 
 A separate, metadata-only **synthetic Evidence Registry v1** now exposes
 `GET /api/v1/caregiver/evidence/{event_id}` only with

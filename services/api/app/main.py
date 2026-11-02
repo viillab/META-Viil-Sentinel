@@ -58,7 +58,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if config.edge_candidate_ledger_path else DEFAULT_LEDGER_PATH
     )
 
-    evidence_registry = SyntheticEvidenceRegistry(candidate_ledger.path)
+    audit_key = config.evidence_audit_anchor_secret
+    evidence_registry = SyntheticEvidenceRegistry(
+        candidate_ledger.path,
+        anchor_required=config.evidence_audit_anchor_required,
+        anchor_path=(
+            Path(config.evidence_audit_anchor_path)
+            if config.evidence_audit_anchor_path else None
+        ),
+        anchor_secret=(
+            audit_key.get_secret_value().encode("utf-8") if audit_key else None
+        ),
+    )
 
     def authorize_caregiver_read(request: Request) -> None:
         """Shared loopback and independent-token check for readonly caregiver views."""
