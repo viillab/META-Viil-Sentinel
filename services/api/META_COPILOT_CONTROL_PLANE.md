@@ -162,6 +162,19 @@ reads the Copilot preview successfully, damages the checkpoint and
 requires HTTP 503 from Copilot. It then shuts down the listener and
 deletes all temporary artifacts.
 
+## Provider-envelope dry-run validated
+
+A follow-on [Meta Copilot Provider Contract](META_COPILOT_PROVIDER_CONTRACT.md)
+now uses the **actual Chat Completions request shape** and processes a
+strict Structured JSON response through a **mock-only HTTP transport**.
+The same three allowlisted tools are checked again after the response and
+a separate signed audit checkpoint is reverified. There is **no live
+model inference or billable Meta request** in this path, and no change
+to the local 4/4 budget cap. New tests reject provider failures, unsafe
+tools, malformed/duplicate JSON, cross-event proposals and mid-request
+anchor changes. The simulated provider result is intentionally labeled
+`provider_response_simulated=true` and `meta_api_called=false`.
+
 ## Explicit exclusions and next work
 
 - This is **NOT a live Meta-driven autonomous agent**. The current tasks

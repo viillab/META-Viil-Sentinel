@@ -4,6 +4,7 @@ Real localhost TCP to FastAPI, real Member 1 Python detector, pinned synthetic
 trace -> a deterministic schematic PNG, strict SHA256 manifest and a MOCK
 Meta JSON contract check. NO paid Meta requests or real-person media.
 """
+import asyncio
 import json
 import secrets
 import tempfile
@@ -24,7 +25,12 @@ from app.evidence_anchor import capture_checkpoint, verify_checkpoint
 from app.evidence_registry import SyntheticEvidenceRegistry
 from app.local_http_demo import loopback_http_server
 from app.main import create_app
-from app.meta_copilot import build_offline_meta_planner_request
+from app.meta_copilot import (
+    MetaCopilotUnavailable,
+    build_offline_meta_planner_request,
+    offline_proposal,
+)
+from app.meta_copilot_mock_transport import MockOnlyMetaPlanner
 from app.meta_first_contract import TrustedMetaCallContext, meta_first_route
 from app.meta_live import MODEL, read_checked_response
 from app.synthetic_evidence import (
@@ -149,6 +155,42 @@ def run_synthetic_event_bound_smoke() -> dict[str, object]:
                 planner_request = build_offline_meta_planner_request(
                     local_evidence, local_audit,
                 )
+                simulated_requests = []
+
+                def mock_meta_planner(request):
+                    simulated_requests.append(request)
+                    payload = json.loads(request.content)
+                    if (
+                        request.method != "POST"
+                        or request.url.host != "api.meta.ai"
+                        or "authorization" in request.headers
+                        or payload["response_format"]["json_schema"]["strict"] is not True
+                        or "data:image" in request.content.decode("utf-8")
+                    ):
+                        raise EdgeProducerSmokeError("Unexpected mock Meta request contract")
+                    return httpx.Response(200, json={
+                        "model": "muse-spark-1.3",
+                        "choices": [{
+                            "finish_reason": "stop",
+                            "message": {
+                                "role": "assistant",
+                                "content": offline_proposal(
+                                    bundle.manifest.event_id
+                                ).model_dump_json(),
+                            },
+                        }],
+                        "usage": {"prompt_tokens": 235, "completion_tokens": 84},
+                    })
+
+                mock_planner = MockOnlyMetaPlanner(
+                    transport=httpx.MockTransport(mock_meta_planner),
+                )
+                mock_result = asyncio.run(
+                    mock_planner.propose_for_verified_event(
+                        registry=anchored_registry,
+                        event_id=bundle.manifest.event_id,
+                    ),
+                )
                 if not (
                     duplicate is False and duplicate_again is True
                     and registered == repeated
@@ -172,6 +214,14 @@ def run_synthetic_event_bound_smoke() -> dict[str, object]:
                     and len(copilot_read.json()["actions"]) == 3
                     and planner_request["model"] == "muse-spark-1.3"
                     and planner_request["response_format"]["json_schema"]["strict"] is True
+                    and mock_result.mock_transport_request_count == 1
+                    and mock_result.meta_api_called is False
+                    and mock_result.meta_budget_modified is False
+                    and mock_result.provider_response_simulated is True
+                    and mock_result.preview.event_id == bundle.manifest.event_id
+                    and mock_result.preview.model_has_executed_tools is False
+                    and len(simulated_requests) == 1
+                    and len(mock_result.preview.actions) == 3
                     and signed == checked
                     and signed.record_count == 1
                     and registry_read.status_code == 200
@@ -201,6 +251,17 @@ def run_synthetic_event_bound_smoke() -> dict[str, object]:
                     or forged_copilot.status_code != 503
                 ):
                     raise EdgeProducerSmokeError("Independent anchor corruption not detected")
+                try:
+                    asyncio.run(mock_planner.propose_for_verified_event(
+                        registry=anchored_registry,
+                        event_id=bundle.manifest.event_id,
+                    ))
+                except MetaCopilotUnavailable:
+                    pass
+                else:
+                    raise EdgeProducerSmokeError("Mock model bypassed damaged signed anchor")
+                if len(simulated_requests) != 1:
+                    raise EdgeProducerSmokeError("Mock model retried after evidence corruption")
                 offline_request = build_offline_pose_meta_request(source_bytes, bundle)
                 if offline_request["model"] != MODEL:
                     raise EdgeProducerSmokeError("Offline model request mismatch")
@@ -278,6 +339,9 @@ def run_synthetic_event_bound_smoke() -> dict[str, object]:
         "meta_copilot_no_anchor_rejected": True,
         "meta_copilot_corrupt_anchor_rejected": True,
         "meta_copilot_model_request_prepared_not_sent": True,
+        "meta_copilot_mock_provider_contract_verified": True,
+        "meta_copilot_mock_provider_rejected_after_anchor_corruption": True,
+        "meta_copilot_mock_provider_calls": 1,
         "meta_response_was_mocked": True,
         "real_meta_api_called": False,
         "meta_budget_modified": False,

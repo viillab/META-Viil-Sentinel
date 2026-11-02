@@ -11,6 +11,13 @@ preview truthfully reports `meta_api_called=false` and remains in
 `offline_readonly_shadow` mode. This is **not yet a live Meta autonomous
 agent** or a real fall decision. The old 4/4 Meta spend guard is unchanged.
 
+The new [mock-only provider contract integration](../api/META_COPILOT_PROVIDER_CONTRACT.md)
+runs a Meta-shaped Chat Completions request against `httpx.MockTransport`,
+checks the simulated Structured Output and revalidates the independent audit
+anchor before preparing the Caregiver workplan. No actual provider
+connection or cost is possible from that adapter; malformed or unsafe
+model proposals are rejected without execution.
+
 ## Verified scope / current result
 
 - A backend-only Meta Model API Chat Completions adapter exists at `services/api/app/meta_live.py`.

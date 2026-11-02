@@ -122,7 +122,10 @@ also **requires** `EVIDENCE_REGISTRY_ENABLED=true`,
 `EVIDENCE_AUDIT_ANCHOR_REQUIRED=true`, a valid independent HMAC
 checkpoint, the same Caregiver bearer and loopback access restrictions.
 This is a deterministic **Offline Shadow** workplan, not a paid Meta
-inference. It returns three bounded review actions and unambiguous flags
+inference. A separate [Mock Meta Provider contract test](META_COPILOT_PROVIDER_CONTRACT.md)
+exercises the full Chat Completions request/response schema using
+`httpx.MockTransport` only. Neither flow calls the real Meta AI.
+The endpoint returns three bounded review actions and unambiguous flags
 `meta_api_called=false`, `fall_confirmed=false`,
 `notification_sent=false`. See
 [META_COPILOT_CONTROL_PLANE.md](META_COPILOT_CONTROL_PLANE.md).

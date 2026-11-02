@@ -36,6 +36,9 @@ def test_full_offline_event_bound_http_and_mock_contract(monkeypatch):
     assert report["meta_copilot_no_anchor_rejected"] is True
     assert report["meta_copilot_corrupt_anchor_rejected"] is True
     assert report["meta_copilot_model_request_prepared_not_sent"] is True
+    assert report["meta_copilot_mock_provider_contract_verified"] is True
+    assert report["meta_copilot_mock_provider_rejected_after_anchor_corruption"] is True
+    assert report["meta_copilot_mock_provider_calls"] == 1
     assert report["meta_response_was_mocked"] is True
     assert report["real_meta_api_called"] is False
     assert report["meta_budget_modified"] is False
