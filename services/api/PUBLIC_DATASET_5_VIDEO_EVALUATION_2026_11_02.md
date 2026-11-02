@@ -70,6 +70,17 @@ In `D:\VIIL-Sentinel\services\api` with `.venv` and the optional Edge `.[video]`
 
 The `--summarize-existing` command produces `data/private/public_fall_video_probe_v1/evaluation-summary.json`; it contains **only aggregate counts and pseudonymous clip IDs**, no raw pose points. The extractor's five original MP4s, pose traces and existing model file stay ignored; do not force-add them to Git.
 
+## Experimental review-only follow-up (separate research branch)
+
+A new [V2 development-only report](EXPERIMENTAL_REVIEW_V2_DEVSET_2026_11_02.md)
+describes a separate 5-clip development cohort and an experimental
+**human-review candidate** detector. It does **not** replace or alter the
+original V1 fall model. On the original five *previously inspected* clips,
+the experimental proposal flagged 2/3 fall-labeled clips and 0/2 ADL clips,
+but the comparison is **nonblind, previously inspected and not an unbiased
+performance estimate**. Rapid voluntary sitting can also trigger the
+experimental review heuristic; no automatic alerts are authorized.
+
 ## Actionable handoff
 
 1. **Member 1 model owner:** investigate camera orientation/temporal frame history and non-upright starting postures, especially sitting-to-fall and bed-to-floor falls. Reproduce with annotations; do not simply lower all thresholds on the held-out five clips.

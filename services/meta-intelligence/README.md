@@ -42,6 +42,19 @@ See [actual five-video evaluation, provenance and gate diagnostics](../api/PUBLI
 **Do not send these human videos to Meta or claim live fall detection is ready.**
 No Meta Model API calls were made in the evaluation.
 
+## Follow-up: V2 experimental review, never Meta on human media
+
+The [experimental V2 review-only study](../api/EXPERIMENTAL_REVIEW_V2_DEVSET_2026_11_02.md)
+tested another five local, hash-pinned noncommercial human-performed
+clips (disjoint **clip IDs**, not proven distinct subjects). Its
+two non-upright movement hypotheses produced review candidates for
+3/3 fall-labeled development clips; the original V1 detected 2/3.
+The previously inspected five clips were checked separately, with
+2/3 review candidates versus V1 0/3, but are not a blind holdout.
+This is **exploratory, not clinically validated**, and fast voluntary
+sitting can cause a spurious candidate. **No videos/poses sent to Meta,
+no new paid API calls, no alert dispatch**, and V1 runtime is unchanged.
+
 ## Verified scope / current result
 
 - A backend-only Meta Model API Chat Completions adapter exists at `services/api/app/meta_live.py`.
