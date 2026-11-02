@@ -85,6 +85,18 @@ From `D:\VIIL-Sentinel\services\api` with Python Edge video extras installed:
 
 The comparison writes privacy-scoped, **aggregate-only** JSON under the two `data/private` folders. The default Edge runtime and caregiver backend are not modified. All model calls are local MediaPipe or trace replay. The previous paid Meta ledger remains 4/4 exhausted, with no billable calls made here.
 
+## Follow-up: real ADL negative challenge and fictional ambiguity stress
+
+The [ADL Negative Challenge report](ADL_NEGATIVE_CHALLENGE_2026_11_02.md)
+evaluates the **two previously unused** `adl_no_fall` videos remaining
+in the licensed source dataset and replays all six ADL clips.
+The frozen V2 had **0 review candidates in the six real ADL clips**
+(23.605 seconds of observed trace data, **far too short** to estimate
+field false alarms/hour). The separate eight-case **fictional** ADL
+stress reveals **2 V2 false review candidates** for *rapid voluntary
+sitting* and *rapid voluntary repositioning in bed*. V2 remains
+nonbinding, review-only and **not eligible for automatic alerts**.
+
 ## Recommended next milestone
 
 1. Establish independently annotated **actor-disjoint** development and blind test sets with an expanded ADL denominator, explicit fall-onset times and license/consent audit.

@@ -55,6 +55,21 @@ This is **exploratory, not clinically validated**, and fast voluntary
 sitting can cause a spurious candidate. **No videos/poses sent to Meta,
 no new paid API calls, no alert dispatch**, and V1 runtime is unchanged.
 
+## Follow-up: nonfall motion stress blocks auto-alert release
+
+[New ADL negative challenge](../api/ADL_NEGATIVE_CHALLENGE_2026_11_02.md):
+both previously unused human ADL MP4s were downloaded, checked with
+public Git blob and SHA-256 and processed by actual local MediaPipe.
+Across **all six** ADL clips in this same source (1,357 total
+frames, just **23.605 seconds** of trace), V1 and V2 each produced
+**zero** candidates. This is NOT a reliable field false-alarm estimate.
+Eight independent *fictional geometry* nonfall stress cases gave
+**two V2 review flags** for voluntary fast sitting and bed shifting.
+That is a **NO-GO for automatic alarms**; keep V2 review-only and
+continue real, actor-disjoint long-form negative evaluation.
+No footage or pose traces were uploaded to Meta or GitHub; no paid
+Meta call was made.
+
 ## Verified scope / current result
 
 - A backend-only Meta Model API Chat Completions adapter exists at `services/api/app/meta_live.py`.
