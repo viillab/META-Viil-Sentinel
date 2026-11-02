@@ -70,6 +70,21 @@ continue real, actor-disjoint long-form negative evaluation.
 No footage or pose traces were uploaded to Meta or GitHub; no paid
 Meta call was made.
 
+## Follow-up: read-only evidence quality and abstention
+
+[Evidence Quality & Abstention research v1](../api/REVIEW_EVIDENCE_ABSTENTION_2026_11_02.md)
+adds source- and timestamp-validated local evidence sufficiency checks,
+strictly separates V1/V2 heuristic proposals from fall confirmation,
+and labels `no_candidate` as **not a clearance**. A full 12-clip
+retrospective local replay shows 2 dual-heuristic review proposals,
+3 single-heuristic proposals, 7 no-candidate cases (including an
+actual Fall-labeled clip) and no quality-abstentions in these 12.
+Longer fictional normal fast sitting and bed shifts can still trigger
+review; this branch remains **NO-GO for automatic fall alerts**.
+Only four torso joints are currently extracted: it would be misleading
+to claim multi-joint tracking has been implemented. Zero Meta calls
+were made; no real videos/poses were uploaded or committed.
+
 ## Verified scope / current result
 
 - A backend-only Meta Model API Chat Completions adapter exists at `services/api/app/meta_live.py`.

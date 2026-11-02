@@ -109,6 +109,9 @@ def test_synthetic_safety_stress_explicitly_exposes_two_false_review_risks():
     assert report["v1_candidate_count"] == 1
     assert report["v2_review_candidate_count"] == 2
     assert report["v2_scenarios_with_review_flags"] == 2
+    assert report["quality_abstained_scenarios"] == 8
+    assert all(x["quality_abstained"] is True for x in report["scenarios"])
+    assert all(x["automated_alert_permitted"] is False for x in report["scenarios"])
     assert report["real_world_false_alert_rate_established"] is False
     assert report["meta_api_called"] is False
     assert report["automated_emergency_dispatch"] is False

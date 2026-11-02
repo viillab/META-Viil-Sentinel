@@ -139,6 +139,19 @@ mismatched SHA-256/size/Git blob, symlinked media, unexpected clip IDs
 or altered frame counts. CI synthetic scenarios are self-contained and
 do not access any private file or provider.
 
+## Follow-on quality/abstention envelope
+
+A [separate, read-only evidence quality gate](REVIEW_EVIDENCE_ABSTENTION_2026_11_02.md)
+now categorizes output into four nonbinding states and refuses to equate
+`no_candidate` with safety. Across all 12 previously known Fall/ADL
+clips, 2 have same-time V1+V2 review signals, 3 V2-only review
+signals and 7 have no candidate (including fall-labeled FD0012).
+None failed the basic pose-quality tests, showing that **a quality gate
+alone does not fix the missed fall**. Eight short fictional ADL stress
+examples are withheld for insufficient frames; **longer high-quality
+fictional normal fast-sitting and bed-shifting still trigger human
+review**, proving the current shared four-landmark ambiguity persists.
+
 ## Release decision and next research work
 
 **NO-GO for unattended automatic fall alarms**. Current positives remain

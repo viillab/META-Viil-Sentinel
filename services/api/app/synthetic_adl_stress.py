@@ -14,6 +14,7 @@ from sentinel_edge.contracts import Landmark, PoseFrame
 from sentinel_edge.detector import TemporalFallDetector
 
 from app.experimental_review_motion import ExperimentalReviewMotionDetector
+from app.review_evidence_abstention import assess_pose_frames
 
 
 @dataclass(frozen=True)
@@ -131,6 +132,7 @@ def run_synthetic_stress() -> dict[str, object]:
     entries = []
     total_v1 = 0
     total_v2 = 0
+    quality_abstained = 0
     for case in scenarios:
         old = TemporalFallDetector()
         review = ExperimentalReviewMotionDetector()
@@ -150,6 +152,28 @@ def run_synthetic_stress() -> dict[str, object]:
                     raise ValueError("Experimental candidate exceeds review-only scope")
         total_v1 += len(v1)
         total_v2 += len(v2)
+        if any(frame.source_id != case.frames[0].source_id for frame in case.frames):
+            # This special synthetic source-identity test is deliberately
+            # rejected by assess_pose_frames(); translate it to abstention.
+            quality_state = "abstain_mixed_source"
+            reasons = ["source_identity_changed", "continuity_unverifiable"]
+            abstained = True
+            alert_permitted = False
+        else:
+            advisory = assess_pose_frames(
+                case.frames, source_id=case.frames[0].source_id,
+            )
+            if (
+                advisory.v1_candidate_count != len(v1)
+                or advisory.v2_review_candidate_count != len(v2)
+            ):
+                raise ValueError("Quality gate cannot reinterpret detector output")
+            quality_state = advisory.status
+            reasons = list(advisory.reason_codes)
+            abstained = advisory.abstained_due_to_quality
+            alert_permitted = advisory.automatic_notification_permitted
+        if abstained:
+            quality_abstained += 1
         entries.append({
             "scenario": case.name,
             "description": case.description,
@@ -159,6 +183,10 @@ def run_synthetic_stress() -> dict[str, object]:
             "v2_review_candidate_count": len(v2),
             "v2_hypothesis_types": sorted({x.hypothesis for x in v2}),
             "v2_review_only": True,
+            "quality_gate_status": quality_state,
+            "quality_abstained": abstained,
+            "quality_gate_reasons": reasons,
+            "automated_alert_permitted": alert_permitted,
             "incident_confirmed": False,
             "notification_sent": False,
             "raw_pose_coordinates_exported": False,
@@ -170,6 +198,7 @@ def run_synthetic_stress() -> dict[str, object]:
         "purpose": "reveal_known_false_review_flags_not_accuracy_estimation",
         "v1_candidate_count": total_v1,
         "v2_review_candidate_count": total_v2,
+        "quality_abstained_scenarios": quality_abstained,
         "v2_scenarios_with_review_flags": sum(
             x["v2_review_candidate_count"] > 0 for x in entries
         ),
