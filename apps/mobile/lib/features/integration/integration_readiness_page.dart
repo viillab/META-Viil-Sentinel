@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/care_theme.dart';
 import '../../shared/care_widgets.dart';
 import 'caregiver_contract_v1.dart';
+import 'readonly_inbox_preview_page.dart';
 
 /// Local *generated* metadata. The access_scope field is intentionally
 /// present for shape testing but never constitutes an authenticated session.
@@ -127,6 +128,15 @@ class _IntegrationReadinessPageState extends State<IntegrationReadinessPage> {
       ),
       const SizedBox(height: 16),
       FilledButton.icon(
+        key: const Key('open-readonly-inbox-preview'),
+        onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => const ReadOnlyInboxPreviewPage(),
+        )),
+        icon: const Icon(Icons.inbox_outlined),
+        label: const Text('Open read-only Inbox Preview'),
+      ),
+      const SizedBox(height: 10),
+      OutlinedButton.icon(
         key: const Key('validate-contract-fixture'),
         onPressed: _validateExample,
         icon: const Icon(Icons.verified_user_outlined),

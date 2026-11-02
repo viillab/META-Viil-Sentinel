@@ -52,7 +52,12 @@ Mobile also provides an **Offline Caregiver Contract Sandbox** under Demo
 Control. It validates a generated `viil.backend.caregiver_inbox.v1`
 metadata sample or rejects an injected image field, using strict keys,
 32 KiB/30-record bounds, timestamp and receipt consistency checks.
-No HTTP request is made and Live/Auth/Meta/Push stay disabled. Flutter
+From there, **Open read-only Inbox Preview** demonstrates three
+fictional selectable advisory records with safe details; stale samples
+are hidden after 30 seconds or when the app leaves the foreground.
+The preview cannot acknowledge or send an alert and does not alter the
+existing Demo Alerts queue. No HTTP request is made and Live/Auth/Meta/
+Push stay disabled. Flutter
 tests compare the codec to the handoff JSON Schema. See the
 [mobile guide](apps/mobile/README.md).
 
