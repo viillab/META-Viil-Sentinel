@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../../core/care_theme.dart';
@@ -44,31 +45,87 @@ class IntegrationReadinessPage extends StatefulWidget {
   State<IntegrationReadinessPage> createState() => _IntegrationReadinessPageState();
 }
 
-class _IntegrationReadinessPageState extends State<IntegrationReadinessPage> {
+class _IntegrationReadinessPageState extends State<IntegrationReadinessPage>
+    with WidgetsBindingObserver {
   SafeCaregiverInbox? _preview;
+  Timer? _expiryTimer;
   bool _rejectedUnsafe = false;
   bool _failed = false;
+  bool _sampleExpired = false;
+  bool _clearedInBackground = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  void _clearSample({bool expired = false, bool background = false}) {
+    _expiryTimer?.cancel();
+    _expiryTimer = null;
+    if (!mounted) return;
+    setState(() {
+      _preview = null;
+      _rejectedUnsafe = false;
+      _failed = false;
+      _sampleExpired = expired;
+      _clearedInBackground = background;
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // A sandbox snapshot is never kept when the app is not foregrounded.
+    if (state != AppLifecycleState.resumed) _clearSample(background: true);
+  }
+
+  void _scheduleExpiry(SafeCaregiverInbox sample) {
+    final expiresAt = sample.generatedAt
+        .add(CaregiverContractV1.ttl)
+        .add(const Duration(milliseconds: 1));
+    final delay = expiresAt.difference(DateTime.now());
+    _expiryTimer = Timer(delay.isNegative ? Duration.zero : delay, () {
+      _clearSample(expired: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _expiryTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
 
   void _validateExample() {
+    _expiryTimer?.cancel();
+    _expiryTimer = null;
     try {
       final actual = parseCaregiverContractJson(
         generatedCaregiverFixture(DateTime.now()),
       );
+      final fresh = actual.freshAt(DateTime.now());
       setState(() {
-        _preview = actual.freshAt(DateTime.now()) ? actual : null;
+        _preview = fresh ? actual : null;
         _rejectedUnsafe = false;
-        _failed = _preview == null;
+        _failed = false;
+        _sampleExpired = !fresh;
+        _clearedInBackground = false;
       });
+      if (fresh) _scheduleExpiry(actual);
     } on ContractRejected {
       setState(() {
         _preview = null;
         _rejectedUnsafe = false;
         _failed = true;
+        _sampleExpired = false;
+        _clearedInBackground = false;
       });
     }
   }
 
   void _rejectUnsafe() {
+    _expiryTimer?.cancel();
+    _expiryTimer = null;
     var rejected = false;
     try {
       parseCaregiverContractJson(
@@ -81,11 +138,18 @@ class _IntegrationReadinessPageState extends State<IntegrationReadinessPage> {
       _preview = null;
       _rejectedUnsafe = rejected;
       _failed = !rejected;
+      _sampleExpired = false;
+      _clearedInBackground = false;
     });
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) {
+    // The validity check also protects resumed frames before the timer fires.
+    final freshPreview = _preview != null && _preview!.freshAt(DateTime.now())
+        ? _preview
+        : null;
+    return Scaffold(
     appBar: AppBar(title: const Text('Mobile integration contract')),
     body: CenteredPage(children: [
       const DemoNotice(),
@@ -149,7 +213,15 @@ class _IntegrationReadinessPageState extends State<IntegrationReadinessPage> {
         icon: const Icon(Icons.gpp_bad_outlined),
         label: const Text('Test rejection of unsafe image field'),
       ),
-      if (_preview != null) ...[
+      if (_sampleExpired || (_preview != null && freshPreview == null)) ...[
+        const SizedBox(height: 18),
+        const StatusPill(text: 'CONTRACT SAMPLE EXPIRED · PREVIEW REMOVED'),
+      ],
+      if (_clearedInBackground) ...[
+        const SizedBox(height: 18),
+        const StatusPill(text: 'CONTRACT SAMPLE CLEARED ON BACKGROUND'),
+      ],
+      if (freshPreview != null) ...[
         const SizedBox(height: 18),
         Card(
           key: const Key('contract-accepted'),
@@ -164,10 +236,10 @@ class _IntegrationReadinessPageState extends State<IntegrationReadinessPage> {
                   acknowledged: true,
                 ),
                 const SizedBox(height: 14),
-                Text('${_preview!.advisories.length} fictional advisory',
+                Text('${freshPreview.advisories.length} fictional advisory',
                     style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 13),
-                for (final item in _preview!.advisories) ...[
+                for (final item in freshPreview.advisories) ...[
                   Text(item.title,
                     style: const TextStyle(
                       fontWeight: FontWeight.w800, color: CareColors.ink,
@@ -227,7 +299,8 @@ class _IntegrationReadinessPageState extends State<IntegrationReadinessPage> {
         style: TextStyle(color: CareColors.muted, fontSize: 11, height: 1.6),
       ),
     ]),
-  );
+    );
+  }
 }
 
 class _ReadinessRow extends StatelessWidget {
