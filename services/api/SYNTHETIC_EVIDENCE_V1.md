@@ -85,6 +85,13 @@ Run in `D:\VIIL-Sentinel\services\api`:
 
 Expected `status`: `SYNTHETIC_EVENT_BOUND_EVIDENCE_PASS`.
 
+**Local consent denial + audit trail:** `SyntheticEvidenceRegistry.register()`
+now enforces a synthetic-only denial of real-media upload and atomically
+appends a SHA256-linked audit entry when registering new evidence. Existing
+evidence reads verify the entire audit chain. A new guarded caregiver
+`GET /api/v1/caregiver/evidence/{event_id}/audit` exposes metadata only,
+not real consent. See [Consent Gate & Audit](EVIDENCE_CONSENT_AUDIT_V1.md).
+
 **New local metadata registry:** The `SyntheticEvidenceRegistry` now stores
 the verified event/trace/image hashes and synthetic-only consent flags in
 the **same SQLite ledger** after authenticated synthetic Candidate intake.

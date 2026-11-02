@@ -99,9 +99,21 @@ def run_synthetic_event_bound_smoke() -> dict[str, object]:
                     "/api/v1/caregiver/evidence/" + event_id,
                     headers={"Authorization": f"Bearer {caregiver_key}"},
                 )
+                audit_read = client.get(
+                    "/api/v1/caregiver/evidence/" + event_id + "/audit",
+                    headers={"Authorization": f"Bearer {caregiver_key}"},
+                )
                 if not (
                     duplicate is False and duplicate_again is True
                     and registered == repeated
+                    and audit_read.status_code == 200
+                    and audit_read.headers.get("cache-control") == "no-store"
+                    and audit_read.json()["sequence"] == 1
+                    and audit_read.json()["event_id"] == event_id
+                    and audit_read.json()["chain_verified"] is True
+                    and audit_read.json()["consent_state"] == "not_verified_for_real_media"
+                    and audit_read.json()["external_upload_authorized"] is False
+                    and audit_read.json()["meta_call_permitted"] is False
                     and registry_read.status_code == 200
                     and registry_read.headers.get("cache-control") == "no-store"
                     and registry_read.json()["event_id"] == event_id
@@ -175,6 +187,11 @@ def run_synthetic_event_bound_smoke() -> dict[str, object]:
         "registry_deduplicated": True,
         "registry_real_media_consent_verified": False,
         "registry_image_bytes_stored": False,
+        "audit_read_via_local_http_verified": True,
+        "audit_chain_verified": True,
+        "audit_idempotent_one_registration_entry": True,
+        "consent_gate_real_media_upload_blocked": True,
+        "audit_never_permits_meta_calls": True,
         "meta_response_was_mocked": True,
         "real_meta_api_called": False,
         "meta_budget_modified": False,

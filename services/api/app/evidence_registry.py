@@ -17,6 +17,14 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict
 
 from app.candidate_ingest import MAX_STORED_EVENTS, parse_candidate
+from app.evidence_audit import (
+    EvidenceAuditFailure,
+    EvidenceAuditReceipt,
+    append_registered_audit,
+    create_audit_schema,
+    require_synthetic_consent_block,
+    verify_audit_chain,
+)
 from app.synthetic_evidence import (
     RENDERER_VERSION,
     SOURCE_TIMES,
@@ -154,6 +162,9 @@ class SyntheticEvidenceRegistry:
                         "No matching signed Edge candidate receipt for these exact bytes"
                     )
                 _schema(connection)
+                create_audit_schema(connection)
+                verify_audit_chain(connection)
+                require_synthetic_consent_block(evidence.manifest)
                 stored = connection.execute(
                     "SELECT manifest_json, registered_at_utc FROM synthetic_evidence_registry "
                     "WHERE event_id=?",
@@ -185,6 +196,12 @@ class SyntheticEvidenceRegistry:
                         canonical_manifest, now,
                     ),
                 )
+                verified_audit = append_registered_audit(
+                    connection, event_id=candidate.event_id,
+                    manifest=evidence.manifest, timestamp=now,
+                )
+                if str(verified_audit.event_id) != str(candidate.event_id):
+                    raise EvidenceRegistryRejected("Audit and registry event mismatch")
                 connection.commit()
                 verified = _checked_manifest(
                     canonical_manifest, event_id=candidate.event_id,
@@ -211,6 +228,12 @@ class SyntheticEvidenceRegistry:
                 ).fetchone()
                 if present is None:
                     return None
+                try:
+                    verified_chain = verify_audit_chain(connection)
+                except EvidenceAuditFailure:
+                    raise EvidenceRegistryRejected("Evidence audit integrity failed") from None
+                if any(record.source_id != source_id for record in verified_chain):
+                    raise EvidenceAuditFailure("Unscoped synthetic audit history")
                 row = connection.execute(
                     "SELECT r.source_id, r.candidate_sha256, r.manifest_json, "
                     "r.registered_at_utc, c.source_id, c.digest "
@@ -234,3 +257,23 @@ class SyntheticEvidenceRegistry:
             return _summary(verified, when)
         except (sqlite3.DatabaseError, OSError):
             raise EvidenceRegistryUnavailable("Registry read is unavailable") from None
+
+    def get_audit(
+        self, *, event_id: UUID, source_id: str
+    ) -> EvidenceAuditReceipt | None:
+        """Return validated metadata-only audit entry for this exact synthetic UUID."""
+        if source_id != SYNTHETIC_SOURCE or not isinstance(event_id, UUID):
+            raise EvidenceRegistryRejected("Unsupported audit lookup scope")
+        if self.path.is_symlink():
+            raise EvidenceRegistryUnavailable("Audit file is not permitted")
+        if not self.path.is_file():
+            return None
+        try:
+            uri = self.path.resolve().as_uri() + "?mode=ro"
+            with closing(sqlite3.connect(uri, uri=True, timeout=3.0)) as connection:
+                receipts = verify_audit_chain(connection)
+            return next(
+                (entry for entry in receipts if entry.event_id == event_id), None
+            )
+        except (sqlite3.DatabaseError, OSError):
+            raise EvidenceRegistryUnavailable("Audit read is unavailable") from None

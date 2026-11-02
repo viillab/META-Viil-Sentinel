@@ -95,6 +95,13 @@ closed on both ingestion and inbox reads, including on Windows.
 
 ## Evidence metadata companion (explicit opt-in)
 
+A metadata-only [synthetic Consent Gate & Audit Trail](EVIDENCE_CONSENT_AUDIT_V1.md)
+now records one SHA256-chained registration receipt per new validated
+synthetic event and categorically denies real-person upload and Meta
+inference. A read-only `GET /api/v1/caregiver/evidence/{event_id}/audit`
+exposes the verified hash link under the same independent caregiver
+token. The chain is not independently anchored or production-tamperproof.
+
 A separate, metadata-only **synthetic Evidence Registry v1** now exposes
 `GET /api/v1/caregiver/evidence/{event_id}` only with
 `EVIDENCE_REGISTRY_ENABLED=true`, the same independent local caregiver

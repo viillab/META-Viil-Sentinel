@@ -23,6 +23,7 @@ from app.candidate_ingest import (
 )
 from app.caregiver_inbox import CaregiverInbox, build_inbox
 from app.config import Settings, get_settings
+from app.evidence_audit import EvidenceAuditFailure, EvidenceAuditReceipt
 from app.evidence_registry import (
     EvidenceRegistryRecord,
     EvidenceRegistryRejected,
@@ -168,12 +169,36 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             record = evidence_registry.get(
                 event_id=event_id, source_id=config.edge_candidate_source_id,
             )
-        except EvidenceRegistryRejected:
+        except (EvidenceRegistryRejected, EvidenceAuditFailure):
             raise HTTPException(503, "Synthetic evidence integrity failed") from None
         except EvidenceRegistryUnavailable:
             raise HTTPException(503, "Synthetic evidence registry unavailable") from None
         if record is None:
             raise HTTPException(404, "Synthetic evidence record not found")
+        return record
+
+    @app.get(
+        "/api/v1/caregiver/evidence/{event_id}/audit",
+        response_model=EvidenceAuditReceipt,
+    )
+    def caregiver_evidence_audit(
+        event_id: UUID, request: Request, response: Response,
+    ) -> EvidenceAuditReceipt:
+        """Read validated synthetic-only audit metadata, never upload permission."""
+        if not config.evidence_registry_enabled:
+            raise HTTPException(404, "Synthetic evidence audit is disabled")
+        authorize_caregiver_read(request)
+        response.headers["Cache-Control"] = "no-store"
+        try:
+            record = evidence_registry.get_audit(
+                event_id=event_id, source_id=config.edge_candidate_source_id,
+            )
+        except (EvidenceRegistryRejected, EvidenceAuditFailure):
+            raise HTTPException(503, "Synthetic audit integrity failed") from None
+        except EvidenceRegistryUnavailable:
+            raise HTTPException(503, "Synthetic evidence audit unavailable") from None
+        if record is None:
+            raise HTTPException(404, "Synthetic audit record not found")
         return record
 
     @app.get("/health")

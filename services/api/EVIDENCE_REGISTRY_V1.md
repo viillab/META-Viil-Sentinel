@@ -51,8 +51,12 @@ candidate JSON, Meta provider responses, or consent documents.
 The registry reads using SQLite `mode=ro`; it does not create a missing DB
 and it refuses corrupt or tampered records. A no-record response is 404;
 corruption/unavailable storage is 503. All database handles close explicitly
-on Windows. This is a local developer registry, **not** cryptographically
-tamperproof storage against an attacker who can rewrite the database.
+on Windows. A new transactional, SHA256-chained synthetic audit record
+is written for every first registration and validated on reads.
+See [Consent Gate & Audit v1](EVIDENCE_CONSENT_AUDIT_V1.md).
+**This is not a cryptographically tamperproof audit system** against a
+user who can rewrite the database. Existing pre-audit registry rows
+without audit history will now fail closed until explicitly migrated.
 
 ## Optional read-only caregiver API
 
@@ -62,7 +66,10 @@ The route is **off by default** (`EVIDENCE_REGISTRY_ENABLED=false`).
 When enabled, it requires the same independent 32+-byte caregiver token and
 loopback checks as `GET /api/v1/caregiver/inbox`. It emits metadata only
 using schema `viil.backend.synthetic_evidence_registry.v1`, with
-`Cache-Control: no-store`. Missing or duplicated bearer headers are 401,
+`Cache-Control: no-store`. A separate read-only
+`GET /api/v1/caregiver/evidence/{event_id}/audit` uses the same
+independent backend token and returns the verified synthetic audit
+hash chain metadata with upload denied. Missing or duplicated bearer headers are 401,
 non-loopback source addresses 403, missing records 404. `POST`, `PUT`
 and `DELETE` for this route are not provided. The browser/Mobile must
 **never embed the static backend bearer token**; a production session-based

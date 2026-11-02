@@ -24,7 +24,9 @@
   [Synthetic Evidence v1](../api/SYNTHETIC_EVIDENCE_V1.md).
   The related [synthetic evidence registry](../api/EVIDENCE_REGISTRY_V1.md)
   now stores only linked receipt/manifest hashes after local signed Edge
-  ingestion; real-media consent remains unverified and no model calls occur.
+  ingestion. A [synthetic-only deny consent gate and SHA256 audit chain](../api/EVIDENCE_CONSENT_AUDIT_V1.md)
+  now records registration with independent read-only local verification.
+  Real-media consent remains unverified and no model calls occur.
 - No real camera pixels or private/person/patient evidence was transmitted.
 
 ## Budget, billing and safeguarding $150
