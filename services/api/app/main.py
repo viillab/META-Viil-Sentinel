@@ -32,6 +32,11 @@ from app.evidence_registry import (
 )
 from app.local_security import is_local_test_client
 from app.meta import provider_for
+from app.meta_copilot import (
+    MetaCopilotPreview,
+    MetaCopilotUnavailable,
+    build_copilot_preview,
+)
 from app.models import Incident, NewIncident, ReviewRequest
 from app.service import IncidentService
 from app.store import IncidentRepository
@@ -211,6 +216,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if record is None:
             raise HTTPException(404, "Synthetic audit record not found")
         return record
+
+    @app.get(
+        "/api/v1/caregiver/copilot/{event_id}",
+        response_model=MetaCopilotPreview,
+    )
+    def caregiver_meta_copilot_preview(
+        event_id: UUID, request: Request, response: Response,
+    ) -> MetaCopilotPreview:
+        """Fail-closed Meta tool-planning preview, NEVER live model or case mutation."""
+        if not config.meta_copilot_preview_enabled:
+            raise HTTPException(404, "Meta Copilot preview is disabled")
+        authorize_caregiver_read(request)
+        response.headers["Cache-Control"] = "no-store"
+        if not config.evidence_registry_enabled or not config.evidence_audit_anchor_required:
+            raise HTTPException(503, "Meta Copilot requires independently anchored evidence")
+        try:
+            report = build_copilot_preview(registry=evidence_registry, event_id=event_id)
+        except (
+            MetaCopilotUnavailable,
+            EvidenceRegistryRejected,
+            EvidenceAuditFailure,
+            EvidenceRegistryUnavailable,
+            sqlite3.DatabaseError,
+            OSError,
+        ):
+            raise HTTPException(503, "Meta Copilot evidence or audit unavailable") from None
+        if report is None:
+            raise HTTPException(404, "Verified synthetic event not found")
+        return report
 
     @app.get("/health")
     def health() -> dict[str, str]:

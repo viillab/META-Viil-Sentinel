@@ -31,6 +31,11 @@ def test_full_offline_event_bound_http_and_mock_contract(monkeypatch):
     assert report["audit_idempotent_one_registration_entry"] is True
     assert report["consent_gate_real_media_upload_blocked"] is True
     assert report["audit_never_permits_meta_calls"] is True
+    assert report["meta_copilot_offline_preview_verified_over_http"] is True
+    assert report["meta_copilot_workplan_tasks"] == 3
+    assert report["meta_copilot_no_anchor_rejected"] is True
+    assert report["meta_copilot_corrupt_anchor_rejected"] is True
+    assert report["meta_copilot_model_request_prepared_not_sent"] is True
     assert report["meta_response_was_mocked"] is True
     assert report["real_meta_api_called"] is False
     assert report["meta_budget_modified"] is False

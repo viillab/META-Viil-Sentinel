@@ -114,6 +114,19 @@ Registration is internal Python only and is tied to the already received
 candidate's exact payload hash in SQLite. The endpoint is disabled by
 default and read-only. See [EVIDENCE_REGISTRY_V1.md](EVIDENCE_REGISTRY_V1.md).
 
+## Meta Copilot local handoff preview
+
+An optional read-only `GET /api/v1/caregiver/copilot/{event_id}` is
+available after setting `META_COPILOT_PREVIEW_ENABLED=true`, but it
+also **requires** `EVIDENCE_REGISTRY_ENABLED=true`,
+`EVIDENCE_AUDIT_ANCHOR_REQUIRED=true`, a valid independent HMAC
+checkpoint, the same Caregiver bearer and loopback access restrictions.
+This is a deterministic **Offline Shadow** workplan, not a paid Meta
+inference. It returns three bounded review actions and unambiguous flags
+`meta_api_called=false`, `fall_confirmed=false`,
+`notification_sent=false`. See
+[META_COPILOT_CONTROL_PLANE.md](META_COPILOT_CONTROL_PLANE.md).
+
 ## Hand-off and remaining blockers
 
 - UI contract source copied unchanged from Member 1:

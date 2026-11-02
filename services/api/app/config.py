@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     caregiver_inbox_token: SecretStr | None = None
     # Separate metadata-only evidence registry reads; default closed.
     evidence_registry_enabled: bool = False
+    # Optional offline read-only case copilot; never invokes paid Meta AI.
+    meta_copilot_preview_enabled: bool = False
     # Optional strict read-time independent HMAC anchor. NOT consent approval.
     evidence_audit_anchor_required: bool = False
     evidence_audit_anchor_path: str | None = None

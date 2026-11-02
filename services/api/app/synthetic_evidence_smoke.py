@@ -24,6 +24,7 @@ from app.evidence_anchor import capture_checkpoint, verify_checkpoint
 from app.evidence_registry import SyntheticEvidenceRegistry
 from app.local_http_demo import loopback_http_server
 from app.main import create_app
+from app.meta_copilot import build_offline_meta_planner_request
 from app.meta_first_contract import TrustedMetaCallContext, meta_first_route
 from app.meta_live import MODEL, read_checked_response
 from app.synthetic_evidence import (
@@ -59,6 +60,7 @@ def run_synthetic_event_bound_smoke() -> dict[str, object]:
             caregiver_inbox_enabled=True,
             caregiver_inbox_token=SecretStr(caregiver_key),
             evidence_registry_enabled=True,
+            meta_copilot_preview_enabled=True,
             evidence_audit_anchor_required=True,
             evidence_audit_anchor_path=str(checkpoint),
             evidence_audit_anchor_secret=SecretStr(anchor_key),
@@ -108,6 +110,9 @@ def run_synthetic_event_bound_smoke() -> dict[str, object]:
                 before_anchor = client.get(
                     "/api/v1/caregiver/evidence/" + event_id, headers=header,
                 )
+                copilot_before_anchor = client.get(
+                    "/api/v1/caregiver/copilot/" + event_id, headers=header,
+                )
                 signed = capture_checkpoint(
                     db_path=Path(tmp) / "events.sqlite3",
                     checkpoint_path=checkpoint,
@@ -126,6 +131,24 @@ def run_synthetic_event_bound_smoke() -> dict[str, object]:
                     "/api/v1/caregiver/evidence/" + event_id + "/audit",
                     headers={"Authorization": f"Bearer {caregiver_key}"},
                 )
+                copilot_read = client.get(
+                    "/api/v1/caregiver/copilot/" + event_id, headers=header,
+                )
+                anchored_registry = SyntheticEvidenceRegistry(
+                    Path(tmp) / "events.sqlite3", anchor_required=True,
+                    anchor_path=checkpoint, anchor_secret=anchor_key.encode("utf-8"),
+                )
+                local_evidence = anchored_registry.get(
+                    event_id=bundle.manifest.event_id, source_id=SYNTHETIC_SOURCE,
+                )
+                local_audit = anchored_registry.get_audit(
+                    event_id=bundle.manifest.event_id, source_id=SYNTHETIC_SOURCE,
+                )
+                if local_evidence is None or local_audit is None:
+                    raise EdgeProducerSmokeError("Missing anchored synthetic facts")
+                planner_request = build_offline_meta_planner_request(
+                    local_evidence, local_audit,
+                )
                 if not (
                     duplicate is False and duplicate_again is True
                     and registered == repeated
@@ -138,6 +161,17 @@ def run_synthetic_event_bound_smoke() -> dict[str, object]:
                     and audit_read.json()["external_upload_authorized"] is False
                     and audit_read.json()["meta_call_permitted"] is False
                     and before_anchor.status_code == 503
+                    and copilot_before_anchor.status_code == 503
+                    and copilot_read.status_code == 200
+                    and copilot_read.headers.get("cache-control") == "no-store"
+                    and copilot_read.json()["event_id"] == event_id
+                    and copilot_read.json()["mode"] == "offline_readonly_shadow"
+                    and copilot_read.json()["meta_api_called"] is False
+                    and copilot_read.json()["human_review_required"] is True
+                    and copilot_read.json()["fall_confirmed"] is False
+                    and len(copilot_read.json()["actions"]) == 3
+                    and planner_request["model"] == "muse-spark-1.3"
+                    and planner_request["response_format"]["json_schema"]["strict"] is True
                     and signed == checked
                     and signed.record_count == 1
                     and registry_read.status_code == 200
@@ -159,7 +193,13 @@ def run_synthetic_event_bound_smoke() -> dict[str, object]:
                     "/api/v1/caregiver/evidence/" + event_id + "/audit",
                     headers=header,
                 )
-                if forged_read.status_code != 503 or forged_audit.status_code != 503:
+                forged_copilot = client.get(
+                    "/api/v1/caregiver/copilot/" + event_id, headers=header,
+                )
+                if (
+                    forged_read.status_code != 503 or forged_audit.status_code != 503
+                    or forged_copilot.status_code != 503
+                ):
                     raise EdgeProducerSmokeError("Independent anchor corruption not detected")
                 offline_request = build_offline_pose_meta_request(source_bytes, bundle)
                 if offline_request["model"] != MODEL:
@@ -233,6 +273,11 @@ def run_synthetic_event_bound_smoke() -> dict[str, object]:
         "audit_idempotent_one_registration_entry": True,
         "consent_gate_real_media_upload_blocked": True,
         "audit_never_permits_meta_calls": True,
+        "meta_copilot_offline_preview_verified_over_http": True,
+        "meta_copilot_workplan_tasks": 3,
+        "meta_copilot_no_anchor_rejected": True,
+        "meta_copilot_corrupt_anchor_rejected": True,
+        "meta_copilot_model_request_prepared_not_sent": True,
         "meta_response_was_mocked": True,
         "real_meta_api_called": False,
         "meta_budget_modified": False,

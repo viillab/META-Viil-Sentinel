@@ -1,5 +1,16 @@
 # Meta Model API — Member 2 takeover (2 Nov 2026)
 
+## Meta Copilot — new orchestrator control plane
+
+A [Meta Copilot Control Plane v1](../api/META_COPILOT_CONTROL_PLANE.md)
+now defines an allowlisted Muse Spark **read-only task-planning contract**
+and an opt-in local Caregiver preview for checking synthetic event linkage,
+verifying its independently signed audit and preparing a human-review
+handoff. The provider request is **prepared but never sent**; the HTTP
+preview truthfully reports `meta_api_called=false` and remains in
+`offline_readonly_shadow` mode. This is **not yet a live Meta autonomous
+agent** or a real fall decision. The old 4/4 Meta spend guard is unchanged.
+
 ## Verified scope / current result
 
 - A backend-only Meta Model API Chat Completions adapter exists at `services/api/app/meta_live.py`.
