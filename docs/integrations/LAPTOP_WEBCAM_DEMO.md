@@ -71,8 +71,15 @@ In **Microsoft Edge or Chrome on the same laptop** open
    This ephemeral browser-only summary has status
    `OPERATOR_REVIEW_REQUIRED`, never hardware acceptance or model
    correctness. It contains no camera identity, video, pose coordinates,
-   model path, API calls, disk exports, or timestamps. Dismiss the report
-   or start a new session to clear it.
+   model path, API calls, disk exports, or timestamps. **Copy technical
+   report JSON** explicitly copies only the ten allowlisted technical
+   fields to the system clipboard for an operator's review notes; it does
+   not save a file, contact the backend or prove real hardware acceptance.
+   The app shows success or clipboard-denied feedback without exposing
+   native browser/device errors. Clipboard content may persist outside
+   the app until overwritten by the operating system; use only where the
+   operator accepts this. Dismiss the report or start a new session to
+   clear the in-app summary.
 6. A real camera acceptance still requires a human operator to confirm
    that the visible preview moves (including in preview-only mode), the
    on-screen frame count advances, and the torso overlay tracks a consenting

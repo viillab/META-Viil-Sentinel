@@ -362,6 +362,39 @@ async function main() {
     }, "released stream and local operator report");
     assert.match(result.report, /OPERATOR REVIEW REQUIRED/);
     assert.match(result.report, /Locally analyzed:\s*0/);
+    // Mock only this disposable browser clipboard, never the user's OS clipboard.
+    await evaluate("Object.defineProperty(navigator,'clipboard',{" +
+      "configurable:true,value:{writeText:async value=>{" +
+      "window.__viilCopiedJson=value;}}});true");
+    assert.equal(await clickButton("Copy technical report JSON"), true);
+    const copiedJson = await until(() => evaluate("window.__viilCopiedJson||null"),
+      "explicit local technical report copy");
+    const copied = JSON.parse(copiedJson);
+    assert.deepEqual(Object.keys(copied), [
+      "schema_version", "status", "durationSeconds", "presentedFrameCallbacks",
+      "analyzedFrames", "reliablePoseFrames", "unconfirmedCandidates",
+      "lastWindowInferenceP95Ms", "stopReason", "limitation",
+    ]);
+    assert.equal(copied.status, "OPERATOR_REVIEW_REQUIRED");
+    assert.equal(copied.stopReason, "manual");
+    assert.equal(copied.analyzedFrames, 0);
+    assert.ok(copied.presentedFrameCallbacks >= 15);
+    assert.equal(await until(() => evaluate(
+      "document.querySelector('section[aria-label=\"Local webcam technical smoke report\"]')" +
+      "?.innerText.includes('Technical counts copied')"),
+    "clipboard copied feedback"), true);
+    // Browser permission denial must never echo native exception details.
+    await evaluate("navigator.clipboard.writeText=async()=>{" +
+      "throw Error('PRIVATE-CLIPBOARD-CONTEXT');};true");
+    assert.equal(await clickButton("Copy technical report JSON"), true);
+    assert.equal(await until(() => evaluate(
+      "document.querySelector('section[aria-label=\"Local webcam technical smoke report\"]')" +
+      "?.innerText.includes('Clipboard unavailable or denied')"),
+    "clipboard-denied feedback"), true);
+    const deniedText = await evaluate(
+      "document.querySelector('section[aria-label=\"Local webcam technical smoke report\"]')" +
+      "?.innerText");
+    assert.doesNotMatch(deniedText, /PRIVATE-CLIPBOARD-CONTEXT/);
     assert.ok((await evaluate("window.__viilFakeTrace.filter(e=>e==='track-stop-call').length")) >= 1,
       "Local StreamTrack.stop() must be called during manual shutdown");
     await evaluate("clearInterval(window.__viilFakeRenderTimer)");
@@ -518,7 +551,7 @@ async function main() {
     console.log("FAKE WEBCAM + SYNTHETIC HEURISTIC BROWSER PASS: rendered=" + snapshot.count +
       "; manual/hidden/stall/late-permission cleanup=verified; " +
       "absolute-startup-timeout=verified; " +
-      "permission-denied=redacted; local report=shown; " +
+      "permission-denied=redacted; local report=shown; clipboard-copy/denial=verified; " +
       "inference=none; POST=0; real hardware=NOT tested");
   } finally {
     cdp?.close();
