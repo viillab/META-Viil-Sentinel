@@ -1,7 +1,9 @@
 """Local-only FastAPI MVP foundation for VIIL Sentinel."""
 from uuid import UUID
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+
 from app.agent import InvalidTransition, human_review
 from app.config import Settings, get_settings
 from app.meta import provider_for
@@ -33,10 +35,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/v1/incidents", response_model=list[Incident])
     def list_incidents() -> list[Incident]:
+        if not config.demo_mode:
+            raise HTTPException(403, "Incident reads require scoped authentication")
         return repository.list()
 
     @app.get("/api/v1/incidents/{incident_id}", response_model=Incident)
     def get_incident(incident_id: UUID) -> Incident:
+        if not config.demo_mode:
+            raise HTTPException(403, "Incident reads require scoped authentication")
         incident = repository.get(incident_id)
         if incident is None:
             raise HTTPException(404, "Incident not found")

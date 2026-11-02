@@ -1,5 +1,7 @@
 """Local-first configuration. External AI and emergency dispatch are disabled by default."""
 from functools import lru_cache
+
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -8,7 +10,9 @@ class Settings(BaseSettings):
     demo_mode: bool = True
     meta_provider: str = "mock"
     meta_model_id: str = "muse-spark-1.3"
-    meta_model_api_key: str | None = None
+    meta_model_api_key: SecretStr | None = None
+    # Live provider may only be invoked by explicit local probe, never demo requests.
+    meta_live_enabled: bool = False
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

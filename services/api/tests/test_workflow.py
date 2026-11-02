@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
-from app.main import create_app
+
 from app.config import Settings
+from app.main import create_app
 
 
 def client() -> TestClient:
@@ -63,6 +64,8 @@ def test_false_alert_path():
 def test_no_unauthenticated_actions_outside_demo():
     with TestClient(create_app(Settings(meta_provider="mock", demo_mode=False))) as api:
         assert api.post("/api/v1/incidents/demo", json={}).status_code == 403
+        assert api.get("/api/v1/incidents").status_code == 403
+        assert api.get("/api/v1/incidents/00000000-0000-4000-8000-000000000000").status_code == 403
 
 
 def test_invalid_input_validation():
