@@ -66,6 +66,29 @@ The codec in `lib/features/integration/caregiver_contract_v1.dart`:
   hypothetical authorized UI could display data, and returns only
   sanitized, mapped presentation labels.
 
+### Read-only Caregiver Inbox Preview
+
+Open **Demo control center → Inspect offline Caregiver API contract →
+Open read-only Inbox Preview**. Tap **Load fresh fictional inbox** to
+display three synthetic examples: a rapid-descent Edge candidate, an
+uncertain wheelchair transfer, and a previously reviewed sample.
+Select any sample to inspect only safe, enum-derived context labels,
+the explicitly *not sent* notification status, and the absence of
+confirmation/emergency dispatch. This preview is independent of the
+local Demo Alerts and History and provides **no Acknowledge, Close,
+Live, Send, or network operation**.
+
+The fictional inbox snapshot is validated with the same strict codec
+as the Contract Sandbox and is **cleared automatically after 30
+seconds**, whenever the application leaves the foreground, or when
+the preview route closes. **Simulate expired snapshot** verifies that
+stale-but-structurally-valid JSON is withheld instead of rendered.
+**Load fresh fictional inbox** always creates a new local sample.
+The sample is not persisted or treated as an authenticated response.
+Tests cover item selection, timeout, fake stale input, background
+clear, 320px layouts with larger text, and isolation from the Alerts
+queue. No physical Android phone has been accepted yet.
+
 A **literal** `access_scope=authenticated_caregiver` string in sample
 JSON is **never proof of authorization**. There is no HTTP adapter and
 Live Mode cannot be enabled in this version. Tests additionally verify
@@ -116,7 +139,8 @@ daemon**, without changing the Windows language or locale.
 - `lib/features/demo/` — guided judge walkthrough, controlled fictional
   scenarios and reset
 - `lib/features/integration/` — offline read-only caregiver metadata
-  contract validation and readiness UI, **no network adapter**
+  validation, sample Inbox Preview, expiry/privacy behavior, readiness
+  UI; **no network adapter**
 - `lib/shared/` — presentational components
 
 The future `viil.backend.caregiver_inbox.v1` contract is described by

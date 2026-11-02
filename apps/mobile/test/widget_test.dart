@@ -188,6 +188,98 @@ void main() {
     expect(find.text('Pending review · 1'), findsOneWidget);
   });
 
+  testWidgets('read-only Inbox Preview selects samples and expires automatically',
+      (tester) async {
+    await tester.pumpWidget(const CareApp());
+    await tester.tap(find.byKey(const Key('open-demo-controls')));
+    await tester.pumpAndSettle();
+    await scrollAndShow(tester, 'open-integration-contract');
+    await tester.tap(find.byKey(const Key('open-integration-contract')));
+    await tester.pumpAndSettle();
+    await scrollAndShow(tester, 'open-readonly-inbox-preview');
+    await tester.tap(find.byKey(const Key('open-readonly-inbox-preview')));
+    await tester.pumpAndSettle();
+    expect(find.text('Caregiver inbox'), findsOneWidget);
+    expect(find.textContaining('NO AUTHENTICATED BACKEND'), findsOneWidget);
+    expect(find.byKey(const Key('inbox-unavailable')), findsOneWidget);
+    await scrollAndShow(tester, 'inbox-load-sample');
+    await tester.tap(find.byKey(const Key('inbox-load-sample')));
+    await tester.pumpAndSettle();
+    expect(find.text('Sample advisories · 3'), findsOneWidget);
+    await scrollAndShow(tester, 'preview-select-0');
+    expect(find.byKey(const Key('preview-select-0')), findsOneWidget);
+    await scrollAndShow(tester, 'preview-select-1');
+    expect(find.byKey(const Key('preview-select-1')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('preview-select-1')));
+    await tester.pumpAndSettle();
+    await scrollAndShow(tester, 'preview-select-2');
+    expect(find.byKey(const Key('preview-select-2')), findsOneWidget);
+    await scrollAndShow(tester, 'inbox-selected-detail');
+    expect(find.byKey(const Key('inbox-selected-detail')), findsOneWidget);
+    expect(find.text('Acknowledge demo event'), findsNothing);
+    expect(find.text('NOT SENT · fictional data'), findsOneWidget);
+    expect(find.text('Activity may involve wheelchair transfer'), findsOneWidget);
+    expect(find.text('MOCK only · no actual Meta inference'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.pump(const Duration(seconds: 31));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('inbox-selected-detail')), findsNothing);
+    expect(find.byKey(const Key('inbox-unavailable')), findsOneWidget);
+    expect(find.textContaining('STALE DATA BLOCKED'), findsOneWidget);
+
+    await scrollAndShow(tester, 'inbox-test-stale');
+    await tester.tap(find.byKey(const Key('inbox-test-stale')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('inbox-selected-detail')), findsNothing);
+    expect(find.textContaining('STALE DATA BLOCKED'), findsOneWidget);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('tab-alerts')));
+    await tester.pumpAndSettle();
+    expect(find.text('Pending review · 1'), findsOneWidget);
+  });
+
+  testWidgets('inbox preview clears samples on background and never has ack button',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.4;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+      tester.platformDispatcher.clearTextScaleFactorTestValue();
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    });
+    await tester.pumpWidget(const CareApp());
+    await tester.tap(find.byKey(const Key('open-demo-controls')));
+    await tester.pumpAndSettle();
+    await scrollAndShow(tester, 'open-integration-contract');
+    await tester.tap(find.byKey(const Key('open-integration-contract')));
+    await tester.pumpAndSettle();
+    await scrollAndShow(tester, 'open-readonly-inbox-preview');
+    await tester.tap(find.byKey(const Key('open-readonly-inbox-preview')));
+    await tester.pumpAndSettle();
+    await scrollAndShow(tester, 'inbox-load-sample');
+    await tester.tap(find.byKey(const Key('inbox-load-sample')));
+    await tester.pumpAndSettle();
+    await scrollAndShow(tester, 'inbox-selected-detail');
+    expect(find.byKey(const Key('inbox-selected-detail')), findsOneWidget);
+    expect(find.text('Acknowledge demo event'), findsNothing);
+    expect(tester.takeException(), isNull);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('inbox-selected-detail')), findsNothing);
+    expect(find.textContaining('PREVIEW CLEARED ON BACKGROUND'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Home is clearly simulated and shows the seeded counts', (tester) async {
     await tester.pumpWidget(const CareApp());
     expect(find.textContaining('DEMO · SIMULATED DATA ONLY'), findsOneWidget);
