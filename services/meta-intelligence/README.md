@@ -27,6 +27,21 @@ The readiness gate categorically blocks real-provider calls and only
 **reads** the existing local Meta budget state. It never reserves a new
 paid attempt, grants real-media rights, or impersonates actual inference.
 
+## Five licensed real-video Edge evaluation — blocking finding
+
+Member 2 has now run **five actual staged human MP4s** through the
+**unchanged Member 1 OpenCV + MediaPipe PoseLandmarker + TemporalFallDetector**
+locally, *not* through Meta. The small diagnostic sample yielded
+**0/3 fall candidates detected, 2/2 ADL clips without false alerts**
+(clip-level TP 0, FN 3, TN 2, FP 0; recall 0%), despite 660/667 frames
+producing valid torso poses. This exposes a serious gap in the strict
+upright -> descent -> horizontal temporal gates; it is NOT a reliable
+generalization metric or a clinical result. All five identifiable
+videos and pose traces remain Git-ignored under `data/private`.
+See [actual five-video evaluation, provenance and gate diagnostics](../api/PUBLIC_DATASET_5_VIDEO_EVALUATION_2026_11_02.md).
+**Do not send these human videos to Meta or claim live fall detection is ready.**
+No Meta Model API calls were made in the evaluation.
+
 ## Verified scope / current result
 
 - A backend-only Meta Model API Chat Completions adapter exists at `services/api/app/meta_live.py`.
