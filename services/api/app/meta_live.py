@@ -6,6 +6,8 @@ This adapter never emits caregiver alerts or upgrades safety state.
 """
 import base64
 import json
+import struct
+import zlib
 from dataclasses import dataclass
 
 import httpx
@@ -55,12 +57,32 @@ class MetaSyntheticResult:
     local_call_number: int
 
 
+def synthetic_png() -> bytes:
+    """Canonical, locally constructed 64x64 flat-color test fixture."""
+    width = height = 64
+    raw = b"".join(b"\x00" + b"\x33\x99\x66" * width for _ in range(height))
+
+    def chunk(name: bytes, data: bytes) -> bytes:
+        body = name + data
+        return (
+            struct.pack(">I", len(data)) + body
+            + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF)
+        )
+
+    return (
+        PNG_SIGNATURE
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(raw))
+        + chunk(b"IEND", b"")
+    )
+
+
 def validate_synthetic_png(frame: bytes) -> None:
-    """Only a caller-constructed PNG may enter this initial provider test."""
+    """Reject *all* user-supplied images, including valid PNG person photos."""
     if not isinstance(frame, bytes) or not 48 <= len(frame) <= MAX_IMAGE_BYTES:
         raise ValueError("Synthetic PNG size is invalid")
-    if not frame.startswith(PNG_SIGNATURE):
-        raise ValueError("Synthetic PNG signature is invalid")
+    if frame != synthetic_png():
+        raise ValueError("Only the canonical generated test image is allowed")
 
 
 def build_synthetic_request(image: bytes) -> dict:

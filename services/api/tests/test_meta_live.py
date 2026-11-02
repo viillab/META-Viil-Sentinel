@@ -142,6 +142,10 @@ async def test_refuses_malicious_provider_output_and_no_real_frames(tmp_path):
         await client.assess(image=synthetic_png())
     with pytest.raises(ValueError):
         build_synthetic_request(b"not-a-picture")
+    altered = bytearray(synthetic_png())
+    altered[55] ^= 1  # same PNG header, but no longer the canonical generated image
+    with pytest.raises(ValueError, match="canonical"):
+        build_synthetic_request(bytes(altered))
     assert budget.status()[0] == 1
 
 

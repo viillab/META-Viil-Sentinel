@@ -6,8 +6,6 @@ Never pass a key on the command line. Never send camera or patient imagery.
 import argparse
 import asyncio
 import json
-import struct
-import zlib
 
 from app.config import Settings
 from app.meta_budget import (
@@ -21,27 +19,8 @@ from app.meta_live import (
     MetaProviderUnavailable,
     MetaSyntheticVisionClient,
     build_synthetic_request,
+    synthetic_png,
 )
-
-
-def synthetic_png() -> bytes:
-    """Construct a 64x64 flat-color PNG locally, with no identity or metadata."""
-    width = height = 64
-    raw = b"".join(b"\x00" + b"\x33\x99\x66" * width for _ in range(height))
-
-    def chunk(name: bytes, data: bytes) -> bytes:
-        body = name + data
-        return (
-            struct.pack(">I", len(data)) + body
-            + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF)
-        )
-
-    return (
-        b"\x89PNG\r\n\x1a\n"
-        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
-        + chunk(b"IDAT", zlib.compress(raw))
-        + chunk(b"IEND", b"")
-    )
 
 
 async def main() -> int:
