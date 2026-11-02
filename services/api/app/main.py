@@ -1,4 +1,5 @@
 """Local-only FastAPI MVP foundation for VIIL Sentinel."""
+import hmac
 import ipaddress
 import sqlite3
 import time
@@ -21,6 +22,7 @@ from app.candidate_ingest import (
     parse_candidate,
     verify_candidate_auth,
 )
+from app.caregiver_inbox import CaregiverInbox, build_inbox
 from app.config import Settings, get_settings
 from app.meta import provider_for
 from app.models import Incident, NewIncident, ReviewRequest
@@ -111,6 +113,42 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(503, "Synthetic intake ledger unavailable") from None
         response.status_code = 200 if receipt.duplicate else 201
         return receipt
+
+    @app.get("/api/v1/caregiver/inbox", response_model=CaregiverInbox)
+    def caregiver_inbox(request: Request, response: Response) -> CaregiverInbox:
+        """Explicit local caregiver token; read-only synthetic metadata."""
+        if not config.caregiver_inbox_enabled:
+            raise HTTPException(404, "Caregiver inbox is disabled")
+        configured = config.caregiver_inbox_token
+        token = configured.get_secret_value() if configured else ""
+        signer = config.edge_candidate_hmac_secret
+        if (len(token.encode("utf-8")) < 32 or (
+            signer is not None and token == signer.get_secret_value()
+        )):
+            raise HTTPException(503, "Caregiver inbox requires an independent secret")
+        remote = request.client.host if request.client else ""
+        try:
+            local = remote == "testclient" or ipaddress.ip_address(remote).is_loopback
+        except ValueError:
+            local = remote == "testclient"
+        if not local:
+            raise HTTPException(403, "Caregiver inbox is loopback-only")
+        headers = request.headers.getlist("authorization")
+        if len(headers) != 1 or not headers[0].startswith("Bearer "):
+            raise HTTPException(401, "Caregiver bearer token required")
+        supplied = headers[0][7:]
+        if not 32 <= len(supplied.encode("utf-8")) <= 160 or not hmac.compare_digest(
+            supplied, token
+        ):
+            raise HTTPException(401, "Invalid caregiver bearer token")
+        response.headers["Cache-Control"] = "no-store"
+        try:
+            return build_inbox(
+                ledger_path=candidate_ledger.path,
+                source_id=config.edge_candidate_source_id,
+            )
+        except (sqlite3.DatabaseError, OSError, ValueError):
+            raise HTTPException(503, "Caregiver inbox data unavailable") from None
 
     @app.get("/health")
     def health() -> dict[str, str]:

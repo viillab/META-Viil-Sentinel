@@ -18,6 +18,7 @@ from app.main import create_app
 
 SYNTHETIC_SOURCE = "synthetic-clip-01"
 SMOKE_KEY = "test-only-ephemeral-synthetic-candidate-signer-not-a-real-secret"
+SMOKE_CAREGIVER_TOKEN = "test-only-ephemeral-caregiver-readonly-token-separate-from-signer"
 EXAMPLE = (
     Path(__file__).resolve().parents[2]
     / "edge-vision" / "examples" / "synthetic" / "candidate_v1.example.json"
@@ -37,6 +38,8 @@ def run_smoke() -> dict:
             edge_candidate_source_id=SYNTHETIC_SOURCE,
             edge_candidate_hmac_secret=SecretStr(SMOKE_KEY),
             edge_candidate_ledger_path=str(Path(tmp) / "candidate-test.sqlite3"),
+            caregiver_inbox_enabled=True,
+            caregiver_inbox_token=SecretStr(SMOKE_CAREGIVER_TOKEN),
         )
         app = create_app(settings)
         body = json.dumps(example, separators=(",", ":")).encode("utf-8")
@@ -71,6 +74,11 @@ def run_smoke() -> dict:
             unsafe_data = {**example, "input_provenance": "authorized_local_camera"}
             unsafe = post(json.dumps(unsafe_data).encode("utf-8"))
             ordinary_reads = client.get("/api/v1/incidents")
+            unauthenticated_inbox = client.get("/api/v1/caregiver/inbox")
+            caregiver_inbox = client.get(
+                "/api/v1/caregiver/inbox",
+                headers={"Authorization": f"Bearer {SMOKE_CAREGIVER_TOKEN}"},
+            )
             if not (
                 initial.status_code == 201
                 and repeated.status_code == 200
@@ -78,6 +86,14 @@ def run_smoke() -> dict:
                 and unauthorized.status_code == 401
                 and unsafe.status_code == 422
                 and ordinary_reads.status_code == 403
+                and unauthenticated_inbox.status_code == 401
+                and caregiver_inbox.status_code == 200
+                and caregiver_inbox.headers["cache-control"] == "no-store"
+                and caregiver_inbox.json()["access_scope"] == "authenticated_caregiver"
+                and len(caregiver_inbox.json()["advisories"]) == 1
+                and caregiver_inbox.json()["advisories"][0]["advisory_id"] == example["event_id"]
+                and caregiver_inbox.json()["advisories"][0]["meta_provenance"] == "none"
+                and caregiver_inbox.json()["advisories"][0]["delivery_state"] == "not_sent"
                 and initial.json()["notification_sent"] is False
                 and initial.json()["meta_called"] is False
                 and initial.json()["confirmed_fall"] is False
@@ -91,6 +107,9 @@ def run_smoke() -> dict:
                 "unsigned_request_rejected": True,
                 "real_camera_provenance_rejected": True,
                 "non_demo_incident_read_rejected": True,
+                "caregiver_inbox_schema": "viil.backend.caregiver_inbox.v1",
+                "caregiver_readonly_projection_passed": True,
+                "caregiver_inbox_auth_required": True,
                 "meta_called": False,
                 "caregiver_notification_sent": False,
                 "real_camera_tested": False,

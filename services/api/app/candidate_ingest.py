@@ -11,6 +11,7 @@ import json
 import re
 import sqlite3
 import time
+from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
@@ -169,7 +170,9 @@ class CandidateLedger:
         digest = hashlib.sha256(raw).hexdigest()
         received_at = datetime.fromtimestamp(now, tz=UTC)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with sqlite3.connect(self.path, timeout=5.0) as connection:
+        # sqlite3.Connection.__exit__ commits/rolls back but does NOT close.
+        # closing() prevents Windows file locks after a finished request.
+        with closing(sqlite3.connect(self.path, timeout=5.0)) as connection, connection:
             connection.execute("BEGIN IMMEDIATE")
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS candidates ("
