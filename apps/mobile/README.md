@@ -54,6 +54,10 @@ of unsafe image field** button verifies that unexpected private-media
 metadata is rejected without displaying the input. Neither action sends
 a request, changes the local Alerts inbox, authenticates a user, reads
 a camera, or makes any assertion of actual notification delivery.
+An accepted fictional contract sample is withheld after **30 seconds**
+and cleared when the app leaves the foreground. An unsafe-sample test
+cancels any previous preview expiry timer without restoring its sample.
+These checks remain entirely local and cannot enable Live Mode.
 
 The codec in `lib/features/integration/caregiver_contract_v1.dart`:
 - accepts only 4 envelope fields and 13 explicitly named advisory fields;
