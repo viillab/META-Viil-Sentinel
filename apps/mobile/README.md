@@ -43,6 +43,38 @@ events and clears any unfinished guided session.
 Live mode is intentionally unavailable pending Member 2's authenticated,
 authorized caregiver API and evidence/Meta integration.
 
+## Offline caregiver integration contract sandbox
+
+Go to **Demo control center → Inspect offline Caregiver API contract**.
+The integration readiness page displays explicitly blocked Live/Auth/Meta/
+Push capabilities. The **Validate generated inbox sample** button
+exercises the strict Dart decoder using a freshly generated, fictional
+`viil.backend.caregiver_inbox.v1` JSON object. The **Test rejection
+of unsafe image field** button verifies that unexpected private-media
+metadata is rejected without displaying the input. Neither action sends
+a request, changes the local Alerts inbox, authenticates a user, reads
+a camera, or makes any assertion of actual notification delivery.
+
+The codec in `lib/features/integration/caregiver_contract_v1.dart`:
+- accepts only 4 envelope fields and 13 explicitly named advisory fields;
+- enforces 32 KiB max JSON, 30 advisories, UUID and pseudonymous source ID,
+  strict UTC timestamp format, duplicate IDs and bounded future event time;
+- requires safe enumerated stage/context/provider/delivery/review codes;
+- rejects forged delivery receipts, verified-fall/emergency claims, real
+  Meta claims attached to simulated evidence, and any extra private fields;
+- requires a freshness check (30 seconds / 5-second clock skew) before a
+  hypothetical authorized UI could display data, and returns only
+  sanitized, mapped presentation labels.
+
+A **literal** `access_scope=authenticated_caregiver` string in sample
+JSON is **never proof of authorization**. There is no HTTP adapter and
+Live Mode cannot be enabled in this version. Tests additionally verify
+that the handoff JSON Schema at
+`handoff/team/caregiver_inbox.v1.schema.json` agrees with Dart keys,
+limits and enumerations. Schema compatibility is not a substitute for
+Member 2's server-side auth, RBAC, tenant isolation and independent
+receipt verification.
+
 ## Local prerequisites
 
 - Flutter 3.44.6 / Dart 3.12.2 tested on Windows
@@ -83,6 +115,8 @@ daemon**, without changing the Windows language or locale.
 - `lib/features/history/` — acknowledged event history
 - `lib/features/demo/` — guided judge walkthrough, controlled fictional
   scenarios and reset
+- `lib/features/integration/` — offline read-only caregiver metadata
+  contract validation and readiness UI, **no network adapter**
 - `lib/shared/` — presentational components
 
 The future `viil.backend.caregiver_inbox.v1` contract is described by

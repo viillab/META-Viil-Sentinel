@@ -2,6 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:viil_sentinel_care/app/care_app.dart';
 
+Future<void> scrollAndShow(WidgetTester tester, String key) async {
+  final target = find.byKey(Key(key));
+  await tester.scrollUntilVisible(
+    target, 210, scrollable: find.byType(Scrollable).last,
+  );
+  await Scrollable.ensureVisible(
+    tester.element(target),
+    alignment: 0.3,
+  );
+  await tester.pumpAndSettle();
+}
+
 Future<void> tapWalkthroughAction(WidgetTester tester, int step) async {
   final action = find.byKey(Key('walkthrough-primary-$step'));
   await tester.scrollUntilVisible(
@@ -143,6 +155,39 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('contract sandbox validates mock and rejects extra image field',
+      (tester) async {
+    await tester.pumpWidget(const CareApp());
+    await tester.tap(find.byKey(const Key('open-demo-controls')));
+    await tester.pumpAndSettle();
+    await scrollAndShow(tester, 'open-integration-contract');
+    await tester.tap(find.byKey(const Key('open-integration-contract')));
+    await tester.pumpAndSettle();
+    expect(find.text('Backend readiness'), findsOneWidget);
+    expect(find.text('LIVE INTEGRATION DISABLED'), findsOneWidget);
+    expect(find.text('NOT CONNECTED'), findsWidgets);
+    await scrollAndShow(tester, 'validate-contract-fixture');
+    await tester.tap(find.byKey(const Key('validate-contract-fixture')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('contract-accepted')), findsOneWidget);
+    expect(find.text('SYNTHETIC CONTRACT VALID · NOT AUTHENTICATED'),
+      findsOneWidget);
+    expect(find.text('No notification dispatched'), findsOneWidget);
+    await scrollAndShow(tester, 'reject-unsafe-contract');
+    await tester.tap(find.byKey(const Key('reject-unsafe-contract')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('contract-accepted')), findsNothing);
+    expect(find.byKey(const Key('contract-rejected')), findsOneWidget);
+    expect(find.text('UNSAFE PAYLOAD REJECTED'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('tab-alerts')));
+    await tester.pumpAndSettle();
+    expect(find.text('Pending review · 1'), findsOneWidget);
+  });
+
   testWidgets('Home is clearly simulated and shows the seeded counts', (tester) async {
     await tester.pumpWidget(const CareApp());
     expect(find.textContaining('DEMO · SIMULATED DATA ONLY'), findsOneWidget);
@@ -189,10 +234,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('open-demo-controls')));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('reset-demo')), 230,
-      scrollable: find.byType(Scrollable).last,
-    );
+    await scrollAndShow(tester, 'reset-demo');
     await tester.tap(find.byKey(const Key('reset-demo')));
     await tester.pump();
     await tester.pageBack();

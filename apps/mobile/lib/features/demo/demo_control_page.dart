@@ -7,9 +7,11 @@ import '../incidents/demo_incident.dart';
 class DemoControlPage extends StatelessWidget {
   const DemoControlPage({
     super.key, required this.controller, required this.onStartWalkthrough,
+    required this.onOpenIntegration,
   });
   final DemoController controller;
   final VoidCallback onStartWalkthrough;
+  final VoidCallback onOpenIntegration;
 
   void _run(BuildContext context, DemoScenario scenario) {
     final event = controller.simulate(scenario);
@@ -66,6 +68,15 @@ class DemoControlPage extends StatelessWidget {
         onTap: () => _run(context, DemoScenario.sitting),
       ),
       const SizedBox(height: 25),
+      const SectionHeader('Integration readiness'),
+      const SizedBox(height: 10),
+      OutlinedButton.icon(
+        key: const Key('open-integration-contract'),
+        onPressed: onOpenIntegration,
+        icon: const Icon(Icons.integration_instructions_outlined),
+        label: const Text('Inspect offline Caregiver API contract'),
+      ),
+      const SizedBox(height: 20),
       const SectionHeader('Environment'),
       const SizedBox(height: 11),
       const Card(
