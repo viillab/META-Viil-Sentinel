@@ -1,6 +1,5 @@
 """Local-only FastAPI MVP foundation for VIIL Sentinel."""
 import hmac
-import ipaddress
 import sqlite3
 import time
 from pathlib import Path
@@ -24,6 +23,7 @@ from app.candidate_ingest import (
 )
 from app.caregiver_inbox import CaregiverInbox, build_inbox
 from app.config import Settings, get_settings
+from app.local_security import is_local_test_client
 from app.meta import provider_for
 from app.models import Incident, NewIncident, ReviewRequest
 from app.service import IncidentService
@@ -65,12 +65,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         source = config.edge_candidate_source_id
         if len(secret) < 32 or not source.startswith("synthetic-"):
             raise HTTPException(503, "Synthetic intake is not safely configured")
-        remote = request.client.host if request.client else ""
-        try:
-            local = remote == "testclient" or ipaddress.ip_address(remote).is_loopback
-        except ValueError:
-            local = remote == "testclient"
-        if not local:
+        if not is_local_test_client(request):
             raise HTTPException(403, "Synthetic intake is loopback-only")
         if request.headers.get("content-type") != "application/json":
             raise HTTPException(415, "JSON content type is required")
@@ -126,12 +121,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             signer is not None and token == signer.get_secret_value()
         )):
             raise HTTPException(503, "Caregiver inbox requires an independent secret")
-        remote = request.client.host if request.client else ""
-        try:
-            local = remote == "testclient" or ipaddress.ip_address(remote).is_loopback
-        except ValueError:
-            local = remote == "testclient"
-        if not local:
+        if not is_local_test_client(request):
             raise HTTPException(403, "Caregiver inbox is loopback-only")
         headers = request.headers.getlist("authorization")
         if len(headers) != 1 or not headers[0].startswith("Bearer "):
@@ -155,30 +145,38 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"status": "ok", "mode": "DEMO" if config.demo_mode else "PRODUCTION_DISABLED"}
 
     @app.get("/api/v1/incidents", response_model=list[Incident])
-    def list_incidents() -> list[Incident]:
+    def list_incidents(request: Request) -> list[Incident]:
         if not config.demo_mode:
             raise HTTPException(403, "Incident reads require scoped authentication")
+        if not is_local_test_client(request):
+            raise HTTPException(403, "Demo incident feed is local-only")
         return repository.list()
 
     @app.get("/api/v1/incidents/{incident_id}", response_model=Incident)
-    def get_incident(incident_id: UUID) -> Incident:
+    def get_incident(request: Request, incident_id: UUID) -> Incident:
         if not config.demo_mode:
             raise HTTPException(403, "Incident reads require scoped authentication")
+        if not is_local_test_client(request):
+            raise HTTPException(403, "Demo incident details are local-only")
         incident = repository.get(incident_id)
         if incident is None:
             raise HTTPException(404, "Incident not found")
         return incident
 
     @app.post("/api/v1/incidents/demo", response_model=Incident, status_code=201)
-    async def create_demo_incident(payload: NewIncident) -> Incident:
+    async def create_demo_incident(request: Request, payload: NewIncident) -> Incident:
         if not config.demo_mode:
             raise HTTPException(403, "Demo event creation is disabled")
+        if not is_local_test_client(request):
+            raise HTTPException(403, "Demo event creation is local-only")
         return await service.create_demo(payload)
 
     @app.post("/api/v1/incidents/{incident_id}/review", response_model=Incident)
-    def review_incident(incident_id: UUID, payload: ReviewRequest) -> Incident:
+    def review_incident(request: Request, incident_id: UUID, payload: ReviewRequest) -> Incident:
         if not config.demo_mode:
             raise HTTPException(403, "Unauthenticated review is disabled outside demo mode")
+        if not is_local_test_client(request):
+            raise HTTPException(403, "Demo incident review is local-only")
         incident = repository.get(incident_id)
         if incident is None:
             raise HTTPException(404, "Incident not found")
