@@ -1,10 +1,26 @@
 """Local-only FastAPI MVP foundation for VIIL Sentinel."""
+import ipaddress
+import sqlite3
+import time
+from pathlib import Path
 from uuid import UUID
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.agent import InvalidTransition, human_review
+from app.candidate_ingest import (
+    DEFAULT_LEDGER_PATH,
+    MAX_BODY_BYTES,
+    CandidateLedger,
+    CandidateReceipt,
+    IntakeConflict,
+    IntakeRateExceeded,
+    IntakeStorageFull,
+    InvalidEdgeCandidate,
+    parse_candidate,
+    verify_candidate_auth,
+)
 from app.config import Settings, get_settings
 from app.meta import provider_for
 from app.models import Incident, NewIncident, ReviewRequest
@@ -28,6 +44,73 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     repository = IncidentRepository()
     service = IncidentService(repository, provider_for(config.meta_provider))
+    candidate_ledger = CandidateLedger(
+        Path(config.edge_candidate_ledger_path)
+        if config.edge_candidate_ledger_path else DEFAULT_LEDGER_PATH
+    )
+
+    @app.post(
+        "/api/v1/edge/candidates",
+        response_model=CandidateReceipt,
+        status_code=201,
+    )
+    async def receive_synthetic_candidate(request: Request, response: Response) -> CandidateReceipt:
+        """HMAC-authenticated metadata-only ingestion, closed to any real camera."""
+        if not config.edge_candidate_ingest_enabled:
+            raise HTTPException(404, "Synthetic candidate intake is disabled")
+        key = config.edge_candidate_hmac_secret
+        secret = key.get_secret_value().encode("utf-8") if key else b""
+        source = config.edge_candidate_source_id
+        if len(secret) < 32 or not source.startswith("synthetic-"):
+            raise HTTPException(503, "Synthetic intake is not safely configured")
+        remote = request.client.host if request.client else ""
+        try:
+            local = remote == "testclient" or ipaddress.ip_address(remote).is_loopback
+        except ValueError:
+            local = remote == "testclient"
+        if not local:
+            raise HTTPException(403, "Synthetic intake is loopback-only")
+        if request.headers.get("content-type") != "application/json":
+            raise HTTPException(415, "JSON content type is required")
+        body = bytearray()
+        async for chunk in request.stream():
+            body.extend(chunk)
+            if len(body) > MAX_BODY_BYTES:
+                raise HTTPException(413, "Candidate metadata exceeds size limit")
+        source_header = request.headers.getlist("x-viil-source-id")
+        timestamp_header = request.headers.getlist("x-viil-timestamp")
+        signature_header = request.headers.getlist("x-viil-signature")
+        if any(len(values) != 1 for values in (
+            source_header, timestamp_header, signature_header,
+        )):
+            raise HTTPException(401, "Candidate authentication required")
+        now = int(time.time())
+        if not verify_candidate_auth(
+            secret=secret,
+            configured_source=source,
+            header_source=source_header[0],
+            header_timestamp=timestamp_header[0],
+            header_signature=signature_header[0],
+            body=bytes(body),
+            now_seconds=now,
+        ):
+            raise HTTPException(401, "Invalid or expired source signature")
+        try:
+            candidate = parse_candidate(bytes(body))
+        except InvalidEdgeCandidate:
+            raise HTTPException(422, "Invalid Edge v1 metadata") from None
+        if candidate.source_id != source_header[0]:
+            raise HTTPException(403, "Candidate source does not match registered signer")
+        try:
+            receipt = candidate_ledger.accept(candidate, raw=bytes(body), now_seconds=now)
+        except IntakeConflict:
+            raise HTTPException(409, "Candidate event ID was already used") from None
+        except IntakeRateExceeded:
+            raise HTTPException(429, "Synthetic intake rate cap exceeded") from None
+        except (IntakeStorageFull, sqlite3.DatabaseError, OSError):
+            raise HTTPException(503, "Synthetic intake ledger unavailable") from None
+        response.status_code = 200 if receipt.duplicate else 201
+        return receipt
 
     @app.get("/health")
     def health() -> dict[str, str]:
