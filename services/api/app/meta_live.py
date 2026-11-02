@@ -90,6 +90,9 @@ def build_synthetic_request(image: bytes) -> dict:
     url = "data:image/png;base64," + base64.b64encode(image).decode("ascii")
     return {
         "model": MODEL,
+        # Meta's private reasoning consumes output tokens too. Previous two
+        # probes failed validation/truncated without an explicit reasoning cap.
+        "reasoning_effort": "minimal",
         "max_completion_tokens": MAX_OUTPUT_TOKENS,
         "messages": [
             {"role": "developer", "content": SYSTEM_PROMPT},
@@ -116,8 +119,12 @@ def read_checked_response(data: object) -> tuple[MetaVisibleAssessment, int | No
         if not isinstance(choices, list) or len(choices) != 1:
             raise ValueError("Invalid choices")
         choice = choices[0]
-        if choice.get("finish_reason") != "stop":
-            raise MetaProviderUnavailable("Meta response incomplete or token-capped")
+        finish = choice.get("finish_reason")
+        if finish != "stop":
+            raise MetaProviderUnavailable(
+                "Meta response incomplete or token-capped; finish_reason="
+                + ("length" if finish == "length" else "other")
+            )
         message = choice["message"]
         if not isinstance(message, dict) or not isinstance(message.get("content"), str):
             raise MetaProviderUnavailable("Meta response missing structured text")
@@ -130,7 +137,7 @@ def read_checked_response(data: object) -> tuple[MetaVisibleAssessment, int | No
         # A single synthetic image cannot ground temporal fall inference.
         if result.verdict.value == "fall_likely":
             raise MetaProviderUnavailable("Meta safety validation rejected fall claim on synthetic data")
-        if any(i != 0 for i in result.supporting_frame_indices):
+        if result.supporting_frame_indices:
             raise MetaProviderUnavailable("Meta safety validation rejected synthetic evidence index")
         usage = data.get("usage", {})
         if not isinstance(usage, dict):

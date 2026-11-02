@@ -91,9 +91,12 @@ and cannot safely embed a static bearer token in distributed source or app
 binaries. This implementation does not connect live Mobile or Browser views.
 
 Real fall inference, benchmark acceptance, privacy/consent, remote Hikvision
-networking, signed real camera intake, paid Meta multimodal output validation,
+networking, signed real camera intake, real evidence-grounded Meta inference,
 notification outbox and caregiver acknowledgments remain separate work.
 
-The team's Meta $150 allowance is **not** charged by these tests. The
-earlier two Meta synthetic probes remain in their exhausted local spend
-ledger; do not reset it or call Meta as part of this smoke.
+This particular `app.local_http_demo` command makes **no paid Meta requests**.
+A different, explicitly authorized synthetic-only Meta test has since passed
+the real image+schema protocol and local transport integration. See
+`services/meta-intelligence/LIVE_META_TEST_REPORT_2026-11-02.md`.
+All **4/4** local Meta requests are now exhausted. Do not reset the guard;
+the team's actual $150 billing balance must be checked in Meta's portal.

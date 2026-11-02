@@ -20,6 +20,10 @@ RESERVATION_MICRO_USD = (
 )  # 129353 micro-USD ($0.129353) per attempt
 MAX_LOCAL_MICRO_USD = 500_000  # never reserve over $0.50 on this local ledger
 MAX_LOCAL_CALLS = 2
+# Explicit operator-approved continuation only: at most TWO additional calls.
+# Never reset the prior two attempts or open an unlimited pay-as-you-go path.
+MAX_APPROVED_LOCAL_CALLS = 4
+MAX_APPROVED_LOCAL_MICRO_USD = 750_000
 DEFAULT_LEDGER = Path(__file__).resolve().parents[3] / "data" / "private" / "meta_spend.sqlite3"
 
 
@@ -28,8 +32,11 @@ class MetaBudgetExceeded(RuntimeError):
 
 
 class MetaBudget:
-    def __init__(self, *, path: Path = DEFAULT_LEDGER) -> None:
+    def __init__(
+        self, *, path: Path = DEFAULT_LEDGER, approved_extra_tests: bool = False
+    ) -> None:
         self.path = Path(path)
+        self.approved_extra_tests = approved_extra_tests
 
     def reserve_once(self) -> tuple[int, int]:
         """Durably reserve before any possible network call; never refund."""
@@ -49,8 +56,13 @@ class MetaBudget:
                 "SELECT reserved_micro_usd, calls FROM budget WHERE id=1"
             ).fetchone()
             reserved, calls = row
-            if (calls >= MAX_LOCAL_CALLS or (
-                reserved + RESERVATION_MICRO_USD > MAX_LOCAL_MICRO_USD
+            call_cap = MAX_APPROVED_LOCAL_CALLS if self.approved_extra_tests else MAX_LOCAL_CALLS
+            cost_cap = (
+                MAX_APPROVED_LOCAL_MICRO_USD
+                if self.approved_extra_tests else MAX_LOCAL_MICRO_USD
+            )
+            if (calls >= call_cap or (
+                reserved + RESERVATION_MICRO_USD > cost_cap
             )):
                 raise MetaBudgetExceeded("Local Meta probe cap reached; no paid call made")
             new_reserved = reserved + RESERVATION_MICRO_USD

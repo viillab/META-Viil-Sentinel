@@ -11,10 +11,12 @@
   medical triage, caregiver alert, or emergency dispatch.
 - API `/api/v1/incidents/demo` remains MOCK; **no Meta call is triggered by UI or incident creation**.
   This separation deliberately avoids accidental spend and false real-inference claims.
-- **Two live Meta HTTP responses were received on 2026-11-02**, but the guarded
-  end-to-end assessment was **not verified**: first output did not pass local
-  validation; the second was incomplete/token-capped. Do not claim live
-  multimodal structured inference works end-to-end yet.
+- **Four cumulative Meta HTTP responses were received on 2026-11-02**.
+  Calls #1–2 failed guarded validation/truncated. After setting
+  `reasoning_effort="minimal"`, calls #3–4 **passed** strict live vision
+  assessment and synthetic local Edge→Backend→Meta→Inbox integration.
+  Neither test proves the model detects actual falls.
+  See [2026-11-02 live test report](LIVE_META_TEST_REPORT_2026-11-02.md).
 - No real camera pixels or private/person/patient evidence was transmitted.
 
 ## Budget, billing and safeguarding $150
@@ -27,13 +29,17 @@ Contributor model, since that mode permits submitted content to train Meta model
 The local `MetaBudget` uses a gitignored SQLite file at
 `data/private/meta_spend.sqlite3`. A SQLite transaction reserves an
 intentionally conservative per-request allowance **before** network I/O.
-The process allows at most **2 attempts** and **$0.50 reserved locally**;
+By default the original process allows **2 attempts** and **$0.50
+reserved locally**. A separate, user-approved explicit two-test extension
+permits at most **4 cumulative attempts** and **$0.75 reserved locally**;
 there is no refund on timeout, errors or malformed output, and no retry.
-The tests used fake keys/transports (no spend).
+All unit/integration tests besides the two explicitly described live calls
+used fake keys/transports (no Meta spend).
 
-On this workstation **both attempts have been used**. The estimated
-conservative reservations total approximately **$0.255442** (the first
-reserved $0.126089 and the second $0.129353). These are NOT actual Meta
+On this workstation **all 4 attempts have been used**. The cumulative
+conservative local reservations total **$0.514148** (not a billing charge).
+The successful third and fourth API replies had respectively
+233/163 and 233/234 input/output tokens. These are NOT Meta Billing
 charges; inspect the team's Meta Usage/Billing dashboard to get actual
 consumption. The local reservation is not an account-wide or team-wide
 budget cap; other keys/teams/processes and pricing changes can still spend
@@ -66,19 +72,22 @@ From `services/api`:
 
 `app.meta_live_probe` **without arguments is completely offline**: it
 validates request construction, shows the local reserved budget/call count,
-and never transmits the key or an image. The `--live-once` option is
-only for an explicitly approved live synthetic test. It remains blocked
-on this workstation because the 2-call ledger is exhausted.
+and never transmits the key or an image. The `--live-once` option is only for an explicitly approved synthetic
+test; the extra approved call cap additionally requires
+`--approve-two-extra-tests`. **Both are now blocked because 4/4 local
+requests were used.** Never reset the ledger simply to get more calls.
 
 ## Remaining critical work (not shipped as working)
 
-1. Inspect actual Meta Billing/Usage; verify the endpoint's supported
-   image+schema+reasoning token requirements and response shape with a
-   newly reviewed token budget **before any additional paid call**.
+1. Inspect actual Meta Billing/Usage. The basic image+strict-schema+minimal
+   reasoning path now works, but image-to-Edge event grounding and actual fall
+   detection are NOT verified. Obtain a separately reviewed test budget
+   before any additional paid call.
 2. Implement signed, authenticated, consented, source-scoped evidence
    intake and an independent validator before allowing authorized real frames.
-3. Implement persistent event deduplication, RBAC across sources/tenants,
-   approved in-app delivery receipts, and a durable notification system.
+3. Synthetic metadata idempotency now uses SQLite, but production-grade
+   source/tenant RBAC, approved in-app delivery receipts and durable
+   notification system remain unimplemented.
 4. Independently evaluate human-labelled fall/ADL examples, privacy
    protection, failure handling and safe escalation; no medical claims.
 5. Non-demo incident reads are denied (403) in this branch. Full

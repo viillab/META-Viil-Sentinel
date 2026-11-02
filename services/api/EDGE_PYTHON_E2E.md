@@ -70,14 +70,17 @@ NOT a field trial. The sample sequences are entirely synthetic; their
 passing scores cannot establish accuracy, low false-alarm rate or model
 performance with people.
 
-## Why no more real Meta API calls
+## Live Meta follow-on test (separate, explicit script)
 
-Member 2's Meta budget guard remains unchanged. The two earlier synthetic
-Meta probes were not fully validated and their local 2-request budget was
-exhausted. The user supplied a separate **$150 team allowance**, but local
-budget reservations are not a reliable statement of actual Meta charges.
-Reconcile official Meta billing/pricing and a revised test authorization
-before trying paid live requests; do not reset the prior ledger here.
+On 2026-11-02, two additional user-approved Meta Model API calls succeeded
+after selecting `reasoning_effort="minimal"`, and a synthetic-only
+Edge→Backend→Meta probe→Inbox live integration check passed. This original
+in-process smoke remains entirely offline. The new opt-in integration command
+is `python -m app.meta_system_live_demo` (offline without paid flags);
+details are in `services/meta-intelligence/LIVE_META_TEST_REPORT_2026-11-02.md`.
+The spend guard is now exhausted at **4/4 cumulative calls**, and a local
+conservative reservation is not Meta's actual charge or team $150 balance.
+Do not reset the ledger or send real camera images.
 
 ## Outstanding deployment blockers
 

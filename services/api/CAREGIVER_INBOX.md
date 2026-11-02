@@ -103,9 +103,12 @@ closed on both ingestion and inbox reads, including on Windows.
   federated SSO, secure session lifecycle, durable alert outbox, evidence
   consent verifier, real device auth, transport TLS, mobile backend client,
   persistent audit retention policy or production readiness has been established.
-- All tests use fake tokens and synthetic fixtures. No real Meta Model API
-  request occurs in this change; the previous two-call Meta local trial
-  ledger and the user's $150 team allowance are left untouched.
+- This read-only Inbox change itself uses no Meta Model API calls. A later
+  **separate, explicitly approved** synthetic Meta live test succeeded and
+  intentionally left Inbox metadata labeled `meta_provenance=none`;
+  see `services/meta-intelligence/LIVE_META_TEST_REPORT_2026-11-02.md`.
+  It is not a validated fall decision. The team's actual $150 Meta
+  billing balance must still be confirmed in the provider portal.
 
 Do not change `simulated` or `fall_confirmed` semantics merely to make a
 judge/demo look live. A production deployment must not reuse this local
