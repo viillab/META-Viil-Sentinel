@@ -7,7 +7,7 @@ import {
 } from "./localPoseDemo";
 import type { PoseObservation, PoseRuntimeSummary } from "./localPoseDemo";
 import { loadLocalPoseLandmarker } from "./localPoseEngine";
-import { makeWebcamSmokeReport } from "./webcamAcceptance";
+import { makeWebcamSmokeReport, serializeWebcamSmokeReport } from "./webcamAcceptance";
 import type { WebcamSmokeReport, WebcamStopReason } from "./webcamAcceptance";
 import {
   hasUsableVideoTrack, LAPTOP_WEBCAM_DEMO_MAX_MS,
@@ -37,6 +37,7 @@ export default function LaptopWebcamDemo() {
   const [previewFrames, setPreviewFrames] = useState(0);
   const [runtime, setRuntime] = useState<PoseRuntimeSummary | null>(null);
   const [smokeReport, setSmokeReport] = useState<WebcamSmokeReport | null>(null);
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "unavailable">("idle");
   const sessionStartedMonoMs = useRef<number | null>(null);
   const sessionCounters = useRef({
     presentedFrameCallbacks: 0, analyzedFrames: 0, reliablePoseFrames: 0,
@@ -83,6 +84,7 @@ export default function LaptopWebcamDemo() {
       }));
       sessionStartedMonoMs.current = null;
     }
+    setCopyStatus("idle");
     clearCapture();
     setStartedAt(null);
     setPhase("idle");
@@ -335,6 +337,7 @@ export default function LaptopWebcamDemo() {
       unconfirmedCandidates: 0, lastWindowInferenceP95Ms: null,
     };
     setSmokeReport(null);
+    setCopyStatus("idle");
     setPreviewFrames(0);
     setMessage("");
     setPhase("requesting");
@@ -425,6 +428,20 @@ export default function LaptopWebcamDemo() {
     : Math.max(0, Math.ceil(
       (startedAt + LAPTOP_WEBCAM_DEMO_MAX_MS - now) / 1000,
     ));
+
+  async function copyTechnicalReport() {
+    if (!smokeReport || phase === "live") return;
+    const requestGeneration = generation.current;
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+      // A real click is required. Explicitly allowlisted metrics only;
+      // no screenshots, pose vectors, file paths, IDs, camera data or egress.
+      await navigator.clipboard.writeText(serializeWebcamSmokeReport(smokeReport));
+      if (generation.current === requestGeneration) setCopyStatus("copied");
+    } catch {
+      if (generation.current === requestGeneration) setCopyStatus("unavailable");
+    }
+  }
 
   return <section className="laptop-webcam-demo" aria-label="Laptop webcam demo">
     <div className="laptop-webcam-info">
@@ -525,9 +542,20 @@ export default function LaptopWebcamDemo() {
         <small>Local counters only, not independent camera acceptance, fall accuracy,
           a safety guarantee, or proof of real alerts. Preview-only sessions
           count fresh rendered video frames but do not run Pose inference.
-          Nothing is saved or uploaded.</small>
-        <button type="button" onClick={() => setSmokeReport(null)}>
-          Dismiss local report</button>
+          Nothing is saved or uploaded automatically. You may explicitly
+          copy only these technical counts to the system clipboard.</small>
+        <div className="laptop-webcam-actions">
+          <button type="button" onClick={() => void copyTechnicalReport()}>
+            Copy technical report JSON</button>
+          <button type="button" onClick={() => { setSmokeReport(null); setCopyStatus("idle"); }}>
+            Dismiss local report</button>
+        </div>
+        {copyStatus === "copied" && <small role="status">
+          Technical counts copied to clipboard · no frames or personal identifiers.
+        </small>}
+        {copyStatus === "unavailable" && <small role="status">
+          Clipboard unavailable or denied · report was not copied.
+        </small>}
       </section>}
       {message && <small role={phase === "error" ? "alert" : "status"}
           className="laptop-webcam-message">{message}</small>}

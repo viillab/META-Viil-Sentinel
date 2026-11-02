@@ -31,6 +31,25 @@ export type WebcamSmokeReport = Readonly<{
   limitation: "LOCAL_RUNTIME_COUNTS_NOT_FALL_ACCURACY";
 }>;
 
+/**
+ * Explicit export allowlist for a user-triggered copy action.
+ * Adding a private field to an internal report never implicitly copies it.
+ */
+export function serializeWebcamSmokeReport(report: WebcamSmokeReport): string {
+  return JSON.stringify({
+    schema_version: report.schema_version,
+    status: report.status,
+    durationSeconds: report.durationSeconds,
+    presentedFrameCallbacks: report.presentedFrameCallbacks,
+    analyzedFrames: report.analyzedFrames,
+    reliablePoseFrames: report.reliablePoseFrames,
+    unconfirmedCandidates: report.unconfirmedCandidates,
+    lastWindowInferenceP95Ms: report.lastWindowInferenceP95Ms,
+    stopReason: report.stopReason,
+    limitation: report.limitation,
+  }, null, 2);
+}
+
 const REASONS: ReadonlyArray<WebcamStopReason> = [
   "manual", "timeout", "hidden", "camera_disconnected",
   "frame_stalled", "inference_error", "playback_error", "unsupported_browser",
