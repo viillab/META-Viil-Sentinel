@@ -81,9 +81,24 @@ retrospective local replay shows 2 dual-heuristic review proposals,
 actual Fall-labeled clip) and no quality-abstentions in these 12.
 Longer fictional normal fast sitting and bed shifts can still trigger
 review; this branch remains **NO-GO for automatic fall alerts**.
-Only four torso joints are currently extracted: it would be misleading
-to claim multi-joint tracking has been implemented. Zero Meta calls
-were made; no real videos/poses were uploaded or committed.
+The main Member 1 Edge runtime still extracts **only four torso joints**.
+A separate, offline **eight-joint research extractor** is described
+below; this is not integrated tracking or real fall verification. Zero Meta
+calls were made; no real videos/poses were uploaded or committed.
+
+## Follow-up: offline eight-joint pose feasibility and abstention
+
+The [2026-11-03 Eight-Joint Local Research report](../api/EIGHT_JOINT_LOCAL_RESEARCH_2026_11_03.md)
+records an **actually executed MediaPipe pass over five previously
+inspected staged human clips**, extracting shoulders, hips, knees and ankles
+into Git-ignored private JSONLs only. 1,368/1,368 frames were processed,
+but all-eight-joint visibility at ≥0.55 confidence ranged from **42.18%
+to 76.69%** across clips. Three Fall-labeled clips were **insufficient
+lower-body evidence** under a pre-existing 75% exploratory coverage gate.
+This is *not* new fall classification, multi-person tracking, clinical
+validation or a Meta-powered capability. The unchanged production Edge
+extractor still uses four torso points. No billable Meta requests or human
+media uploads occurred.
 
 ## Verified scope / current result
 
