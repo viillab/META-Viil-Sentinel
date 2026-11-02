@@ -130,6 +130,18 @@ The endpoint returns three bounded review actions and unambiguous flags
 `notification_sent=false`. See
 [META_COPILOT_CONTROL_PLANE.md](META_COPILOT_CONTROL_PLANE.md).
 
+## Read-only Meta Copilot readiness
+
+A new, opt-in, local-only
+`GET /api/v1/caregiver/copilot/{event_id}/readiness` uses the same
+independent Caregiver bearer authentication, signed Evidence Registry,
+and independent audit checkpoint. It returns `real_provider_allowed=false`
+with the read-only local Meta test reservation state. This is **NOT**
+an authorization token, image upload path, actual Meta call or
+production billing report. A separate
+[Shadow Deduplication v1](META_COPILOT_SHADOW_DEDUP_V1.md) prevents
+duplicate/mock retry storms per synthetic Event UUID.
+
 ## Hand-off and remaining blockers
 
 - UI contract source copied unchanged from Member 1:

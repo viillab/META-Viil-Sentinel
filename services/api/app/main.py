@@ -32,10 +32,17 @@ from app.evidence_registry import (
 )
 from app.local_security import is_local_test_client
 from app.meta import provider_for
+from app.meta_budget import MetaBudget
 from app.meta_copilot import (
     MetaCopilotPreview,
     MetaCopilotUnavailable,
     build_copilot_preview,
+)
+from app.meta_copilot_shadow_ledger import (
+    ShadowPlannerDenied,
+    ShadowPlannerUnavailable,
+    ShadowReadiness,
+    inspect_shadow_readiness,
 )
 from app.models import Incident, NewIncident, ReviewRequest
 from app.service import IncidentService
@@ -245,6 +252,36 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if report is None:
             raise HTTPException(404, "Verified synthetic event not found")
         return report
+
+    @app.get(
+        "/api/v1/caregiver/copilot/{event_id}/readiness",
+        response_model=ShadowReadiness,
+    )
+    def caregiver_meta_copilot_readiness(
+        event_id: UUID, request: Request, response: Response,
+    ) -> ShadowReadiness:
+        """Read-only preflight: actual paid model is ALWAYS denied in this MVP."""
+        if not config.meta_copilot_preview_enabled:
+            raise HTTPException(404, "Meta Copilot readiness is disabled")
+        authorize_caregiver_read(request)
+        response.headers["Cache-Control"] = "no-store"
+        if not config.evidence_registry_enabled or not config.evidence_audit_anchor_required:
+            raise HTTPException(503, "Independent evidence checkpoint required")
+        try:
+            return inspect_shadow_readiness(
+                registry=evidence_registry, event_id=event_id, budget=MetaBudget(),
+            )
+        except (
+            ShadowPlannerDenied,
+            ShadowPlannerUnavailable,
+            MetaCopilotUnavailable,
+            EvidenceRegistryRejected,
+            EvidenceAuditFailure,
+            EvidenceRegistryUnavailable,
+            sqlite3.DatabaseError,
+            OSError,
+        ):
+            raise HTTPException(503, "Shadow planner preflight unavailable") from None
 
     @app.get("/health")
     def health() -> dict[str, str]:

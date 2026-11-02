@@ -175,6 +175,17 @@ tools, malformed/duplicate JSON, cross-event proposals and mid-request
 anchor changes. The simulated provider result is intentionally labeled
 `provider_response_simulated=true` and `meta_api_called=false`.
 
+## Repeat-call protection and Meta readiness (shadow only)
+
+The next [Shadow Dedup & Readiness milestone](META_COPILOT_SHADOW_DEDUP_V1.md)
+stores per-event mock-run reservations and safe results in a **separate
+private SQLite** file to prevent accidental duplicate mock requests.
+Concurrent calls for the same event are serialized, failed attempts are
+not retried automatically, and cache reads still require independently
+anchored evidence. A new authenticated local read-only readiness endpoint
+shows that **paid Meta is disallowed** and observes, without spending,
+the existing local Meta test budget. This is not a real-provider adapter.
+
 ## Explicit exclusions and next work
 
 - This is **NOT a live Meta-driven autonomous agent**. The current tasks

@@ -93,6 +93,18 @@ The smoke also sends a **real TCP HTTP** request to the local FastAPI
 service. This is distinct from the synthetic Meta HTTP call, which
 is an in-process mocked transport and never reaches the internet.
 
+## Durable one-mock-call-per-event shadow admission
+
+A new [Meta Copilot Shadow Deduplication & Readiness](META_COPILOT_SHADOW_DEDUP_V1.md)
+reserves one synthetic Event UUID in an independent SQLite shadow ledger
+before the mock provider call, caches the strictly verified preview,
+rejects concurrent duplicates, and permanently blocks automatic retries
+after failure or interrupted reservation. Signed evidence is revalidated
+on every cache read. The guarded local Caregiver
+`GET /api/v1/caregiver/copilot/{event_id}/readiness` endpoint reports
+the **read-only** local budget state and always says
+`real_provider_allowed=false`. This does **not** enable live Meta calls.
+
 ## Why not enable real Meta now?
 
 The previous authorized four Meta test attempts are exhausted on the

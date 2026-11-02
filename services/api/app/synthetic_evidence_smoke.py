@@ -22,15 +22,17 @@ from app.edge_emitter_e2e import (
     edge_candidates_from_trace,
 )
 from app.evidence_anchor import capture_checkpoint, verify_checkpoint
-from app.evidence_registry import SyntheticEvidenceRegistry
+from app.evidence_registry import EvidenceRegistryRejected, SyntheticEvidenceRegistry
 from app.local_http_demo import loopback_http_server
 from app.main import create_app
+from app.meta_budget import MetaBudget
 from app.meta_copilot import (
     MetaCopilotUnavailable,
     build_offline_meta_planner_request,
     offline_proposal,
 )
 from app.meta_copilot_mock_transport import MockOnlyMetaPlanner
+from app.meta_copilot_shadow_ledger import MetaCopilotShadowLedger
 from app.meta_first_contract import TrustedMetaCallContext, meta_first_route
 from app.meta_live import MODEL, read_checked_response
 from app.synthetic_evidence import (
@@ -119,6 +121,10 @@ def run_synthetic_event_bound_smoke() -> dict[str, object]:
                 copilot_before_anchor = client.get(
                     "/api/v1/caregiver/copilot/" + event_id, headers=header,
                 )
+                readiness_before_anchor = client.get(
+                    "/api/v1/caregiver/copilot/" + event_id + "/readiness",
+                    headers=header,
+                )
                 signed = capture_checkpoint(
                     db_path=Path(tmp) / "events.sqlite3",
                     checkpoint_path=checkpoint,
@@ -139,6 +145,10 @@ def run_synthetic_event_bound_smoke() -> dict[str, object]:
                 )
                 copilot_read = client.get(
                     "/api/v1/caregiver/copilot/" + event_id, headers=header,
+                )
+                readiness_read = client.get(
+                    "/api/v1/caregiver/copilot/" + event_id + "/readiness",
+                    headers=header,
                 )
                 anchored_registry = SyntheticEvidenceRegistry(
                     Path(tmp) / "events.sqlite3", anchor_required=True,
@@ -185,10 +195,26 @@ def run_synthetic_event_bound_smoke() -> dict[str, object]:
                 mock_planner = MockOnlyMetaPlanner(
                     transport=httpx.MockTransport(mock_meta_planner),
                 )
+                shadow_ledger = MetaCopilotShadowLedger(
+                    Path(tmp) / "private-shadow" / "runs.sqlite3",
+                )
+                budget_observer = MetaBudget(
+                    path=Path(tmp) / "private-budget" / "spend.sqlite3",
+                )
                 mock_result = asyncio.run(
-                    mock_planner.propose_for_verified_event(
+                    shadow_ledger.run_mock_once(
                         registry=anchored_registry,
                         event_id=bundle.manifest.event_id,
+                        mock_planner=mock_planner,
+                        budget=budget_observer,
+                    ),
+                )
+                cached_result = asyncio.run(
+                    MetaCopilotShadowLedger(shadow_ledger.path).run_mock_once(
+                        registry=anchored_registry,
+                        event_id=bundle.manifest.event_id,
+                        mock_planner=mock_planner,
+                        budget=budget_observer,
                     ),
                 )
                 if not (
@@ -204,6 +230,11 @@ def run_synthetic_event_bound_smoke() -> dict[str, object]:
                     and audit_read.json()["meta_call_permitted"] is False
                     and before_anchor.status_code == 503
                     and copilot_before_anchor.status_code == 503
+                    and readiness_before_anchor.status_code == 503
+                    and readiness_read.status_code == 200
+                    and readiness_read.json()["real_provider_allowed"] is False
+                    and readiness_read.json()["meta_api_called"] is False
+                    and readiness_read.json()["official_meta_billing_verified"] is False
                     and copilot_read.status_code == 200
                     and copilot_read.headers.get("cache-control") == "no-store"
                     and copilot_read.json()["event_id"] == event_id
@@ -214,10 +245,16 @@ def run_synthetic_event_bound_smoke() -> dict[str, object]:
                     and len(copilot_read.json()["actions"]) == 3
                     and planner_request["model"] == "muse-spark-1.3"
                     and planner_request["response_format"]["json_schema"]["strict"] is True
-                    and mock_result.mock_transport_request_count == 1
+                    and mock_result.total_mock_provider_calls_for_event == 1
+                    and mock_result.outcome == "mock_completed"
+                    and mock_result.mock_provider_invoked_this_call is True
                     and mock_result.meta_api_called is False
-                    and mock_result.meta_budget_modified is False
-                    and mock_result.provider_response_simulated is True
+                    and mock_result.budget_modified is False
+                    and mock_result.readiness.real_provider_allowed is False
+                    and mock_result.readiness.meta_budget_calls_observed == 0
+                    and cached_result.outcome == "duplicate_from_shadow_cache"
+                    and cached_result.mock_provider_invoked_this_call is False
+                    and cached_result.preview == mock_result.preview
                     and mock_result.preview.event_id == bundle.manifest.event_id
                     and mock_result.preview.model_has_executed_tools is False
                     and len(simulated_requests) == 1
@@ -246,17 +283,24 @@ def run_synthetic_event_bound_smoke() -> dict[str, object]:
                 forged_copilot = client.get(
                     "/api/v1/caregiver/copilot/" + event_id, headers=header,
                 )
+                forged_readiness = client.get(
+                    "/api/v1/caregiver/copilot/" + event_id + "/readiness",
+                    headers=header,
+                )
                 if (
                     forged_read.status_code != 503 or forged_audit.status_code != 503
                     or forged_copilot.status_code != 503
+                    or forged_readiness.status_code != 503
                 ):
                     raise EdgeProducerSmokeError("Independent anchor corruption not detected")
                 try:
-                    asyncio.run(mock_planner.propose_for_verified_event(
+                    asyncio.run(shadow_ledger.run_mock_once(
                         registry=anchored_registry,
                         event_id=bundle.manifest.event_id,
+                        mock_planner=mock_planner,
+                        budget=budget_observer,
                     ))
-                except MetaCopilotUnavailable:
+                except (MetaCopilotUnavailable, EvidenceRegistryRejected):
                     pass
                 else:
                     raise EdgeProducerSmokeError("Mock model bypassed damaged signed anchor")
@@ -342,6 +386,13 @@ def run_synthetic_event_bound_smoke() -> dict[str, object]:
         "meta_copilot_mock_provider_contract_verified": True,
         "meta_copilot_mock_provider_rejected_after_anchor_corruption": True,
         "meta_copilot_mock_provider_calls": 1,
+        "shadow_ledger_one_mock_call_per_event": True,
+        "shadow_ledger_duplicate_cached": True,
+        "shadow_ledger_readiness_denies_live_meta": True,
+        "shadow_readiness_verified_over_local_http": True,
+        "shadow_readiness_rejects_corrupt_anchor_over_http": True,
+        "shadow_ledger_cache_invalidated_by_bad_anchor": True,
+        "shadow_budget_ledger_unmodified": True,
         "meta_response_was_mocked": True,
         "real_meta_api_called": False,
         "meta_budget_modified": False,

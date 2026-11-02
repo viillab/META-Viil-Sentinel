@@ -18,6 +18,15 @@ anchor before preparing the Caregiver workplan. No actual provider
 connection or cost is possible from that adapter; malformed or unsafe
 model proposals are rejected without execution.
 
+## Offline Meta Copilot shadow admission
+
+[Meta Copilot Shadow Dedup & Readiness](../api/META_COPILOT_SHADOW_DEDUP_V1.md)
+adds durable Event UUID idempotency, a one-mock-call-per-case shadow
+reservation and a local Caregiver readiness endpoint.
+The readiness gate categorically blocks real-provider calls and only
+**reads** the existing local Meta budget state. It never reserves a new
+paid attempt, grants real-media rights, or impersonates actual inference.
+
 ## Verified scope / current result
 
 - A backend-only Meta Model API Chat Completions adapter exists at `services/api/app/meta_live.py`.

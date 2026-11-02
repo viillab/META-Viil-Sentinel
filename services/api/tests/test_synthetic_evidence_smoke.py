@@ -39,6 +39,13 @@ def test_full_offline_event_bound_http_and_mock_contract(monkeypatch):
     assert report["meta_copilot_mock_provider_contract_verified"] is True
     assert report["meta_copilot_mock_provider_rejected_after_anchor_corruption"] is True
     assert report["meta_copilot_mock_provider_calls"] == 1
+    assert report["shadow_ledger_one_mock_call_per_event"] is True
+    assert report["shadow_ledger_duplicate_cached"] is True
+    assert report["shadow_ledger_readiness_denies_live_meta"] is True
+    assert report["shadow_readiness_verified_over_local_http"] is True
+    assert report["shadow_readiness_rejects_corrupt_anchor_over_http"] is True
+    assert report["shadow_ledger_cache_invalidated_by_bad_anchor"] is True
+    assert report["shadow_budget_ledger_unmodified"] is True
     assert report["meta_response_was_mocked"] is True
     assert report["real_meta_api_called"] is False
     assert report["meta_budget_modified"] is False
