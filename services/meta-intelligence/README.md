@@ -115,6 +115,22 @@ identity** and cannot distinguish falls from normal action yet. It
 does not alter the production detector, call Meta or allow automatic
 emergency messages. Source media and pose traces stay Git-ignored.
 
+## Follow-up: anonymous tracklets fail closed on crossings/occlusions
+
+The [2026-11-03 Anonymous Tracklet research](../api/ANONYMOUS_TRACKLET_OCCLUSION_RESEARCH_2026_11_03.md)
+adds bounded 0–4-person **synthetic test geometry matching**:
+unique one-to-one spatial matches only, explicit refusal of
+crossing/nearby-person ambiguity, no linkage across missing
+poses, no camera-source mixing and no re-identification.
+Against the same five **single-pose** local licensed clips, the
+replay finds 892 adjacent geometric links from 1,368 frames;
+**this is NOT a validated multi-person tracker** and provides no
+fall prediction or identity correctness metric. Multi-person
+cases use *fictional* points only. The MediaPipe source is still
+`num_poses=1`; original Member 1 code is untouched. Person-related
+source footage/poses remain private; no Meta spend or emergency
+notifications were caused.
+
 ## Verified scope / current result
 
 - A backend-only Meta Model API Chat Completions adapter exists at `services/api/app/meta_live.py`.

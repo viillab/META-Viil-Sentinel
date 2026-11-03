@@ -150,6 +150,20 @@ cd ..\edge-vision
 ..\api\.venv\Scripts\python.exe -m pytest -q
 ```
 
+## Next step completed: safe anonymous tracklet feasibility
+
+The [Anonymous Tracklet & Occlusion Abstention study](ANONYMOUS_TRACKLET_OCCLUSION_RESEARCH_2026_11_03.md)
+adds a separate **research-only** 0–4 pose geometric association
+module that refuses crowded/ambiguous matches and drops continuity
+immediately when a pose is lost, occluded, or crosses an unsafe time
+gap. It makes **no true identity or occlusion recovery claim**.
+Retrospective local replay of the same 5 single-pose traces produced
+**892** neighboring geometric links from **1,368** frames after
+two implausible-speed links were additionally excluded. Only
+fictional numerical examples test multi-person crossings; true
+multi-person annotated data and identities are still unavailable.
+No production Edge implementation or fall alert changed.
+
 ## Next prerequisites and decision
 
 **NO-GO** for autonomous alarms, triage, fall assurance or real-world
