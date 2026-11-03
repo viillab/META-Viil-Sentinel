@@ -177,6 +177,22 @@ rights, consent, or a scientifically valid evaluation. All outputs
 retain `release_authorized=false`; no real media, Meta API call,
 or production Member 1 detector changes are made.
 
+## Follow-up: offline person-tracking metrics with strict reference binding
+
+The [2026-11-03 Offline Tracking Diagnostics v1](../api/OFFLINE_TRACKING_METRICS_2026_11_03.md)
+implements a second read-only, private `data/private` prediction
+contract tied by canonical SHA-256 to the full actor-disjoint
+manifest. It compares **independently annotated** reference
+actor-to-detection matches with pseudonymous local track tokens
+and reports aggregate adjacent ID switches, cross-actor token
+reuse, visible-frame misses, unmatched detections, fragmentation
+and abstention. Its actual executed **fictional 4-frame** test
+detects one adjacent ID switch, one cross-actor track reuse, and
+one unmatched detection. It does NOT validate the original
+reference labels or assess real tracking accuracy; every report
+refuses production release and emergency actions. No extra Meta
+calls, source video extraction or Member 1 code changes.
+
 ## Verified scope / current result
 
 - A backend-only Meta Model API Chat Completions adapter exists at `services/api/app/meta_live.py`.

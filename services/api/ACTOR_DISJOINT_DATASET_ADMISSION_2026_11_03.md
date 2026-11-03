@@ -135,6 +135,22 @@ source digests, per-frame timestamps, raw annotation states or
 video paths. Real source/permission documents remain the team's
 responsibility and are not committed to GitHub.
 
+## Follow-on: offline identity-continuity diagnostics
+
+The next [Offline Tracking Diagnostics v1](OFFLINE_TRACKING_METRICS_2026_11_03.md)
+adds a second, separately versioned **prediction + independent
+actor-to-detection annotation** contract, cryptographically bound
+to the full v1 manifest via canonical SHA-256. It scores only the
+declared sealed `test` clips and counts missed visible actors,
+false detections, adjacent ID switches, cross-actor track-token
+reuse, missing continuity, visible-state fragmentation and
+abstentions. A 4-frame fictional test demo intentionally produces
+one ID switch, one cross-actor reuse and one unmatched detection.
+No actual human multi-person data or annotated tracker output was
+used. The machine cannot establish actor identity or research
+consent independently; these are aggregate diagnostics, and
+`release_authorized` remains **false**.
+
 ## What is deliberately NOT shipped
 
 No new real-person or multiple-person clips are downloaded.
