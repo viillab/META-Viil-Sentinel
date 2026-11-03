@@ -180,31 +180,37 @@ class AnonymousTrackletResearch:
         )
 
     def process(self, frame: ResearchDetections) -> TrackletStep:
-        # Benchmark-only instantaneous links must not survive rejected inputs.
+        # Failed inputs invalidate continuity. No matching is allowed
+        # across an untrusted frame, including bad timestamp or source.
         self._last_pairs = ()
-        if type(frame) is not ResearchDetections:
-            raise ValueError("Unsupported multi-pose frame structure")
-        if (
-            type(frame.source_id) is not str or not 1 <= len(frame.source_id) <= 80
-            or type(frame.timestamp_ms) is not int or frame.timestamp_ms < 0
-            or type(frame.poses) is not tuple
-            or len(frame.poses) > self.policy.max_poses_per_frame
-        ):
-            raise ValueError("Invalid bounded multi-pose frame/source/time")
+        try:
+            if type(frame) is not ResearchDetections:
+                raise ValueError("Unsupported multi-pose frame structure")
+            if (
+                type(frame.source_id) is not str or not 1 <= len(frame.source_id) <= 80
+                or type(frame.timestamp_ms) is not int or frame.timestamp_ms < 0
+                or type(frame.poses) is not tuple
+                or len(frame.poses) > self.policy.max_poses_per_frame
+            ):
+                raise ValueError("Invalid bounded multi-pose frame/source/time")
+            if self._source is not None and frame.source_id != self._source:
+                raise ValueError("Cross-camera/source motion association rejected")
+            if self._last_time is not None and frame.timestamp_ms <= self._last_time:
+                raise ValueError("Duplicate/reordered timestamp rejected")
+            if self.frames >= self.policy.max_frames:
+                raise ValueError("Unbounded association trace rejected")
+            geometries = [_geometry(pose, self.policy) for pose in frame.poses]
+        except (ValueError, TypeError):
+            self._active.clear()
+            raise
+        # Commit state only after every restricted pose has passed validation.
         if self._source is None:
             self._source = frame.source_id
-        if frame.source_id != self._source:
-            raise ValueError("Cross-camera/source motion association rejected")
-        if self._last_time is not None and frame.timestamp_ms <= self._last_time:
-            raise ValueError("Duplicate/reordered timestamp rejected")
         self.frames += 1
-        if self.frames > self.policy.max_frames:
-            raise ValueError("Unbounded association trace rejected")
         gap = (frame.timestamp_ms - self._last_time
                if self._last_time is not None else 0)
         self._last_time = frame.timestamp_ms
         self.max_seen_poses = max(self.max_seen_poses, len(frame.poses))
-        geometries = [_geometry(pose, self.policy) for pose in frame.poses]
         if any(g is None for g in geometries):
             self._active.clear()
             self.abstained_low_visibility += 1

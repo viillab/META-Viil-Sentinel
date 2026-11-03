@@ -129,6 +129,22 @@ budget is already exhausted (4/4); this milestone makes **zero paid
 Meta API calls**. Production Member 1 Edge detector and caregiver
 notification paths remain unchanged.
 
+## Follow-up: high-volume synthetic actor-handoff falsification
+
+A [32-seed / 8-family association stress audit](SEEDED_TRACKLET_STRESS_2026_11_03.md)
+now measures **256 entirely fictional scenes** and **512 policy
+replays**. Critically, the previously safe-looking default
+`multi_person_mode="abstain"` made **32 false associations**
+when one synthetic actor silently replaced another at virtually the
+same coordinates *between adjacent single-pose frames*.
+The opt-in geometry-only ablation made 96 false links (the 32
+single-actor handoffs plus 64 spatial swaps involving two people).
+This is NOT a field ID-switch rate; there is no actual person-identity
+assurance in either mode. The local state machine was also hardened
+so invalid source/pose/timing inputs revoke old tracklets before
+any later valid frame can be linked. Human labels remain fictional,
+and no media/pose data or provider calls were added.
+
 ## Next prerequisite
 
 Acquire lawful/authorized **multi-person video**, independently

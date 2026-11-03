@@ -145,6 +145,22 @@ single-pose replay still yields 892 links from 1,368 frames;
 production Member 1 Edge and alerting logic remain unchanged.
 No real-person media was uploaded, no Meta API spending occurred.
 
+## Follow-up: seeded actor-handoff falsification and fail-closed input
+
+[2026-11-03 seeded association stress](../api/SEEDED_TRACKLET_STRESS_2026_11_03.md):
+32 deterministic numeric seeds × 8 original scripted families
+yield **256 fictional scenes / 512 policy replays**. A crucial
+counterexample showed **32 wrong adjacent associations under the
+conservative default** when a single fictional detected pose is
+silently replaced by another actor at the same location between
+sampled frames; the opt-in geometry-only mode made 96 wrong links
+including 64 due to two-person spatial swaps. Neither mode proves
+real person identity; **NO-GO for deployment**. Also hardened
+`AnonymousTrackletResearch.process()`: bad pose, timestamp, source
+or capacity input now clears prior active tracklets and cannot
+leave stale continuity in memory. No real media uploaded or Meta
+spend; Member 1 production paths are unchanged.
+
 ## Verified scope / current result
 
 - A backend-only Meta Model API Chat Completions adapter exists at `services/api/app/meta_live.py`.
