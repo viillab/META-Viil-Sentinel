@@ -135,6 +135,21 @@ From `D:\VIIL-Sentinel\services\api`:
 .\.venv\Scripts\python.exe -m ruff check .
 ```
 
+## Follow-on: actor-disjoint evaluation dataset admission gate
+
+A separate [research Dataset Admission v1](ACTOR_DISJOINT_DATASET_ADMISSION_2026_11_03.md)
+now validates **private research manifest structure** before any
+licensed multi-person evaluation: machine-checkable train/validation/
+sealed-test token disjointness (actors, capture sessions, camera
+domains, and duplicate SHA-256 clips), explicit per-frame actor
+visibility/occlusion/absence, strict monotonic frames and times,
+and required multi-person/occlusion/single-pose-handoff test
+coverage. It accepts only bounded JSON under Git-ignored
+`data/private`; a totally fictional 3-clip demo runs offline
+without any real person data. **A structurally valid manifest does
+not prove consent, identity correctness, actor disjointness in the
+real world or readiness for production.** Release is still NO-GO.
+
 ## Safety / next engineering prerequisite
 
 **NO-GO** for identity verification, real multi-person tracking,

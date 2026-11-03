@@ -161,6 +161,22 @@ or capacity input now clears prior active tracklets and cannot
 leave stale continuity in memory. No real media uploaded or Meta
 spend; Member 1 production paths are unchanged.
 
+## Follow-up: actor-disjoint research dataset admission gate
+
+The [2026-11-03 dataset admission checker](../api/ACTOR_DISJOINT_DATASET_ADMISSION_2026_11_03.md)
+adds a strict versioned, read-only `data/private` manifest schema
+for future permissioned real multi-person research. It verifies
+pseudonymous actor/session/camera disjointness across train,
+validation and sealed test clips, exact source digest uniqueness,
+independently *declared* review checklists, and explicit
+frame-by-frame visible/occluded/out-of-frame annotations. It also
+flags absent multi-person, occlusion and single-visible-actor
+handoff examples in the test split. The successful fictional
+3-clip/12-frame demo does NOT certify actual person identity,
+rights, consent, or a scientifically valid evaluation. All outputs
+retain `release_authorized=false`; no real media, Meta API call,
+or production Member 1 detector changes are made.
+
 ## Verified scope / current result
 
 - A backend-only Meta Model API Chat Completions adapter exists at `services/api/app/meta_live.py`.
