@@ -5,6 +5,7 @@ Model API image input/structured-output contract and model access, using consent
 keyframes only. Never upload patient imagery under research/demo free credits.
 """
 from typing import Protocol
+
 from app.models import EvidenceObservation
 
 

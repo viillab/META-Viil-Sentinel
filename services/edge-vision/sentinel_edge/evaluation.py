@@ -3,11 +3,11 @@
 No video/image/model network calls. Does not establish clinical performance.
 Each manifest clip represents one ground-truth example, not one frame.
 """
+import json
+import re
 from argparse import ArgumentParser
 from dataclasses import asdict, dataclass
-import json
 from pathlib import Path
-import re
 
 from sentinel_edge.detector import DetectorConfig, TemporalFallDetector
 from sentinel_edge.metrics import summarize_binary
@@ -55,7 +55,8 @@ def evaluate_manifest(
 
     for item in clips:
         if not isinstance(item, dict):
-            raise ValueError("Each clip must be an object")
+            # Preserve the public invalid-manifest ValueError contract.
+            raise ValueError("Each clip must be an object")  # noqa: TRY004
         if set(item) - {"id", "trace", "expected_fall", "onset_ms"}:
             raise ValueError("Unsupported clip manifest fields")
         clip_id, filename, label = (

@@ -2,8 +2,13 @@
 import pytest
 
 from sentinel_edge.contracts import (
-    LEFT_HIP, LEFT_SHOULDER, RIGHT_HIP, RIGHT_SHOULDER,
-    Landmark, PoseFeatures, PoseFrame,
+    LEFT_HIP,
+    LEFT_SHOULDER,
+    RIGHT_HIP,
+    RIGHT_SHOULDER,
+    Landmark,
+    PoseFeatures,
+    PoseFrame,
 )
 from sentinel_edge.detector import DetectorConfig, TemporalFallDetector
 

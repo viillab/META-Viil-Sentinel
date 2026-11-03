@@ -20,7 +20,7 @@ class IncidentService:
             incident.observation = await self.interpreter.interpret(
                 source_id=incident.source_id, confidence=incident.confidence
             )
-        except Exception:
+        except Exception:  # noqa: BLE001 - fail closed for any provider failure
             # Never fabricate a successful AI report when interpretation fails.
             incident.observation = None
         incident = advance(incident, IncidentStatus.REVIEW_REQUIRED, actor="orchestrator")

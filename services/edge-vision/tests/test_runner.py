@@ -1,5 +1,7 @@
 from pathlib import Path
+
 import pytest
+
 from sentinel_edge.runner import parse_args, timestamp_for_frame
 
 

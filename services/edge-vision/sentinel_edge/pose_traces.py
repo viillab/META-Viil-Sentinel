@@ -3,11 +3,11 @@
 Landmark traces can be identifying. Do not commit real traces or patient data.
 Only a minimal set of torso landmarks is needed for this heuristic.
 """
-from collections.abc import Iterator
 import json
+from collections.abc import Iterator
 from pathlib import Path
 
-from sentinel_edge.contracts import Landmark, PoseFrame, REQUIRED_POINTS
+from sentinel_edge.contracts import REQUIRED_POINTS, Landmark, PoseFrame
 
 MAX_FRAMES_PER_CLIP = 100_000
 MAX_LINE_CHARS = 4096

@@ -1,6 +1,11 @@
 """Deterministic human-in-the-loop state machine, not autonomous rescue dispatch."""
 from app.models import (
-    AuditEvent, Incident, IncidentAction, IncidentStatus, ReviewRequest, utc_now,
+    AuditEvent,
+    Incident,
+    IncidentAction,
+    IncidentStatus,
+    ReviewRequest,
+    utc_now,
 )
 
 ALLOWED_TRANSITIONS: dict[IncidentStatus, set[IncidentStatus]] = {

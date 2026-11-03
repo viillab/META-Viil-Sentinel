@@ -7,6 +7,7 @@ No inferred medical severity and no emergency dispatch.
 from collections import deque
 from dataclasses import dataclass
 from math import isfinite
+
 from sentinel_edge.contracts import FallCandidateEvent, PoseFeatures, PoseFrame
 
 

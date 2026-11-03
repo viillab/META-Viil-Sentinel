@@ -1,4 +1,5 @@
 import pytest
+
 from sentinel_edge.metrics import summarize_binary
 
 

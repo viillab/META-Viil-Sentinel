@@ -3,14 +3,14 @@
 No media uploads and no automatic storage. Four torso landmarks are potentially
 identifying data; export requires explicit opt-in and output is ignored by Git.
 """
+import json
 from argparse import ArgumentParser
 from contextlib import ExitStack
 from dataclasses import asdict
-import json
 from pathlib import Path
 from time import monotonic
 
-from sentinel_edge.contracts import Landmark, PoseFrame, REQUIRED_POINTS
+from sentinel_edge.contracts import REQUIRED_POINTS, Landmark, PoseFrame
 from sentinel_edge.detector import TemporalFallDetector
 from sentinel_edge.pose_traces import frame_to_trace_record
 
