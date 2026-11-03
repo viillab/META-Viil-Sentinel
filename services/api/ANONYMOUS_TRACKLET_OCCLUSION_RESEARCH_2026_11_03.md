@@ -123,6 +123,24 @@ caregiver alerts, emergency dispatch or sharing person video/pose
 with Meta. The local paid Meta ledger remains at **4/4** approved
 attempts; no new API calls were made.
 
+## Follow-up: mandatory multi-person abstention after benchmark falsification
+
+The [synthetic association benchmark](SYNTHETIC_TRACKLET_ASSOCIATION_BENCHMARK_2026_11_03.md)
+revealed **two incorrect adjacent geometric links** in a scripted
+full-position swap of two *fictional* actors: one old silhouette could be
+mistaken for the other person after a sampled-frame transition.
+Therefore `TrackletPolicy()` now defaults to
+`multi_person_mode="abstain"`, refusing **all** 2+ pose association.
+For research only, `multi_person_mode="geometry_only"` preserves the
+original experimental behavior to quantify the tradeoff. Across eight
+fictional cases the default made 0 incorrect links versus the old
+geometry research mode's 2, but deliberately missed 102 consecutive
+actor appearances instead of 20. **These are not real-world accuracy
+figures.** The five existing single-pose local-video replays remain
+892 valid geometric links/1,368 frames. This strict default avoids
+known unsafe multi-person inference rather than "solving" person
+identity; **NO GO for real multi-person deployment**.
+
 ## Next substantive prerequisite
 
 True person association requires a **separately authorized multi-person

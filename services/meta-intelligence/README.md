@@ -131,6 +131,20 @@ cases use *fictional* points only. The MediaPipe source is still
 source footage/poses remain private; no Meta spend or emergency
 notifications were caused.
 
+## Follow-up: synthetic multi-person association safety benchmark
+
+A [ground-truth fictional-actor tracklet benchmark](../api/SYNTHETIC_TRACKLET_ASSOCIATION_BENCHMARK_2026_11_03.md)
+now quantifies the inherent ambiguity of eight-point geometric
+matching. In 8 original fictional scenarios (161 adjacent actor
+appearances), the old geometry-only mode produced **141 correct,
+2 incorrect** links. The new default `multi_person_mode="abstain"`
+yielded **59 correct, 0 incorrect** links, deliberately refusing
+all multi-person linkage. This is a conscious false-link-vs-coverage
+tradeoff, **not real human tracking validation**. Previous local
+single-pose replay still yields 892 links from 1,368 frames;
+production Member 1 Edge and alerting logic remain unchanged.
+No real-person media was uploaded, no Meta API spending occurred.
+
 ## Verified scope / current result
 
 - A backend-only Meta Model API Chat Completions adapter exists at `services/api/app/meta_live.py`.

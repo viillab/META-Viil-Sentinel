@@ -58,7 +58,10 @@ def test_stable_single_person_tracklet_never_becomes_a_verified_identity():
 def test_two_people_well_separated_use_unique_local_geometry_not_reidentification():
     inputs = [frame(i*100, person(x=.19+i*.01), person(x=.81-i*.01))
               for i in range(12)]
-    results, summary = run(*inputs)
+    results, summary = run(
+        *inputs,
+        policy=associate.TrackletPolicy(multi_person_mode="geometry_only"),
+    )
     assert results[0].new_anonymous_tracklets == 2
     assert all(x.linked_anonymous_pairs == 2 for x in results[1:])
     assert summary["max_poses_seen_in_one_frame"] == 2
@@ -73,6 +76,7 @@ def test_crossing_close_people_forces_abstention_then_new_tracklets():
         frame(100, person(.47), person(.53)),  # overlap: no trusted pairing
         frame(200, person(.28), person(.72)),
         frame(300, person(.27), person(.73)),
+        policy=associate.TrackletPolicy(multi_person_mode="geometry_only"),
     )
     assert [v.status for v in values] == [
         "new_anonymous_tracklets", "ambiguous_people_abstain",
@@ -90,6 +94,7 @@ def test_one_old_center_compatible_with_two_new_centers_is_ambiguous():
         frame(0, person(.5)),
         frame(100, person(.40), person(.60)),  # separated but both near old
         frame(200, person(.25), person(.75)),
+        policy=associate.TrackletPolicy(multi_person_mode="geometry_only"),
     )
     assert values[1].status == "ambiguous_people_abstain"
     assert summary["multi_person_ambiguous_frames_abstained"] == 1
@@ -118,6 +123,7 @@ def test_one_partial_pose_abstains_entire_crowded_scene():
         frame(0, person(.25), person(.75)),
         frame(100, person(.25), damaged),
         frame(200, person(.25), person(.75)),
+        policy=associate.TrackletPolicy(multi_person_mode="geometry_only"),
     )
     assert values[1].status == "low_visibility_abstain"
     assert values[1].active_anonymous_tracklets == 0
@@ -191,6 +197,7 @@ def test_invalid_pose_source_or_capacity_is_rejected(bad):
 
 @pytest.mark.parametrize("options", [
     {"max_poses_per_frame": 0},
+    {"multi_person_mode": "wrong"},
     {"max_poses_per_frame": True},
     {"max_poses_per_frame": 9},
     {"max_frames": 30_000},

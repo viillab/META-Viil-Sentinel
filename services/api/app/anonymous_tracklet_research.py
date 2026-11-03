@@ -33,6 +33,9 @@ class TrackletPolicy:
 
     max_poses_per_frame: int = 4
     max_frames: int = 12_000
+    # Conservative default prevents silent person swaps in close/crossing
+    # multi-person clips. "geometry_only" is explicit research ablation.
+    multi_person_mode: Literal["abstain", "geometry_only"] = "abstain"
     min_visibility: float = VISIBILITY_FLOOR
     max_center_displacement: float = 0.14
     # Prevent a large apparent jump being linked over an implausibly
@@ -44,6 +47,8 @@ class TrackletPolicy:
     max_torso_length_ratio: float = 1.8
 
     def __post_init__(self) -> None:
+        if self.multi_person_mode not in ("abstain", "geometry_only"):
+            raise ValueError("Unsupported multi-person research policy")
         integer_fields = (
             self.max_poses_per_frame, self.max_frames, self.max_frame_gap_ms,
         )
@@ -155,6 +160,9 @@ class AnonymousTrackletResearch:
         self.abstained_ambiguous = 0
         self.gap_resets = 0
         self.max_seen_poses = 0
+        # Instantaneous detection-index edges for *fictional benchmark only*.
+        # NOT persistent track IDs; cleared every frame and NEVER serialized.
+        self._last_pairs: tuple[tuple[int, int], ...] = ()
 
     def _step(self, status: FrameStatus, detected: int, linked: int = 0,
               new: int = 0) -> TrackletStep:
@@ -172,6 +180,8 @@ class AnonymousTrackletResearch:
         )
 
     def process(self, frame: ResearchDetections) -> TrackletStep:
+        # Benchmark-only instantaneous links must not survive rejected inputs.
+        self._last_pairs = ()
         if type(frame) is not ResearchDetections:
             raise ValueError("Unsupported multi-pose frame structure")
         if (
@@ -211,6 +221,17 @@ class AnonymousTrackletResearch:
             for i, ga in enumerate(geometries)
             for gb in geometries[i + 1:]
         ):
+            self._active.clear()
+            self.abstained_ambiguous += 1
+            return self._step("ambiguous_people_abstain", len(frame.poses))
+
+        if (
+            self.policy.multi_person_mode == "abstain"
+            and (len(geometries) > 1 or len(self._active) > 1)
+        ):
+            # Eight skeletal landmarks cannot prove person identity after a
+            # full position swap between sampled frames. No geometric
+            # association is authorized when 2+ people are involved.
             self._active.clear()
             self.abstained_ambiguous += 1
             return self._step("ambiguous_people_abstain", len(frame.poses))
@@ -258,6 +279,7 @@ class AnonymousTrackletResearch:
             )
             updated.append(_LocalTracklet(center, scale, consecutive))
         self._active = updated
+        self._last_pairs = tuple(associations)
         return self._step(
             "anonymous_geometry_linked" if associations else "new_anonymous_tracklets",
             len(frame.poses), linked=len(associations),
