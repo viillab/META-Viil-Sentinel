@@ -1,0 +1,10 @@
+{
+  "schema_version": "viil.edge.camera_registry.v1",
+  "cameras": [
+    {
+      "id": "hik-tailnet-demo",
+      "kind": "rtsp",
+      "rtsp_env": "VIIL_HIK_TAILSCALE_RTSP"
+    }
+  ]
+}

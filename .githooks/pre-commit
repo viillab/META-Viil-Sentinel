@@ -1,0 +1,8 @@
+#!/bin/sh
+# VIIL Sentinel: main is reserved for human-only releases.
+current_branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+if [ "$current_branch" = "main" ]; then
+  echo "ERROR: Do not commit on main. Create a feature branch from preprod." >&2
+  exit 1
+fi
+exit 0

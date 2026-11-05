@@ -1,0 +1,66 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "viil-sentinel-edge"
+version = "0.1.0"
+description = "Prototype-only temporal pose fall-candidate event extraction"
+requires-python = ">=3.11"
+dependencies = ["defusedxml>=0.7.1,<0.8"]
+
+[project.optional-dependencies]
+video = ["mediapipe>=0.10.20,<0.11"]
+pyav = ["av>=13,<19"]
+media = ["fastapi>=0.115,<1.0", "uvicorn>=0.30,<1.0"]
+jpeg = ["opencv-python>=4.10,<5"]
+dev = ["pytest>=8,<10", "ruff>=0.8,<1.0", "numpy>=1.26,<3.0", "httpx>=0.27,<1.0"]
+training = ["numpy>=1.26,<3.0"]
+
+[project.scripts]
+viil-edge = "sentinel_edge.runner:main"
+viil-edge-doctor = "sentinel_edge.doctor:main"
+viil-edge-evaluate = "sentinel_edge.evaluation:main"
+viil-edge-model-smoke = "sentinel_edge.model_smoke:main"
+viil-edge-video-benchmark = "sentinel_edge.video_benchmark:main"
+viil-edge-handoff = "sentinel_edge.handoff_cli:main"
+viil-edge-verify-handoff = "sentinel_edge.handoff_verify:main"
+viil-edge-handoff-preflight = "sentinel_edge.handoff_preflight:main"
+viil-edge-submission-check = "sentinel_edge.submission_readiness:main"
+viil-edge-split-audit = "sentinel_edge.split_audit:main"
+viil-edge-train-baseline = "sentinel_edge.temporal_training:main"
+viil-edge-export-windows = "sentinel_edge.window_export:main"
+viil-edge-curate-caucafall = "sentinel_edge.caucafall_curator:main"
+viil-edge-research-compare = "sentinel_edge.model_quality:main"
+viil-edge-annotation-review = "sentinel_edge.annotation_review:main"
+viil-edge-reviewed-freeze = "sentinel_edge.reviewed_dataset_seal:main"
+viil-edge-train-private = "sentinel_edge.private_model_training:main"
+viil-edge-train-joint = "sentinel_edge.joint_dataset_training:main"
+viil-edge-assist-external = "sentinel_edge.assist_external:main"
+viil-edge-reviewed-events = "sentinel_edge.reviewed_event_benchmark:main"
+viil-edge-train-tiny-mlp = "sentinel_edge.tiny_mlp_training:main"
+viil-edge-ikar-stress = "sentinel_edge.ikar_domain_stress:main"
+viil-edge-profile-resources = "sentinel_edge.edge_resource_profile:main"
+viil-edge-compare-rtsp = "sentinel_edge.rtsp_compare:main"
+viil-edge-camera-health = "sentinel_edge.camera_health:main"
+viil-edge-camera-readiness = "sentinel_edge.hikvision_operator_readiness:main"
+viil-edge-media-bridge = "sentinel_edge.local_media_bridge:main"
+viil-edge-privacy-approval = "sentinel_edge.privacy_approval_operator:main"
+viil-edge-camera-fleet = "sentinel_edge.camera_fleet:main"
+viil-edge-field-acceptance = "sentinel_edge.field_acceptance:main"
+viil-edge-profile-persistent = "sentinel_edge.persistent_pose_session:main"
+viil-edge-shadow-research = "sentinel_edge.shadow_external:main"
+viil-edge-early-motion-research = "sentinel_edge.early_motion_external:main"
+
+[tool.setuptools.packages.find]
+include = ["sentinel_edge*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]

@@ -1,0 +1,52 @@
+{
+  "schema_version": "viil.team.roster.v1",
+  "as_of": "2026-10-28",
+  "active_member_count": 2,
+  "members": [
+    {
+      "id": "member1",
+      "owns": [
+        "edge_vision",
+        "pose_model",
+        "causal_fall_detection",
+        "research_model",
+        "performance",
+        "dashboard",
+        "ux_ui",
+        "in_app_notifications",
+        "frontend_integration"
+      ],
+      "branch_prefix": "member1/feature/"
+    },
+    {
+      "id": "member2",
+      "owns": [
+        "fastapi_backend",
+        "meta_model_api_adapter",
+        "meta_evidence_assessment",
+        "agent_orchestration",
+        "database",
+        "authentication",
+        "source_registry",
+        "event_deduplication"
+      ],
+      "branch_prefix": "member2/feature/"
+    }
+  ],
+  "retired_member_id": "member3",
+  "member3_branch_prefix_active": false,
+  "policy": {
+    "meta_first_automated_evidence_review_target": true,
+    "real_meta_provider_currently_connected": false,
+    "research_model_authorized_for_real_alerts": false,
+    "staged_automated_in_app_advisory_possible_only_after_validation": true,
+    "medical_triage_authorized": false,
+    "emergency_dispatch_authorized": false,
+    "manual_review_for_unverified_or_ambiguous_evidence": true
+  },
+  "integration_branch": "member/feature/preprod",
+  "protected_branches": [
+    "main",
+    "preprod"
+  ]
+}

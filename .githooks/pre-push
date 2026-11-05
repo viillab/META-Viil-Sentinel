@@ -1,0 +1,19 @@
+#!/bin/sh
+# Prevent accidental writes to main. Still protect main on GitHub server-side.
+while read -r local_ref local_sha remote_ref remote_sha
+do
+  case "$remote_ref" in
+    refs/heads/main)
+      echo "ERROR: Push to main is blocked by VIIL Sentinel's local Git policy." >&2
+      echo "Human-only promotion should happen through a reviewed GitHub action outside this automated workflow." >&2
+      exit 1
+      ;;
+  esac
+  case "$local_ref" in
+    refs/heads/main)
+      echo "ERROR: Pushing main from this workspace is blocked." >&2
+      exit 1
+      ;;
+  esac
+done
+exit 0

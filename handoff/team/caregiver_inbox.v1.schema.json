@@ -1,0 +1,189 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "VIIL Sentinel caregiver inbox metadata v1 (Member 1/2 handoff)",
+  "description": "Proposed read-only projection for authenticated, per-camera scoped caregiver sessions; not an alert service or verified incident assertion.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "generated_at",
+    "access_scope",
+    "advisories"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "viil.backend.caregiver_inbox.v1"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "access_scope": {
+      "const": "authenticated_caregiver"
+    },
+    "advisories": {
+      "type": "array",
+      "maxItems": 30,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "advisory_id",
+          "source_id",
+          "occurred_at",
+          "stage",
+          "context_code",
+          "meta_provenance",
+          "delivery_state",
+          "receipt_verified",
+          "review_state",
+          "simulated",
+          "fall_confirmed",
+          "emergency_dispatch_authorized",
+          "human_follow_up_required"
+        ],
+        "properties": {
+          "advisory_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "source_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "stage": {
+            "enum": [
+              "edge_candidate",
+              "follow_up_required",
+              "informational_advisory"
+            ]
+          },
+          "context_code": {
+            "enum": [
+              "unknown",
+              "near_floor",
+              "wheelchair_transfer",
+              "rapid_descent"
+            ]
+          },
+          "meta_provenance": {
+            "enum": [
+              "none",
+              "mock",
+              "meta_model_api"
+            ]
+          },
+          "delivery_state": {
+            "enum": [
+              "not_sent",
+              "pending",
+              "delivered",
+              "failed"
+            ]
+          },
+          "receipt_verified": {
+            "type": "boolean"
+          },
+          "review_state": {
+            "enum": [
+              "pending",
+              "acknowledged",
+              "closed"
+            ]
+          },
+          "simulated": {
+            "type": "boolean"
+          },
+          "fall_confirmed": {
+            "const": false
+          },
+          "emergency_dispatch_authorized": {
+            "const": false
+          },
+          "human_follow_up_required": {
+            "const": true
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "delivery_state": {
+                  "const": "delivered"
+                }
+              },
+              "required": [
+                "delivery_state"
+              ]
+            },
+            "then": {
+              "properties": {
+                "receipt_verified": {
+                  "const": true
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "receipt_verified": {
+                  "const": false
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "stage": {
+                  "const": "informational_advisory"
+                }
+              },
+              "required": [
+                "stage"
+              ]
+            },
+            "then": {
+              "properties": {
+                "meta_provenance": {
+                  "const": "meta_model_api"
+                },
+                "simulated": {
+                  "const": false
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "meta_provenance": {
+                  "const": "meta_model_api"
+                }
+              },
+              "required": [
+                "meta_provenance"
+              ]
+            },
+            "then": {
+              "properties": {
+                "simulated": {
+                  "const": false
+                },
+                "stage": {
+                  "enum": [
+                    "follow_up_required",
+                    "informational_advisory"
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}
